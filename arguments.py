@@ -46,6 +46,7 @@ class ParamGroup:
 
 class ModelParams(ParamGroup): 
     def __init__(self, parser, sentinel=False):
+        self.label = "unlabeled"
         self.sh_degree = 3
         self._source_path = ""
         self._model_path = ""
@@ -53,7 +54,8 @@ class ModelParams(ParamGroup):
         self._resolution = -1
         self._white_background = False
         self.data_device = "cuda"
-        self.eval = False
+        self.eval = True
+        self.diffuse_only = False 
         super().__init__(parser, "Loading Parameters", sentinel)
 
     def extract(self, args):
@@ -87,6 +89,7 @@ class OptimizationParams(ParamGroup):
         self.densify_until_iter = 15_000
         self.densify_grad_threshold = 0.0002
         self.random_background = False
+        self.sh_slowdown_factor = 20.0
         super().__init__(parser, "Optimization Parameters")
 
 def get_combined_args(parser : ArgumentParser):

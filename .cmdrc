@@ -1,0 +1,68 @@
+export TRAINING_TIME=12:00:00
+
+# todo: nefgpu50 also has rtx8000 with 46g?
+
+# todo add new gpus
+BEST_GPUS="(host='nefgpu28.inria.fr' or host='nefgpu37.inria.fr')"
+LAME_GPUS="(host='nefgpu47.inria.fr' or host='nefgpu48.inria.fr' or host='nefgpu49.inria.fr' or host='nefgpu50.inria.fr' or host='nefgpu51.inria.fr' or host='nefgpu34.inria.fr')"
+ANY_GPUS="(host='nefgpu28.inria.fr' or host='nefgpu37.inria.fr' or host='nefgpu34.inria.fr' or host='nefgpu47.inria.fr' or host='nefgpu48.inria.fr' or host='nefgpu49.inria.fr' or host='nefgpu50.inria.fr' or host='nefgpu51.inria.fr')"
+
+
+interact () {
+    oarsub -p "gpu='YES' and $BEST_GPUS" -l gpunum=${1:-1},walltime=$TRAINING_TIME -I
+}
+
+interact_a6000 () {
+    oarsub -p "gpu='YES' and host='nefgpu28.inria.fr'" -l gpunum=${1:-1},walltime=$TRAINING_TIME -I
+}
+
+interact_a100 () {
+    oarsub -p "gpu='YES' and (host='nefgpu56.inria.fr' or host='nefgpu57.inria.fr' or host='nefgpu58.inria.fr')" -l gpunum=${1:-1},walltime=$TRAINING_TIME -t besteffort -I
+}
+
+interact_rtx8000 () {
+    oarsub -p "gpu='YES' and host='nefgpu37.inria.fr'" -l gpunum=${1:-4},walltime=$TRAINING_TIME -I
+}
+
+interact_lame () {
+    oarsub -p "gpu='YES' and $LAME_GPUS" -t besteffort -l gpunum=1,walltime=$TRAINING_TIME -I
+}
+
+sq () {
+    echo >> queue.log
+    date >> queue.log 
+    oarstat -u | tee queue.log 
+}
+
+jobname () {
+    oarstat -j $1 -f | grep name | head -n 1
+}
+
+usage () {
+    quota -s
+}
+
+attach () {
+    oarsub -C $1
+}
+
+clearall () {
+    sq | tail -n +3 | awk '$2 != "ypoirier" {print $1}'
+}
+
+q_a6000 () {
+    oarsub -p "gpu='YES' and host='nefgpu28.inria.fr'" --n $2 -l gpunum=1,walltime=$TRAINING_TIME --stdout="%jobname%-%jobid%.std" --stderr="%jobname%-%jobid%.std" "python train.py -s colmap/$1/train --flash_dir --flash_dir_fine_tune"
+}
+
+q_realscene () {
+    oarsub -p "gpu='YES' and host='nefgpu28.inria.fr'" --n $1 -l gpunum=1,walltime=$TRAINING_TIME --stdout="%jobname%-%jobid%.std" --stderr="%jobname%-%jobid%.std" "python train.py -s colmap/$1/train --flash_dir --flash_dir_fine_tune"
+}
+
+
+q_ablation () {
+    oarsub -p "gpu='YES' and host='nefgpu28.inria.fr'" --n $1 -l gpunum=1,walltime=$TRAINING_TIME --stdout="%jobname%-%jobid%.std" --stderr="%jobname%-%jobid%.std" "python train.py -s colmap/$1/train --flash_dir --flash_dir_fine_tune --max_images 90"
+}
+
+q_syn () {
+    oarsub -p "gpu='YES' and host='nefgpu28.inria.fr'" --n $1 -l gpunum=1,walltime=$TRAINING_TIME --stdout="%jobname%-%jobid%.std" --stderr="%jobname%-%jobid%.std" "python train.py -s colmap_syn/$1/train --flash_dir --flash_dir_fine_tune"
+}
