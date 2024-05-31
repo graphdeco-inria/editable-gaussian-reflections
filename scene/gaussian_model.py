@@ -46,6 +46,8 @@ class GaussianModel:
         self.modelParams = modelParams
         self.active_sh_degree = 0
         self.max_sh_degree = sh_degree  
+        if self.modelParams.convert_mlp:
+            self.active_sh_degree = self.max_sh_degree
         self._xyz = torch.empty(0)
         self._features_dc = torch.empty(0)
         self._features_rest = torch.empty(0)
@@ -59,6 +61,28 @@ class GaussianModel:
         self.percent_dense = 0
         self.spatial_lr_scale = 0
         self.setup_functions()
+
+        if self.modelParams.convert_mlp:
+            in_feat = 3 * self.modelParams.num_feat_per_gaussian_channel + 12
+            out_feat = 3+3+4 if self.modelParams.dynamic_gaussians else 3 
+            
+            if self.modelParams.use_tcnn:
+                import tinycudann as tcnn 
+                self.mlp = tcnn.Network(in_feat, out_feat, {
+                    "otype": "FullyFusedMLP",
+                    "activation": "ReLU",
+                    "output_activation": "None",
+                    "n_neurons": 128,
+                    "n_hidden_layers": 1
+                }) 
+            else:
+                self.mlp = nn.Sequential(
+                    nn.Linear(in_feat, 128), 
+                    nn.ReLU(),
+                    nn.Linear(128, 128),
+                    nn.ReLU(),
+                    nn.Linear(128, out_feat)
+                ).cuda()
 
     def capture(self):
         return (
@@ -159,11 +183,14 @@ class GaussianModel:
         l = [
             {'params': [self._xyz], 'lr': training_args.position_lr_init * self.spatial_lr_scale, "name": "xyz"},
             {'params': [self._features_dc], 'lr': training_args.feature_lr, "name": "f_dc"},
-            {'params': [self._features_rest], 'lr': training_args.feature_lr / training_args.sh_slowdown_factor, "name": "f_rest"},
+            {'params': [self._features_rest], 'lr': training_args.mlp_lr if self.modelParams.convert_mlp else training_args.feature_lr / training_args.sh_slowdown_factor, "name": "f_rest"},
             {'params': [self._opacity], 'lr': training_args.opacity_lr, "name": "opacity"},
             {'params': [self._scaling], 'lr': training_args.scaling_lr, "name": "scaling"},
             {'params': [self._rotation], 'lr': training_args.rotation_lr, "name": "rotation"}
         ]
+
+        if self.modelParams.convert_mlp:
+            l += [{'params': self.mlp.parameters(), 'lr': training_args.mlp_lr, "name": f"mlp"}]
 
         self.optimizer = torch.optim.Adam(l, lr=0.0, eps=1e-15)
         self.xyz_scheduler_args = get_expon_lr_func(lr_init=training_args.position_lr_init*self.spatial_lr_scale,
@@ -226,16 +253,16 @@ class GaussianModel:
         opacities = np.asarray(plydata.elements[0]["opacity"])[..., np.newaxis]
 
         features_dc = np.zeros((xyz.shape[0], 3, 1))
-        features_dc[:, 0, 0] = np.asarray(plydata.elements[0]["f_dc_0"])
-        features_dc[:, 1, 0] = np.asarray(plydata.elements[0]["f_dc_1"])
-        features_dc[:, 2, 0] = np.asarray(plydata.elements[0]["f_dc_2"])
+        features_dc[:, 0, 0] = np.asarray(plydata.elements[0][f"f_dc_0"])
+        features_dc[:, 1, 0] = np.asarray(plydata.elements[0][f"f_dc_1"])
+        features_dc[:, 2, 0] = np.asarray(plydata.elements[0][f"f_dc_2"])
 
         extra_f_names = [p.name for p in plydata.elements[0].properties if p.name.startswith("f_rest_")]
         extra_f_names = sorted(extra_f_names, key = lambda x: int(x.split('_')[-1]))
         
         nf = 1 if self.modelParams.diffuse_only else (self.max_sh_degree + 1) ** 2
 
-        assert len(extra_f_names)==3*nf - 3
+        assert len(extra_f_names)==3*nf - 3, breakpoint()
         
         if self.modelParams.diffuse_only:
             features_extra = np.zeros((xyz.shape[0], len(extra_f_names)))
@@ -289,6 +316,8 @@ class GaussianModel:
     def _prune_optimizer(self, mask):
         optimizable_tensors = {}
         for group in self.optimizer.param_groups:
+            if group["name"] == "mlp":
+                continue
             stored_state = self.optimizer.state.get(group['params'][0], None)
             if stored_state is not None:
                 stored_state["exp_avg"] = stored_state["exp_avg"][mask]
@@ -323,6 +352,8 @@ class GaussianModel:
     def cat_tensors_to_optimizer(self, tensors_dict):
         optimizable_tensors = {}
         for group in self.optimizer.param_groups:
+            if group["name"] == "mlp":
+                continue
             assert len(group["params"]) == 1
             extension_tensor = tensors_dict[group["name"]]
             stored_state = self.optimizer.state.get(group['params'][0], None)
@@ -419,5 +450,6 @@ class GaussianModel:
         torch.cuda.empty_cache()
 
     def add_densification_stats(self, viewspace_point_tensor, update_filter):
-        self.xyz_gradient_accum[update_filter] += torch.norm(viewspace_point_tensor.grad[update_filter,:2], dim=-1, keepdim=True)
+        if viewspace_point_tensor.grad is not None:
+            self.xyz_gradient_accum[update_filter] += torch.norm(viewspace_point_tensor.grad[update_filter,:2], dim=-1, keepdim=True)
         self.denom[update_filter] += 1

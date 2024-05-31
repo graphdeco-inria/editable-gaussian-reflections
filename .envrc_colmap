@@ -1,0 +1,4 @@
+module load cuda/10.0 gcc/7.3.0
+export COLMAP_PATH=/data/graphdeco/share/colmap
+export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$COLMAP_PATH/lib/colmap:$COLMAP_PATH/deps/ceres/lib64:$COLMAP_PATH/deps/cgal/lib64:$COLMAP_PATH/deps/freeimage/lib
+export PATH=$COLMAP_PATH/bin:$PATH

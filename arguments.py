@@ -56,10 +56,19 @@ class ModelParams(ParamGroup):
         self.data_device = "cuda"
         self.eval = True
         self.diffuse_only = False 
+        self.convert_mlp = False 
+        self.dynamic_gaussians = False
+        self.dynamic_diffuse = False 
+        self.num_feat_per_gaussian_channel = 16 
+        self.use_tcnn = False
+        self.split_spec_diff = False
+        self.keep_every_kth_view = 1
         super().__init__(parser, "Loading Parameters", sentinel)
 
     def extract(self, args):
         g = super().extract(args)
+        if g.dynamic_gaussians:
+            g.convert_mlp = True
         g.source_path = os.path.abspath(g.source_path)
         return g
 
@@ -90,6 +99,8 @@ class OptimizationParams(ParamGroup):
         self.densify_grad_threshold = 0.0002
         self.random_background = False
         self.sh_slowdown_factor = 20.0
+        self.mlp_lr = 1e-3
+        
         super().__init__(parser, "Optimization Parameters")
 
 def get_combined_args(parser : ArgumentParser):
