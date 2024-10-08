@@ -8,3 +8,6 @@ tensorboard_3d
 screenshots
 /output*
 *.mp4
+/.bash_history
+submodules/diff-surfel-rasterization/
+renders

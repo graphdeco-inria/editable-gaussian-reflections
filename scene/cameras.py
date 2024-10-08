@@ -19,10 +19,14 @@ class Camera(nn.Module):
                  image_name, uid,
                  diffuse_image,
                  glossy_image,
+                 position_image,
+                 normal_image,
+                 roughness_image,
+                 metalness_image,
+                 albedo_image,
                  trans=np.array([0.0, 0.0, 0.0]), scale=1.0, data_device = "cuda",
                  ):
         super(Camera, self).__init__()
-
         self.uid = uid
         self.colmap_id = colmap_id
         self.R = R
@@ -31,8 +35,13 @@ class Camera(nn.Module):
         self.FoVy = FoVy
         self.image_name = image_name
 
-        self.diffuse_image = diffuse_image
+        self.diffuse_image = diffuse_image * (1.0 - metalness_image) #!!!
         self.glossy_image = glossy_image
+        self.normal_image = normal_image
+        self.position_image = position_image
+        self.roughness_image = roughness_image
+        self.metalness_image = metalness_image
+        self.albedo_image = albedo_image
 
         try:
             self.data_device = torch.device(data_device)
@@ -41,14 +50,9 @@ class Camera(nn.Module):
             print(f"[Warning] Custom device {data_device} failed, fallback to default cuda device" )
             self.data_device = torch.device("cuda")
 
-        self.original_image = image.clamp(0.0, 1.0).to(self.data_device)
+        self.original_image = self.diffuse_image + self.glossy_image
         self.image_width = self.original_image.shape[2]
         self.image_height = self.original_image.shape[1]
-
-        if gt_alpha_mask is not None:
-            self.original_image *= gt_alpha_mask.to(self.data_device)
-        else:
-            self.original_image *= torch.ones((1, self.image_height, self.image_width), device=self.data_device)
 
         self.zfar = 100.0
         self.znear = 0.01
@@ -56,10 +60,20 @@ class Camera(nn.Module):
         self.trans = trans
         self.scale = scale
 
-        self.world_view_transform = torch.tensor(getWorld2View2(R, T, trans, scale)).transpose(0, 1).cuda()
+        self.R = R
+        self.T = T
+
+        self.update()
+
+
+    def update(self):
+        self.world_view_transform = torch.tensor(getWorld2View2(self.R, self.T, self.trans, self.scale)).transpose(0, 1).cuda()
         self.projection_matrix = getProjectionMatrix(znear=self.znear, zfar=self.zfar, fovX=self.FoVx, fovY=self.FoVy).transpose(0,1).cuda()
         self.full_proj_transform = (self.world_view_transform.unsqueeze(0).bmm(self.projection_matrix.unsqueeze(0))).squeeze(0)
         self.camera_center = self.world_view_transform.inverse()[3, :3]
+
+        self.focal_x = self.image_width / (2 * np.tan(self.FoVx * 0.5))
+        self.focal_y = self.image_height / (2 * np.tan(self.FoVy * 0.5))
 
 class MiniCam:
     def __init__(self, width, height, fovy, fovx, znear, zfar, world_view_transform, full_proj_transform):

@@ -42,11 +42,11 @@ class GaussianModel:
         self.rotation_activation = torch.nn.functional.normalize
 
 
-    def __init__(self, modelParams: ModelParams, sh_degree : int):
-        self.modelParams = modelParams
+    def __init__(self, model_params: ModelParams, sh_degree: int):
+        self.model_params = model_params
         self.active_sh_degree = 0
         self.max_sh_degree = sh_degree  
-        if self.modelParams.convert_mlp:
+        if self.model_params.convert_mlp:
             self.active_sh_degree = self.max_sh_degree
         self._xyz = torch.empty(0)
         self._features_dc = torch.empty(0)
@@ -62,27 +62,53 @@ class GaussianModel:
         self.spatial_lr_scale = 0
         self.setup_functions()
 
-        if self.modelParams.convert_mlp:
-            in_feat = 3 * self.modelParams.num_feat_per_gaussian_channel + 12
-            out_feat = 3+3+4 if self.modelParams.dynamic_gaussians else 3 
+        self.model_params.convert_mlp = True
+        self.mlp = nn.Sequential(
+            nn.LazyLinear(128), 
+            nn.ReLU(),
+            nn.Linear(128, 128),
+            nn.ReLU(),
+            nn.Linear(128, 3)
+        ).cuda()
+
+        if self.model_params.optimize_reflectivity:
+            self.mlp.reflectivies = torch.nn.Parameter(torch.randn(256, 256, 256, 3, device="cuda") / 10)
+
+        if self.model_params.optimize_roughness:
+            self.mlp.roughnesses = torch.nn.Parameter(torch.ones(256, 256, 256, 1, device="cuda") / 10)
+
+        if self.model_params.optimize_normals:
+            self.mlp.normals = torch.nn.Parameter(torch.randn(256, 256, 256, 3, device="cuda") / 100)
+
+        # if self.model_params.convert_mlp:
+        #     in_feat = 3 * self.model_params.num_feat_per_gaussian_channel + 12
+        #     out_feat = 3+3+4 if self.model_params.dynamic_gaussians else 3 
             
-            if self.modelParams.use_tcnn:
-                import tinycudann as tcnn 
-                self.mlp = tcnn.Network(in_feat, out_feat, {
-                    "otype": "FullyFusedMLP",
-                    "activation": "ReLU",
-                    "output_activation": "None",
-                    "n_neurons": 128,
-                    "n_hidden_layers": 1
-                }) 
-            else:
-                self.mlp = nn.Sequential(
-                    nn.Linear(in_feat, 128), 
-                    nn.ReLU(),
-                    nn.Linear(128, 128),
-                    nn.ReLU(),
-                    nn.Linear(128, out_feat)
-                ).cuda()
+        #     if self.model_params.use_tcnn:
+        #         import tinycudann as tcnn 
+        #         self.mlp = tcnn.Network(in_feat, out_feat, {
+        #             "otype": "FullyFusedMLP",
+        #             "activation": "ReLU",
+        #             "output_activation": "None",
+        #             "n_neurons": 128,
+        #             "n_hidden_layers": 1
+        #         }) 
+        #     else:
+        #         self.mlp = nn.Sequential(
+        #             nn.Linear(in_feat, 128), 
+        #             nn.ReLU(),
+        #             nn.Linear(128, 128),
+        #             nn.ReLU(),
+        #             nn.Linear(128, out_feat)
+        #         ).cuda()
+
+        #         self.mlp.brdf_mlp = nn.Sequential(
+        #             nn.LazyLinear(128), 
+        #             nn.ReLU(),
+        #             nn.Linear(128, 128),
+        #             nn.ReLU(),
+        #             nn.Linear(128, 1)
+        #         ).cuda()
 
     def capture(self):
         return (
@@ -136,6 +162,11 @@ class GaussianModel:
         features_rest = self._features_rest
         return torch.cat((features_dc, features_rest), dim=1)
     
+    def get_inverse_covariance(self, scaling_modifier=1):
+        return self.covariance_activation(1 / self.get_scaling,
+                                          1 / scaling_modifier,
+                                          self.get_rotation)
+    
     @property
     def get_opacity(self):
         return self.opacity_activation(self._opacity)
@@ -151,8 +182,9 @@ class GaussianModel:
         self.spatial_lr_scale = spatial_lr_scale
         fused_point_cloud = torch.tensor(np.asarray(pcd.points)).float().cuda()
         fused_color = RGB2SH(torch.tensor(np.asarray(pcd.colors)).float().cuda())
-        if self.modelParams.diffuse_only:
-            features = torch.zeros((fused_color.shape[0], 3, 1)).float().cuda()
+        if self.model_params.diffuse_only:
+            features = torch.zeros((fused_color.shape[0], 3, 2 if self.model_params.dual else 1)).float().cuda() 
+            #!!! set to 2 instead of 1 for an experiment
         else:
             features = torch.zeros((fused_color.shape[0], 3, (self.max_sh_degree + 1) ** 2)).float().cuda()
         features[:, :3, 0 ] = fused_color
@@ -183,13 +215,13 @@ class GaussianModel:
         l = [
             {'params': [self._xyz], 'lr': training_args.position_lr_init * self.spatial_lr_scale, "name": "xyz"},
             {'params': [self._features_dc], 'lr': training_args.feature_lr, "name": "f_dc"},
-            {'params': [self._features_rest], 'lr': training_args.mlp_lr if self.modelParams.convert_mlp else training_args.feature_lr / training_args.sh_slowdown_factor, "name": "f_rest"},
+            {'params': [self._features_rest], 'lr': training_args.mlp_lr if self.model_params.convert_mlp else training_args.feature_lr / training_args.sh_slowdown_factor, "name": "f_rest"},
             {'params': [self._opacity], 'lr': training_args.opacity_lr, "name": "opacity"},
             {'params': [self._scaling], 'lr': training_args.scaling_lr, "name": "scaling"},
             {'params': [self._rotation], 'lr': training_args.rotation_lr, "name": "rotation"}
         ]
 
-        if self.modelParams.convert_mlp:
+        if self.model_params.convert_mlp:
             l += [{'params': self.mlp.parameters(), 'lr': training_args.mlp_lr, "name": f"mlp"}]
 
         self.optimizer = torch.optim.Adam(l, lr=0.0, eps=1e-15)
@@ -260,11 +292,12 @@ class GaussianModel:
         extra_f_names = [p.name for p in plydata.elements[0].properties if p.name.startswith("f_rest_")]
         extra_f_names = sorted(extra_f_names, key = lambda x: int(x.split('_')[-1]))
         
-        nf = 1 if self.modelParams.diffuse_only else (self.max_sh_degree + 1) ** 2
+        # nf = 2 if self.model_params.diffuse_only else (self.max_sh_degree + 1) ** 2 
+        nf = 2 #if self.model_params.dual else 1 
 
-        assert len(extra_f_names)==3*nf - 3, breakpoint()
-        
-        if self.modelParams.diffuse_only:
+        assert len(extra_f_names) == 3*nf - 3, (len(extra_f_names), 3*nf - 3)
+
+        if self.model_params.diffuse_only:
             features_extra = np.zeros((xyz.shape[0], len(extra_f_names)))
             for idx, attr_name in enumerate(extra_f_names):
                 features_extra[:, idx] = np.asarray(plydata.elements[0][attr_name])
@@ -446,6 +479,15 @@ class GaussianModel:
             big_points_ws = self.get_scaling.max(dim=1).values > 0.1 * extent
             prune_mask = torch.logical_or(torch.logical_or(prune_mask, big_points_vs), big_points_ws)
         self.prune_points(prune_mask)
+
+        torch.cuda.empty_cache()
+
+    def densify_without_pruning(self, max_grad, min_opacity, extent):
+        grads = self.xyz_gradient_accum / self.denom
+        grads[grads.isnan()] = 0.0
+
+        self.densify_and_clone(grads, max_grad, extent)
+        self.densify_and_split(grads, max_grad, extent)
 
         torch.cuda.empty_cache()
 

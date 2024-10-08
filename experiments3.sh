@@ -1,0 +1,6 @@
+q a40 <<< "python train.py -s colmap/hard_kitchen_vanilla --split_spec_diff --densify_dual --densify_grad_threshold 0.0002 --label densify_grad_threshold_0.0002"
+q a40 <<< "python train.py -s colmap/hard_kitchen_vanilla --split_spec_diff --densify_dual --densify_grad_threshold 0.0001 --label densify_grad_threshold_0.0001"
+q a40 <<< "python train.py -s colmap/hard_kitchen_vanilla --split_spec_diff --densify_dual --densify_grad_threshold 0.00004 --label densify_grad_threshold_0.00004"
+q a40 <<< "python train.py -s colmap/hard_kitchen_vanilla --split_spec_diff --densify_dual --densify_grad_threshold 0.00002 --label densify_grad_threshold_0.00002"
+q a40 <<< "python train.py -s colmap/hard_kitchen_vanilla --split_spec_diff --densify_dual --densify_grad_threshold 0.00001 --label densify_grad_threshold_0.00001"
+q a40 <<< "python train.py -s colmap/hard_kitchen_vanilla --split_spec_diff --densify_dual --densify_grad_threshold 0.000004 --label densify_grad_threshold_0.000004"

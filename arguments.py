@@ -51,24 +51,34 @@ class ModelParams(ParamGroup):
         self._source_path = ""
         self._model_path = ""
         self._images = "images"
-        self._resolution = -1
+        self._resolution = 768//4
         self._white_background = False
         self.data_device = "cuda"
         self.eval = True
         self.diffuse_only = False 
         self.convert_mlp = False 
-        self.dynamic_gaussians = False
-        self.dynamic_diffuse = False 
+        self.dual = False 
+        self.dual_bbox_size_mult = 4.0
         self.num_feat_per_gaussian_channel = 16 
         self.use_tcnn = False
-        self.split_spec_diff = False
+        self.split_spec_diff = True
+        self.densify_dual = False
+        self.skip_primal = False
+        self.optimize_reflectivity = False
+        self.freeze_optimize_reflectivity = False
+        self.optimize_roughness = False
+        self.freeze_optimize_roughness = False
+        self.optimize_normals = False
+        self.freeze_optimize_normals = False
+        self.mlp_brdf = False
+        self.gaussian_subsets = False
         self.keep_every_kth_view = 1
+        self.max_images = 9999999
+        self.num_init_points = 1000 # only with nerf init
         super().__init__(parser, "Loading Parameters", sentinel)
 
     def extract(self, args):
         g = super().extract(args)
-        if g.dynamic_gaussians:
-            g.convert_mlp = True
         g.source_path = os.path.abspath(g.source_path)
         return g
 
@@ -77,6 +87,7 @@ class PipelineParams(ParamGroup):
         self.convert_SHs_python = False
         self.compute_cov3D_python = False
         self.debug = False
+        self.depth_ratio = 0.0
         super().__init__(parser, "Pipeline Parameters")
 
 class OptimizationParams(ParamGroup):
@@ -92,15 +103,20 @@ class OptimizationParams(ParamGroup):
         self.rotation_lr = 0.001
         self.percent_dense = 0.01
         self.lambda_dssim = 0.2
+        self.lambda_dist = 0.0
+        self.lambda_normal = 0.05
+        self.opacity_cull = 0.05
+
         self.densification_interval = 100
         self.opacity_reset_interval = 3000
         self.densify_from_iter = 500
         self.densify_until_iter = 15_000
         self.densify_grad_threshold = 0.0002
-        self.random_background = False
+
         self.sh_slowdown_factor = 20.0
         self.mlp_lr = 1e-3
-        
+        self.random_background = False
+
         super().__init__(parser, "Optimization Parameters")
 
 def get_combined_args(parser : ArgumentParser):

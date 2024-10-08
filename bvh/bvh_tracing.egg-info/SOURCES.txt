@@ -1,0 +1,11 @@
+LICENCE
+README.md
+setup.py
+/home/ypoirier/raycasting-and-compositing/bvh/src/bindings.cpp
+/home/ypoirier/raycasting-and-compositing/bvh/src/bvh.cu
+/home/ypoirier/raycasting-and-compositing/bvh/src/construct.cu
+/home/ypoirier/raycasting-and-compositing/bvh/src/trace.cu
+bvh_tracing.egg-info/PKG-INFO
+bvh_tracing.egg-info/SOURCES.txt
+bvh_tracing.egg-info/dependency_links.txt
+bvh_tracing.egg-info/top_level.txt

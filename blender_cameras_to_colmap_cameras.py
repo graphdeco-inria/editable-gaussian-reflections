@@ -54,8 +54,8 @@ def nerf_to_colmap(json_path):
     os.makedirs(outdir, exist_ok=True)
 
     transforms = json.load(open(json_path, 'r'))
-    w = transforms["w"]
-    h = transforms["h"]
+    w = transforms["width"]
+    h = transforms["height"]
 
     with open(outdir + "/points3D.txt", "w") as file:
         pass
@@ -75,8 +75,8 @@ def nerf_to_colmap(json_path):
 # Number of images: 200, mean observations per image: 2233.04
 """.strip(), file=file)
         
-        for _, frame in enumerate(sorted(transforms["frames"], key=lambda frame: frame["file_path"])):
-            id = int(frame["file_path"].split("/")[-1].split(".")[1])
+        for i, frame in enumerate(transforms["frames"]):
+            id = int(frame["file_path"].split("/")[-1].split(".")[0].split("_")[1])
             print(id + 1, file=file, end=" ")
             c2w = np.array(frame["transform_matrix"])
             qvec, tvec = nerf_pose_to_colmap_pose(c2w)
@@ -86,7 +86,7 @@ def nerf_to_colmap(json_path):
                 print(x, file=file, end=" ")
             print(1, file=file, end=" ")
 
-            print(frame["file_path"].split("/")[-1], file=file, end=" ")
+            print(frame["file_path"].split("/")[-1] + ".png", file=file, end=" ")
 
             print(file=file) # Need a blank line where points will be
             print(file=file)

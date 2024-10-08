@@ -129,7 +129,6 @@ def read_points3D_binary(path_to_model_file):
         void Reconstruction::WritePoints3DBinary(const std::string& path)
     """
 
-
     with open(path_to_model_file, "rb") as fid:
         num_points = read_next_bytes(fid, 8, "Q")[0]
 

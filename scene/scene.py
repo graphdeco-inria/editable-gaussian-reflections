@@ -13,8 +13,10 @@ import os
 import random
 import json
 from utils.system_utils import searchForMaxIteration
-from scene.dataset_readers import sceneLoadTypeCallbacks
+from scene.dataset_readers import *
 from scene.gaussian_model import GaussianModel
+from scene.surfel_model import SurfelModel
+
 from arguments import ModelParams
 from utils.camera_utils import cameraList_from_camInfos, camera_to_JSON
 import torch
@@ -22,15 +24,15 @@ import torch
 class Scene:
     gaussians : GaussianModel
 
-    def __init__(self, modelParams : ModelParams, gaussians : GaussianModel, load_iteration=None, shuffle=True, resolution_scales=[1.0], dynamic=False):
+    def __init__(self, model_params : ModelParams, gaussians : GaussianModel, load_iteration=None, shuffle=True, resolution_scales=[1.0], dual=False):
         """b
         :param path: Path to colmap scene main folder.
         """
-        self.modelParams = modelParams
-        self.model_path = modelParams.model_path
+        self.model_params = model_params
+        self.model_path = model_params.model_path
         self.loaded_iter = None
         self.gaussians = gaussians
-        self.dynamic = dynamic
+        self.dual = dual
 
         if load_iteration:
             if load_iteration == -1:
@@ -42,15 +44,23 @@ class Scene:
         self.train_cameras = {}
         self.test_cameras = {}
 
-        if os.path.exists(os.path.join(modelParams.source_path, "sparse")):
-            scene_info = sceneLoadTypeCallbacks["Colmap"](modelParams, modelParams.source_path, modelParams.images, modelParams.eval)
-        elif os.path.exists(os.path.join(modelParams.source_path, "transforms_train.json")):
+        if model_params.dual:
+            source_path = model_params.source_path.replace("colmap/", "renders/").replace("/train", "")
+        elif not model_params.skip_primal:
+            source_path = model_params.source_path.replace("renders/", "colmap/") + "/train"
+        else:
+            source_path = model_params.source_path
+
+        print("dual:", model_params.dual, ":: source path:", source_path)
+        if os.path.exists(os.path.join(source_path, "sparse")):
+            scene_info = readColmapSceneInfo(model_params, source_path, model_params.images, model_params.eval)
+        elif os.path.exists(os.path.join(source_path, "transforms_train.json")):
             print("Found transforms_train.json file, assuming Blender data set!")
-            scene_info = sceneLoadTypeCallbacks["Blender"](modelParams, modelParams.source_path, modelParams.white_background, modelParams.eval)
+            scene_info = readNerfSyntheticInfo(model_params, source_path, model_params.white_background, model_params.eval)
         else:
             assert False, "Could not recognize scene type!"
 
-        scene_info.train_cameras = scene_info.train_cameras[::modelParams.keep_every_kth_view]
+        scene_info.train_cameras = scene_info.train_cameras[::model_params.keep_every_kth_view]
 
         if not self.loaded_iter:
             with open(scene_info.ply_path, 'rb') as src_file, open(os.path.join(self.model_path, "input.ply") , 'wb') as dest_file:
@@ -72,42 +82,43 @@ class Scene:
 
         self.cameras_extent = scene_info.nerf_normalization["radius"]
         
-        if not self.dynamic:
-            for resolution_scale in resolution_scales:
-                print("Loading Training Cameras")
-                self.train_cameras[resolution_scale] = cameraList_from_camInfos(scene_info.train_cameras, resolution_scale, modelParams)
-                print("Loading Test Cameras")
-                self.test_cameras[resolution_scale] = cameraList_from_camInfos(scene_info.test_cameras, resolution_scale, modelParams)
+        for resolution_scale in resolution_scales:
+            print("Loading Training Cameras")
+            self.train_cameras[resolution_scale] = cameraList_from_camInfos(scene_info.train_cameras, resolution_scale, model_params)
+            print("Loading Test Cameras")
+            self.test_cameras[resolution_scale] = cameraList_from_camInfos(scene_info.test_cameras, resolution_scale, model_params)
 
         print(f"I have {len(self.train_cameras)} cameras")
 
+        if not self.model_params.dual and self.model_params.skip_primal:
+            return 
+
         if self.loaded_iter:
-            if self.modelParams.convert_mlp:
+            if self.model_params.convert_mlp:
                 self.gaussians.mlp = torch.load(
                     os.path.join(self.model_path,
                                     "point_cloud",
                                     "iteration_" + str(self.loaded_iter),
-                                    f"{'dyn_' if self.dynamic else ''}mlp.pt")
+                                    f"{'dual_' if self.dual else ''}mlp.pt")
                 )
             self.gaussians.load_ply(os.path.join(self.model_path,
                                                            "point_cloud",
                                                            "iteration_" + str(self.loaded_iter),
-                                                           f"{'dyn_' if self.dynamic else ''}point_cloud.ply"))
+                                                           f"{'dual_' if self.dual else ''}point_cloud.ply"))
         else:
             self.gaussians.create_from_pcd(scene_info.point_cloud, self.cameras_extent)
 
     def save(self, iteration):
         point_cloud_path = os.path.join(self.model_path, "point_cloud/iteration_{}".format(iteration))
-        self.gaussians.save_ply(os.path.join(point_cloud_path, f"{'dyn_' if self.dynamic else ''}point_cloud.ply"))
-        if self.modelParams.convert_mlp:
-            torch.save(self.gaussians.mlp, os.path.join(point_cloud_path, f"{'dyn_' if self.dynamic else ''}mlp.pt"))
-            if self.modelParams.use_tcnn:
+        self.gaussians.save_ply(os.path.join(point_cloud_path, f"{'dual_' if self.dual else ''}point_cloud.ply"))
+        if self.model_params.convert_mlp:
+            torch.save(self.gaussians.mlp, os.path.join(point_cloud_path, f"{'dual_' if self.dual else ''}mlp.pt"))
+            if self.model_params.use_tcnn:
                 import io
                 buff = io.BytesIO()
                 torch.save(self.gaussians.mlp.state_dict()['params'], buff)
-                with open(os.path.join(point_cloud_path, f"{'dyn_' if self.dynamic else ''}mlp.bin"), "wb") as f:
+                with open(os.path.join(point_cloud_path, f"{'dual_' if self.dual else ''}mlp.bin"), "wb") as f:
                     f.write(buff.getvalue())
-
 
     def getTrainCameras(self, scale=1.0):
         return self.train_cameras[scale]
