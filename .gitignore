@@ -11,3 +11,4 @@ screenshots
 /.bash_history
 submodules/diff-surfel-rasterization/
 renders
+*.ply

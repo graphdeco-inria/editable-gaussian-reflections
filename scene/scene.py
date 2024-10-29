@@ -15,7 +15,7 @@ import json
 from utils.system_utils import searchForMaxIteration
 from scene.dataset_readers import *
 from scene.gaussian_model import GaussianModel
-from scene.surfel_model import SurfelModel
+# from scene.surfel_model import SurfelModel
 
 from arguments import ModelParams
 from utils.camera_utils import cameraList_from_camInfos, camera_to_JSON
@@ -24,7 +24,7 @@ import torch
 class Scene:
     gaussians : GaussianModel
 
-    def __init__(self, model_params : ModelParams, gaussians : GaussianModel, load_iteration=None, shuffle=True, resolution_scales=[1.0], dual=False):
+    def __init__(self, model_params : ModelParams, gaussians : GaussianModel, load_iteration=None, shuffle=True, resolution_scales=[1.0], dual=False, extend_point_cloud=None):
         """b
         :param path: Path to colmap scene main folder.
         """
@@ -51,20 +51,28 @@ class Scene:
         else:
             source_path = model_params.source_path
 
-        print("dual:", model_params.dual, ":: source path:", source_path)
-        if os.path.exists(os.path.join(source_path, "sparse")):
-            scene_info = readColmapSceneInfo(model_params, source_path, model_params.images, model_params.eval)
-        elif os.path.exists(os.path.join(source_path, "transforms_train.json")):
-            print("Found transforms_train.json file, assuming Blender data set!")
+        if model_params.dual:
+            assert os.path.exists(os.path.join(source_path, "transforms_train.json")), source_path
             scene_info = readNerfSyntheticInfo(model_params, source_path, model_params.white_background, model_params.eval)
         else:
-            assert False, "Could not recognize scene type!"
+            assert os.path.exists(os.path.join(source_path, "sparse")), source_path
+            scene_info = readColmapSceneInfo(model_params, source_path, model_params.images, model_params.eval)
+
+        self.scene_info = scene_info
+            
+        # if os.path.exists(os.path.join(source_path, "sparse")):
+        #     scene_info = readColmapSceneInfo(model_params, source_path, model_params.images, model_params.eval)
+        # elif os.path.exists(os.path.join(source_path, "transforms_train.json")):
+        #     print("Found transforms_train.json file, assuming Blender data set!")
+        #     scene_info = readNerfSyntheticInfo(model_params, source_path, model_params.white_background, model_params.eval)
+        # else:
+        #     assert False, "Could not recognize scene type!"
 
         scene_info.train_cameras = scene_info.train_cameras[::model_params.keep_every_kth_view]
 
         if not self.loaded_iter:
-            with open(scene_info.ply_path, 'rb') as src_file, open(os.path.join(self.model_path, "input.ply") , 'wb') as dest_file:
-                dest_file.write(src_file.read())
+            # with open(scene_info.ply_path, 'rb') as src_file, open(os.path.join(self.model_path, "input.ply") , 'wb') as dest_file:
+            #     dest_file.write(src_file.read())
             json_cams = []
             camlist = []
             if scene_info.test_cameras:
@@ -93,18 +101,30 @@ class Scene:
         if not self.model_params.dual and self.model_params.skip_primal:
             return 
 
+        if extend_point_cloud is not None:
+            # scene_info.point_cloud = BasicPointCloud(
+            #     np.concatenate([scene_info.point_cloud.points, extend_point_cloud.points]),
+            #     np.concatenate([scene_info.point_cloud.colors, extend_point_cloud.colors]),
+            #     np.concatenate([scene_info.point_cloud.normals, extend_point_cloud.normals]),
+            # )
+            scene_info.point_cloud = BasicPointCloud(
+                np.concatenate([scene_info.point_cloud.points, extend_point_cloud.points]),
+                np.concatenate([scene_info.point_cloud.colors, extend_point_cloud.colors]),
+                np.concatenate([scene_info.point_cloud.normals, extend_point_cloud.normals]),
+            )
+
         if self.loaded_iter:
-            if self.model_params.convert_mlp:
-                self.gaussians.mlp = torch.load(
-                    os.path.join(self.model_path,
-                                    "point_cloud",
-                                    "iteration_" + str(self.loaded_iter),
-                                    f"{'dual_' if self.dual else ''}mlp.pt")
-                )
+            # if self.model_params.convert_mlp:
+            #     self.gaussians.mlp = torch.load(
+            #         os.path.join(self.model_path,
+            #                         "point_cloud",
+            #                         "iteration_" + str(self.loaded_iter),
+            #                         f"{'dual_' if self.dual else ''}mlp.pt")
+            #     )
             self.gaussians.load_ply(os.path.join(self.model_path,
                                                            "point_cloud",
                                                            "iteration_" + str(self.loaded_iter),
-                                                           f"{'dual_' if self.dual else ''}point_cloud.ply"))
+                                                           f"{'dual_' if self.dual else ''}point_cloud.ply"), self.dual)
         else:
             self.gaussians.create_from_pcd(scene_info.point_cloud, self.cameras_extent)
 

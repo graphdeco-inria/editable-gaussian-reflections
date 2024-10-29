@@ -51,10 +51,10 @@ class ModelParams(ParamGroup):
         self._source_path = ""
         self._model_path = ""
         self._images = "images"
-        self._resolution = 768//4
+        self._resolution = 1024 // 2 ## Yohan: on quarter res this crashes at 600 iters and I don't know why
         self._white_background = False
         self.data_device = "cuda"
-        self.eval = True
+        self.eval = False
         self.diffuse_only = False 
         self.convert_mlp = False 
         self.dual = False 
@@ -64,8 +64,12 @@ class ModelParams(ParamGroup):
         self.split_spec_diff = True
         self.densify_dual = False
         self.skip_primal = False
-        self.optimize_reflectivity = False
-        self.freeze_optimize_reflectivity = False
+        
+        self.brdf = False
+        self.brdf_f0_grid = False
+        self.fused_scene = False
+
+        self.freeze_brdf = False
         self.optimize_roughness = False
         self.freeze_optimize_roughness = False
         self.optimize_normals = False
@@ -74,7 +78,11 @@ class ModelParams(ParamGroup):
         self.gaussian_subsets = False
         self.keep_every_kth_view = 1
         self.max_images = 9999999
-        self.num_init_points = 1000 # only with nerf init
+        self.num_init_points = 100_000 # 100_000
+        self.opacity_modulation = False
+
+        self.raytrace_primal = False
+
         super().__init__(parser, "Loading Parameters", sentinel)
 
     def extract(self, args):
@@ -114,7 +122,7 @@ class OptimizationParams(ParamGroup):
         self.densify_grad_threshold = 0.0002
 
         self.sh_slowdown_factor = 20.0
-        self.mlp_lr = 1e-3
+        self.mlp_lr = 0.001 #!!! was 1e-3 for mlp, reduced for feature grid
         self.random_background = False
 
         super().__init__(parser, "Optimization Parameters")

@@ -46,6 +46,7 @@ class CameraInfo:
     roughness_image: None
     metalness_image: None
     albedo_image: None
+    spec_brdf_image: None
 
 @dataclass
 class SceneInfo:
@@ -114,55 +115,57 @@ def readColmapCameras(model_params, cam_extrinsics, cam_intrinsics, images_folde
         image_name = os.path.basename(image_path).split(".")[0]
         image = Image.open(image_path.replace("/colmap/", "/renders/").replace("/images/", "/color/"))
         
-        if model_params.split_spec_diff:
-            diffuse_image_path = image_path.replace("/color_", "/diffuse_").replace("/colmap/", "/renders/").replace("/images/", "/diffuse/")
-            diffuse_image = Image.open(diffuse_image_path).convert("RGB")
+        diffuse_image_path = image_path.replace("/color_", "/diffuse_").replace("/colmap/", "/renders/").replace("/images/", "/diffuse/")
+        diffuse_image = Image.open(diffuse_image_path).convert("RGB")
 
-            glossy_image_path = image_path.replace("/color_", "/glossy_").replace("/colmap/", "/renders/").replace("/images/", "/glossy/")
-            glossy_image = Image.open(glossy_image_path).convert("RGB")
-            
-            normal_image_path = image_path.replace("/color_", "/normal_").replace(".png", ".exr").replace("/colmap/", "/renders/").replace("/images/", "/normal/")
-            normal_image = cv2.imread(normal_image_path, cv2.IMREAD_UNCHANGED)
-            normal_image = cv2.cvtColor(normal_image, cv2.COLOR_BGR2RGB)
-            assert normal_image is not None, f"Normal image not found at {normal_image_path}"
+        glossy_image_path = image_path.replace("/color_", "/glossy_").replace("/colmap/", "/renders/").replace("/images/", "/glossy/")
+        glossy_image = Image.open(glossy_image_path).convert("RGB")
+        
+        normal_image_path = image_path.replace("/color_", "/normal_").replace(".png", ".exr").replace("/colmap/", "/renders/").replace("/images/", "/normal/")
+        normal_image = cv2.imread(normal_image_path, cv2.IMREAD_UNCHANGED)
+        assert normal_image is not None, f"Normal image not found at {normal_image_path}"
+        normal_image = cv2.cvtColor(normal_image, cv2.COLOR_BGR2RGB)
 
-            position_image_path = image_path.replace("/color_", "/position_").replace(".png", ".exr").replace("/colmap/", "/renders/").replace("/images/", "/position/")
-            position_image = cv2.imread(position_image_path, cv2.IMREAD_UNCHANGED)
-            position_image = cv2.cvtColor(position_image, cv2.COLOR_BGR2RGB)
-            assert position_image is not None, f"Position image not found at {position_image_path}"
+        position_image_path = image_path.replace("/color_", "/position_").replace(".png", ".exr").replace("/colmap/", "/renders/").replace("/images/", "/position/")
+        position_image = cv2.imread(position_image_path, cv2.IMREAD_UNCHANGED)
+        assert position_image is not None, f"Position image not found at {position_image_path}"
+        position_image = cv2.cvtColor(position_image, cv2.COLOR_BGR2RGB)
 
-            roughness_image_path = image_path.replace("/color_", "/roughness_").replace(".png", ".exr").replace("/colmap/", "/renders/").replace("/images/", "/roughness/")
-            roughness_image = cv2.imread(roughness_image_path, cv2.IMREAD_UNCHANGED)
-            roughness_image = cv2.cvtColor(roughness_image, cv2.COLOR_BGR2RGB)
-            assert roughness_image is not None, f"Roughness image not found at {roughness_image_path}"
+        roughness_image_path = image_path.replace("/color_", "/roughness_").replace(".png", ".exr").replace("/colmap/", "/renders/").replace("/images/", "/roughness/")
+        roughness_image = cv2.imread(roughness_image_path, cv2.IMREAD_UNCHANGED)
+        assert roughness_image is not None, f"Roughness image not found at {roughness_image_path}"
+        roughness_image = cv2.cvtColor(roughness_image, cv2.COLOR_BGR2RGB)
 
-            metalness_path = image_path.replace("/color_", "/metalness_").replace(".png", ".exr").replace("/colmap/", "/renders/").replace("/images/", "/metalness/")
-            metalness_image = cv2.imread(metalness_path, cv2.IMREAD_UNCHANGED)
-            metalness_image = cv2.cvtColor(metalness_image, cv2.COLOR_BGR2RGB)
-            assert metalness_image is not None, f"Metalness image not found at {metalness_path}"
+        metalness_path = image_path.replace("/color_", "/metalness_").replace(".png", ".exr").replace("/colmap/", "/renders/").replace("/images/", "/metalness/")
+        metalness_image = cv2.imread(metalness_path, cv2.IMREAD_UNCHANGED)
+        assert metalness_image is not None, f"Metalness image not found at {metalness_path}"
+        metalness_image = cv2.cvtColor(metalness_image, cv2.COLOR_BGR2RGB)
 
-            albedo_path = image_path.replace("/color_", "/albedo2_").replace(".png", ".exr").replace("/colmap/", "/renders/").replace("/images/", "/albedo2/")
-            albedo_image = cv2.imread(albedo_path, cv2.IMREAD_UNCHANGED)
-            albedo_image = cv2.cvtColor(albedo_image, cv2.COLOR_BGR2RGB)
-            assert albedo_image is not None, f"Albedo image not found at {albedo_path}"
+        albedo_path = image_path.replace("/color_", "/albedo2_").replace(".png", ".exr").replace("/colmap/", "/renders/").replace("/images/", "/albedo2/")
+        albedo_image = cv2.imread(albedo_path, cv2.IMREAD_UNCHANGED)
+        assert albedo_image is not None, f"Albedo image not found at {albedo_path}"
+        albedo_image = cv2.cvtColor(albedo_image, cv2.COLOR_BGR2RGB)
+
+        spec_brdf_path = image_path.replace("/color_", "/spec_brdf_").replace(".png", ".exr").replace("/colmap/", "/renders/").replace("/images/", "/spec_brdf/")
+        if os.path.exists(spec_brdf_path):
+            spec_brdf_image = cv2.imread(spec_brdf_path, cv2.IMREAD_UNCHANGED)
+            assert spec_brdf_image is not None, f"Albedo image not found at {spec_brdf_path}"
+            spec_brdf_image = cv2.cvtColor(spec_brdf_image, cv2.COLOR_BGR2RGB)
         else:
-            diffuse_image = None
-            glossy_image = None
-            position_image = None
-            normal_image = None
-            roughness_image = None
-            metalness_image = None
-            albedo_image = None
+            spec_brdf_image = None
 
         cam_info = CameraInfo(uid=uid, R=R, T=T, FovY=FovY, FovX=FovX, image=image,
-                              image_path=image_path, image_name=image_name, width=width, height=height, diffuse_image=diffuse_image, glossy_image=glossy_image, position_image=position_image, normal_image=normal_image, roughness_image=roughness_image, metalness_image=metalness_image, albedo_image=albedo_image)
+                              image_path=image_path, image_name=image_name, width=width, height=height, diffuse_image=diffuse_image, glossy_image=glossy_image, position_image=position_image, normal_image=normal_image, roughness_image=roughness_image, metalness_image=metalness_image, albedo_image=albedo_image, spec_brdf_image=spec_brdf_image)
 
         cam_infos.append(cam_info)
-
     
+    futures = []
     with ThreadPoolExecutor() as executor: 
         for idx, key in tqdm(keys):
-            executor.submit(readFrame, idx, key)
+            futures.append(executor.submit(readFrame, idx, key))
+
+    for future in concurrent.futures.as_completed(futures):
+        future.result()
 
     cam_infos = sorted(cam_infos, key=lambda x: x.image_name)
     
@@ -208,6 +211,7 @@ def readColmapSceneInfo(model_params, path, images, eval, llffhold=8):
 
     reading_dir = "images" if images == None else images
     cam_infos_unsorted = readColmapCameras(model_params, cam_extrinsics=cam_extrinsics, cam_intrinsics=cam_intrinsics, images_folder=os.path.join(path, reading_dir))
+    assert len(cam_infos_unsorted) > 0, "No cameras found in the scene!"
     cam_infos = sorted(cam_infos_unsorted.copy(), key = lambda x : x.image_name)
 
     if eval:
@@ -270,44 +274,42 @@ def readCamerasFromTransforms(model_params, path, transformsfile, white_backgrou
             image_name = Path(cam_name).stem
             image = Image.open(image_path)
             
-            if model_params.split_spec_diff:
-                diffuse_image_path = image_path.replace("/color_", "/diffuse_").replace("/colmap/", "/renders/").replace("/color/", "/diffuse/")
-                diffuse_image = Image.open(diffuse_image_path).convert("RGB")
+            diffuse_image_path = image_path.replace("/color_", "/diffuse_").replace("/colmap/", "/renders/").replace("/color/", "/diffuse/")
+            diffuse_image = Image.open(diffuse_image_path).convert("RGB")
 
-                glossy_image_path = image_path.replace("/color_", "/glossy_").replace("/colmap/", "/renders/").replace("/color/", "/glossy/")
-                glossy_image = Image.open(glossy_image_path).convert("RGB")
-                
-                normal_image_path = image_path.replace("/color_", "/normal_").replace(".png", ".exr").replace("/colmap/", "/renders/").replace("/color/", "/normal/")
-                normal_image = cv2.imread(normal_image_path, cv2.IMREAD_UNCHANGED)
-                normal_image = cv2.cvtColor(normal_image, cv2.COLOR_BGR2RGB)
-                assert normal_image is not None, f"Normal image not found at {normal_image_path}"
+            glossy_image_path = image_path.replace("/color_", "/glossy_").replace("/colmap/", "/renders/").replace("/color/", "/glossy/")
+            glossy_image = Image.open(glossy_image_path).convert("RGB")
+            
+            normal_image_path = image_path.replace("/color_", "/normal_").replace(".png", ".exr").replace("/colmap/", "/renders/").replace("/color/", "/normal/")
+            normal_image = cv2.imread(normal_image_path, cv2.IMREAD_UNCHANGED)
+            normal_image = cv2.cvtColor(normal_image, cv2.COLOR_BGR2RGB)
+            assert normal_image is not None, f"Normal image not found at {normal_image_path}"
 
-                position_image_path = image_path.replace("/color_", "/position_").replace(".png", ".exr").replace("/colmap/", "/renders/").replace("/color/", "/position/")
-                position_image = cv2.imread(position_image_path, cv2.IMREAD_UNCHANGED)
-                position_image = cv2.cvtColor(position_image, cv2.COLOR_BGR2RGB)
+            position_image_path = image_path.replace("/color_", "/position_").replace(".png", ".exr").replace("/colmap/", "/renders/").replace("/color/", "/position/")
+            position_image = cv2.imread(position_image_path, cv2.IMREAD_UNCHANGED)
+            position_image = cv2.cvtColor(position_image, cv2.COLOR_BGR2RGB)
 
-                roughness_image_path = image_path.replace("/color_", "/roughness_").replace(".png", ".exr").replace("/colmap/", "/renders/").replace("/color/", "/roughness/")
-                roughness_image = cv2.imread(roughness_image_path, cv2.IMREAD_UNCHANGED)
-                roughness_image = cv2.cvtColor(roughness_image, cv2.COLOR_BGR2RGB)
-                assert roughness_image is not None, f"Roughness image not found at {roughness_image_path}"
+            roughness_image_path = image_path.replace("/color_", "/roughness_").replace(".png", ".exr").replace("/colmap/", "/renders/").replace("/color/", "/roughness/")
+            roughness_image = cv2.imread(roughness_image_path, cv2.IMREAD_UNCHANGED)
+            roughness_image = cv2.cvtColor(roughness_image, cv2.COLOR_BGR2RGB)
+            assert roughness_image is not None, f"Roughness image not found at {roughness_image_path}"
 
-                metalness_path = image_path.replace("/color_", "/metalness_").replace(".png", ".exr").replace("/colmap/", "/renders/").replace("/color/", "/metalness/")
-                metalness_image = cv2.imread(metalness_path, cv2.IMREAD_UNCHANGED)
-                metalness_image = cv2.cvtColor(metalness_image, cv2.COLOR_BGR2RGB)
-                assert metalness_image is not None, f"Metalness image not found at {metalness_path}"
+            metalness_path = image_path.replace("/color_", "/metalness_").replace(".png", ".exr").replace("/colmap/", "/renders/").replace("/color/", "/metalness/")
+            metalness_image = cv2.imread(metalness_path, cv2.IMREAD_UNCHANGED)
+            metalness_image = cv2.cvtColor(metalness_image, cv2.COLOR_BGR2RGB)
+            assert metalness_image is not None, f"Metalness image not found at {metalness_path}"
 
-                albedo_path = image_path.replace("/color_", "/albedo2_").replace(".png", ".exr").replace("/colmap/", "/renders/").replace("/color/", "/albedo2/")
-                albedo_image = cv2.imread(albedo_path, cv2.IMREAD_UNCHANGED)
-                albedo_image = cv2.cvtColor(albedo_image, cv2.COLOR_BGR2RGB)
-                assert albedo_image is not None, f"Albedo image not found at {albedo_path}"
+            albedo_path = image_path.replace("/color_", "/albedo2_").replace(".png", ".exr").replace("/colmap/", "/renders/").replace("/color/", "/albedo2/")
+            albedo_image = cv2.imread(albedo_path, cv2.IMREAD_UNCHANGED)
+            albedo_image = cv2.cvtColor(albedo_image, cv2.COLOR_BGR2RGB)
+            assert albedo_image is not None, f"Albedo image not found at {albedo_path}"
+
+            spec_brdf_path = image_path.replace("/color_", "/spec_brdf_").replace(".png", ".exr").replace("/colmap/", "/renders/").replace("/color/", "/spec_brdf/")
+            if os.path.exists(spec_brdf_path):
+                spec_brdf_image = cv2.imread(spec_brdf_path, cv2.IMREAD_UNCHANGED)
+                spec_brdf_image = cv2.cvtColor(spec_brdf_image, cv2.COLOR_BGR2RGB)
             else:
-                diffuse_image = None
-                glossy_image = None
-                position_image = None
-                normal_image = None
-                roughness_image = None
-                metalness_image = None
-                albedo_image = None 
+                spec_brdf_image = None
 
             im_data = np.array(image.convert("RGBA"))
 
@@ -321,7 +323,7 @@ def readCamerasFromTransforms(model_params, path, transformsfile, white_backgrou
             FovX = fovx
 
             cam_infos.append(CameraInfo(uid=idx, R=R, T=T, FovY=FovY, FovX=FovX, image=image,
-                            image_path=image_path, image_name=image_name, width=image.size[0], height=image.size[1], diffuse_image=diffuse_image, glossy_image=glossy_image, position_image=position_image, normal_image=normal_image, roughness_image=roughness_image, metalness_image=metalness_image, albedo_image=albedo_image))
+                            image_path=image_path, image_name=image_name, width=image.size[0], height=image.size[1], diffuse_image=diffuse_image, glossy_image=glossy_image, position_image=position_image, normal_image=normal_image, roughness_image=roughness_image, metalness_image=metalness_image, albedo_image=albedo_image, spec_brdf_image=spec_brdf_image))
 
         with ThreadPoolExecutor() as executor: 
             futures = []

@@ -24,6 +24,7 @@ class Camera(nn.Module):
                  roughness_image,
                  metalness_image,
                  albedo_image,
+                 spec_brdf_image,
                  trans=np.array([0.0, 0.0, 0.0]), scale=1.0, data_device = "cuda",
                  ):
         super(Camera, self).__init__()
@@ -42,6 +43,7 @@ class Camera(nn.Module):
         self.roughness_image = roughness_image
         self.metalness_image = metalness_image
         self.albedo_image = albedo_image
+        self.spec_brdf_image = spec_brdf_image
 
         try:
             self.data_device = torch.device(data_device)

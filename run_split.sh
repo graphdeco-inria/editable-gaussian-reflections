@@ -24,7 +24,7 @@ outfile=output/$label/$version
     convert tmp/label_slice.png tmp/label_slice_fixed.png +append tmp/label_sliced.png
 }
 
-[ -z "$SKIP_TRAIN" ] && python train.py --split_spec_diff --label $label/$version -s "${@}"
+[ -z "$SKIP_TRAIN" ] && python train.py --label $label/$version -s "${@}"
 
 python render.py --skip_train -m $outfile --eval
 ffmpeg -y -i $outfile/test/ours_30000/renders/%05d.png -i $outfile/test/ours_30000/gt/%05d.png -filter_complex "[0:v][1:v]hstack=inputs=2" -c:v libx264 -pix_fmt yuv420p $outfile/test.mp4
