@@ -44,6 +44,7 @@ class Camera(nn.Module):
         self.metalness_image = metalness_image
         self.albedo_image = albedo_image
         self.spec_brdf_image = spec_brdf_image
+        self.F0_image = self.albedo_image * self.metalness_image # + 0.08 * self.specular_image
 
         try:
             self.data_device = torch.device(data_device)

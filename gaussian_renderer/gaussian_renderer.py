@@ -38,7 +38,7 @@ brdf_lut = torch.tensor(brdf_lut).to("cuda")
 brdf_lut = brdf_lut.permute((2, 0, 1))
 
 
-def render(viewpoint_camera, pc : GaussianModel, pipe, bg_color : torch.Tensor, scaling_modifier = 1.0, override_color = None, render_depth = False, secondary_view = None, iteration = None, nomask = "NOMASK" in os.environ, raytracing_renderer=None, target=None, rays_from_camera=False, primal_pc=None):
+def render(viewpoint_camera, pc : GaussianModel, pipe, bg_color : torch.Tensor, scaling_modifier = 1.0, override_color = None, render_depth = False, secondary_view = None, iteration = None, raytracing_renderer=None, target=None, rays_from_camera=False, primal_pc=None, target_position=None, target_normal=None, target_roughness=None, target_F0=None):
     """
     Render the scene. 
     
@@ -111,9 +111,10 @@ def render(viewpoint_camera, pc : GaussianModel, pipe, bg_color : torch.Tensor, 
             view_pe = positional_encoding(dir_pp_normalized)
 
             if raytracing_renderer is not None:
-                mask = (viewpoint_camera.glossy_image.sum(0) > 0).cuda()
-                if nomask:
-                    mask = torch.ones_like(mask)
+                if pc.model_params.use_masks:
+                    mask = (viewpoint_camera.glossy_image.sum(0) > 0).cuda()
+                else:
+                    mask = torch.ones_like(viewpoint_camera.glossy_image.sum(0))
 
                 # roughness_map = viewpoint_camera.roughness_image.moveaxis(0, -1).flatten(0, 1).cuda()[mask.flatten(0, 1)]
                 # metalness_map = viewpoint_camera.metalness_image.moveaxis(0, -1).flatten(0, 1).cuda()[mask.flatten(0, 1)]
@@ -132,134 +133,51 @@ def render(viewpoint_camera, pc : GaussianModel, pipe, bg_color : torch.Tensor, 
                 
                 relf_ray_d = incident - 2 * (incident * normal).sum(dim=-1).unsqueeze(-1) * normal
 
-                if False:
-                    raytracer = RayTracer(pc.get_xyz, pc.get_scaling, pc.get_rotation)
-                    hits = raytracer.trace(refl_ray_o[mask.flatten(0, 1)], relf_ray_d[mask.flatten(0, 1)], pc.get_xyz, pc.get_inverse_covariance(), pc.get_opacity)
-
-                    cov3d = build_covariance_3d(pc.get_scaling, pc.get_rotation)
-                    ho = refl_ray_o[mask.flatten(0, 1)][hits.ray_ids]
-                    hd = relf_ray_d[mask.flatten(0, 1)][hits.ray_ids]
-                    raytracer = RayTracer(pc.get_xyz, pc.get_scaling, pc.get_rotation)
-                    
-                    tmp = (cov3d[hits.gaussian_ids] @ hd.unsqueeze(-1)).squeeze(-1)
-                    t_max = ((pc.get_xyz[hits.gaussian_ids] - ho) * tmp).sum(dim=-1) / (hd * tmp).sum(dim=-1)
-                    eval_pos = ho + hd * t_max.unsqueeze(-1)
-                    
-                    # eval the guassians at these points
-                    dx = (eval_pos - pc.get_xyz[hits.gaussian_ids])  
-                    tmp2 = (cov3d.inverse()[hits.gaussian_ids] @ dx.unsqueeze(-1)).squeeze(-1)
-                    gauss_weight = torch.exp(-0.5*(dx * tmp2).sum(dim=-1))
-                    
-                    opacity = pc.get_opacity[hits.gaussian_ids].squeeze(-1)
-                    if pc.model_params.optimize_roughness:
-                        roughness = torch.nn.functional.grid_sample(pc.mlp.roughnesses.moveaxis(-1,0)[None], refl_ray_o[mask.flatten(0, 1)][None, None, None])[0, :, 0, 0].mT * 10  # *10 is a hack to increase the lr
-                    else:
-                        roughness = roughness_map[hits.ray_ids]
-                    metalness = metalness_map[hits.ray_ids]
-                    slope = pc._features_rest[:, 0, -1][hits.gaussian_ids]
-                    mult = 1.0 - (slope * roughness[hits.ray_ids]).clamp(0, 1)
-                    alphas = gauss_weight * opacity * mult
-                    
-                    colors = pc.get_features[:, 0][hits.gaussian_ids]
-
-                    weights, transmittances = nerfacc.render_weight_from_alpha(alphas=alphas, ray_indices=hits.ray_ids.long())
-                    pixel_colors = nerfacc.accumulate_along_rays(weights=weights, values=colors, ray_indices=hits.ray_ids.long(), n_rays=refl_ray_o[mask.flatten(0, 1)].shape[0])
-                    
-                    F0 = torch.zeros_like(pixel_colors)
-                    if pc.model_params.brdf:
-                        F0 = torch.nn.functional.grid_sample(pc.mlp.F0_map.moveaxis(-1,0)[None], refl_ray_o[None, None, None])[0, :, 0, 0].mT * 10  # *10 is a hack to increase the lr 
-                        eye = -incident
-                        # halfway = (eye + ray_d) / (eye + ray_d).norm(dim=-1, keepdim=True)
-                        r0 = F0
-                        fresnel = r0 + (1.0 - r0) * (1.0 - (normal * eye).sum(dim=-1, keepdim=True).clamp(0))**5
-                        #??? what about the lambert term 
-                        pixel_colors = pixel_colors * fresnel #!!! eye or halfway vector?
-                        # https://google.github.io/filament/Filament.html#materialsystem/specularbrdf uses halfway
-                        # https://learnopengl.com/PBR/Theory uses halfway
-                    elif pc.model_params.mlp_brdf:
-                        mlp_in = torch.cat([roughness_map.mean(dim=-1, keepdim=True), metalness_map.mean(dim=-1, keepdim=True), albedo_map, normal, incident, relf_ray_d], dim=-1) 
-                        brdf = pc.mlp(positional_encoding(mlp_in))
-                    else:
-                        brdf = 1.0
-                    rendered_image = torch.zeros_like(viewpoint_camera.position_image.moveaxis(0, -1).flatten(0, 1)).cuda()
-                    rendered_image[mask.flatten(0, 1)] = pixel_colors 
-                    rendered_image = rendered_image.reshape(*viewpoint_camera.normal_image.shape[1:3], 3).moveaxis(-1, 0)
-                    print(rendered_image.shape)
-                else:
-                    
-                    GRID = True
-                    if pc.model_params.brdf:
-                        if pc.model_params.brdf_optimize:
-                            if GRID:
-                                F0_image = torch.nn.functional.grid_sample(pc.mlp.F0_map.moveaxis(-1,0)[None], refl_ray_o[None, None, None])[0, :, 0, 0].reshape(viewpoint_camera.metalness_image.shape) 
-                                #!!!* 10  # todo *10 is a hack to increase the lr 
-                            else:
-                                F0_image = rasterizer(
-                                    means3D = primal_pc.get_xyz.detach(),
-                                    means2D = torch.zeros_like(primal_pc.get_xyz.detach(), dtype=pc.get_xyz.dtype, requires_grad=True, device="cuda") + 0,
-                                    shs = None,
-                                    colors_precomp = primal_pc._features_rest[:, 0],
-                                    opacities = primal_pc.get_opacity.detach(),
-                                    scales = primal_pc.get_scaling.detach(),
-                                    rotations = primal_pc.get_rotation.detach(),
-                                    cov3D_precomp = None
-                                )[0]
-                            n_dot_v = (-incident * normal).sum(dim=-1)
-                            target_roughness_map = torch.zeros_like(n_dot_v)
-                            uv = torch.stack([2 * n_dot_v - 1, 2 * target_roughness_map - 1], -1)
-                            lut_values = F.grid_sample(brdf_lut[None, ...], uv[None, :, None, ...], align_corners=True)[0,...,0].reshape(F0_image.shape)
-                            brdf_map = lut_values[0] * F0_image + lut_values[1] 
-                        else:
-                            brdf_map = viewpoint_camera.spec_brdf_image.cuda()
-                            F0_image = torch.zeros_like(brdf_map)
-
-                        raytracing_pkg = raytracing_renderer(refl_ray_o, relf_ray_d, mask, roughness_map, brdf_map, viewpoint_camera, pc, pipe, bg_color, scaling_modifier, override_color, target=target, rays_from_camera=rays_from_camera)
-                        rendered_image = raytracing_pkg["render"].moveaxis(-1, 0)
-                        visibility_filter = raytracing_pkg["visibility_filter"]
-                        
-                        if pc.model_params.brdf_optimize:
-                            if torch.is_grad_enabled():
-                                if pc.model_params.brdf_f0_grid:
-                                    pc.mlp.F0_map.grad = torch.autograd.grad(brdf_map, pc.mlp.F0_map, grad_outputs=brdf_map.grad)[0]
-                                else:
-                                    primal_pc._features_rest.grad = torch.autograd.grad(F0_image, primal_pc._features_rest, grad_outputs=brdf_map.grad)[0] # *** note the hard assignment
-                    else:
-                        brdf_map = torch.ones_like(roughness_map)
-                        raytracing_pkg = raytracing_renderer(refl_ray_o, relf_ray_d, mask, roughness_map, brdf_map, viewpoint_camera, pc, pipe, bg_color, scaling_modifier, override_color, target=target, rays_from_camera=rays_from_camera)
-                        rendered_image = raytracing_pkg["render"].moveaxis(-1, 0)
-                        visibility_filter = raytracing_pkg["visibility_filter"]
-                    
-                
-                if pc.model_params.optimize_roughness:
-                    assert False
-                    roughness_image = torch.zeros_like(viewpoint_camera.position_image.moveaxis(0, -1).flatten(0, 1)).cuda()
-                    roughness_image[mask] = roughness.unsqueeze(-1).repeat(1, 3) 
-                    roughness_image = roughness_image.reshape(*viewpoint_camera.normal_image.shape[1:3], 3).moveaxis(-1, 0)
-                else:
-                    roughness_image = viewpoint_camera.roughness_image
-
                 if pc.model_params.brdf:
-                #     F0_image = torch.zeros_like(viewpoint_camera.position_image.moveaxis(0, -1).flatten(0, 1)).cuda()
-                #     F0_image[mask] = F0
-                #     F0_image = F0_image.reshape(*viewpoint_camera.normal_image.shape[1:3], 3).moveaxis(-1, 0)
-                    F0_image = F0_image #!! todo
-                else:
-                    F0_image = viewpoint_camera.albedo_image #!! todo
+                    if pc.model_params.brdf_optimize:
+                        if pc.model_params.brdf_f0_grid:
+                            input_F0_image = torch.nn.functional.grid_sample(pc.mlp.F0_map.moveaxis(-1,0)[None], refl_ray_o[None, None, None])[0, :, 0, 0].reshape(viewpoint_camera.metalness_image.shape) 
+                            #!!!* 10  # todo *10 is a hack to increase the lr 
+                        n_dot_v = (-incident * normal).sum(dim=-1)
+                        target_roughness_map = torch.zeros_like(n_dot_v)
+                        uv = torch.stack([2 * n_dot_v - 1, 2 * target_roughness_map - 1], -1)
+                        lut_values = F.grid_sample(brdf_lut[None, ...], uv[None, :, None, ...], align_corners=True)[0,...,0].reshape(input_F0_image.shape)
+                        input_brdf_map = lut_values[0] * input_F0_image + lut_values[1] 
+                    else:
+                        
+                        input_F0_image = torch.zeros_like(input_brdf_map)
 
-                if pc.model_params.optimize_normals:
-                    assert False
-                    normal_image = torch.zeros_like(viewpoint_camera.position_image.moveaxis(0, -1).flatten(0, 1)).cuda()
-                    normal_image[mask] = normal
-                    normal_image = normal_image.reshape(*viewpoint_camera.normal_image.shape[1:3], 3).moveaxis(-1, 0)
+                    raytracing_pkg = raytracing_renderer(refl_ray_o, relf_ray_d, mask, roughness_map, input_brdf_map, viewpoint_camera, pc, pipe, bg_color, scaling_modifier, override_color, target=target, rays_from_camera=rays_from_camera, target_position=target_position, target_normal=target_normal, target_brdf_params=torch.cat([target_F0, target_roughness], dim=0) if target_F0 is not None else None)
+                    rendered_image = raytracing_pkg["render"].moveaxis(-1, 0)
+                    visibility_filter = raytracing_pkg["visibility_filter"]
+                    
+                    if pc.model_params.brdf_optimize:
+                        if torch.is_grad_enabled():
+                            if pc.model_params.brdf_f0_grid:
+                                pc.mlp.F0_map.grad = torch.autograd.grad(input_brdf_map, pc.mlp.F0_map, grad_outputs=input_brdf_map.grad)[0]
+                            else:
+                                primal_pc._features_rest.grad = torch.autograd.grad(input_F0_image, primal_pc._features_rest, grad_outputs=input_brdf_map.grad)[0] # *** note the hard assignment
                 else:
-                    normal_image = viewpoint_camera.normal_image
+                    input_brdf_map = torch.ones_like(roughness_map)
+                    raytracing_pkg = raytracing_renderer(refl_ray_o, relf_ray_d, mask, roughness_map, input_brdf_map, viewpoint_camera, pc, pipe, bg_color, scaling_modifier, override_color, target=target, rays_from_camera=rays_from_camera, target_position=target_position, target_normal=target_normal)
+                    rendered_image = raytracing_pkg["render"].moveaxis(-1, 0)
+                    visibility_filter = raytracing_pkg["visibility_filter"]
+
+                F0_image = raytracing_renderer.output_brdf_params[..., :3].clone().detach().reshape(*viewpoint_camera.position_image.shape[1:3], 3).moveaxis(-1, 0)
+                roughness_image = raytracing_renderer.output_brdf_params[..., 3:4].clone().detach().reshape(*viewpoint_camera.position_image.shape[1:3], 1).moveaxis(-1, 0).repeat(3, 1, 1)
+                position_image = raytracing_renderer.output_position_buffer.clone().detach().reshape(*viewpoint_camera.position_image.shape[1:3], 3).moveaxis(-1, 0)
+                normal_image = raytracing_renderer.output_normal_buffer.clone().detach().reshape(*viewpoint_camera.normal_image.shape[1:3], 3).moveaxis(-1, 0)
+
+                
 
                 result = {
                     "render": rendered_image,
                     "roughness": roughness_image,
                     "F0": F0_image,
+                    "position": position_image,
                     "normal": normal_image,
-                    "brdf": brdf_map,
+                    # todo brdf params
+                    "brdf": input_brdf_map,
                     "refl_ray_o": refl_ray_o.moveaxis(-1, 0).reshape(*viewpoint_camera.normal_image.shape),
                     "refl_ray_d": relf_ray_d.moveaxis(-1, 0).reshape(*viewpoint_camera.normal_image.shape),
                     # "n_dot_v": n_dot_v.reshape(*viewpoint_camera.normal_image.shape[1:3]),

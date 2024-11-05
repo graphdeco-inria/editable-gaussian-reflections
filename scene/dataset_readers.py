@@ -56,6 +56,9 @@ class SceneInfo:
     nerf_normalization: dict
     ply_path: str
 
+
+EXR_EXPOSURE = 5
+
 def getNerfppNorm(cam_info):
     def get_center_and_diag(cam_centers):
         cam_centers = np.hstack(cam_centers)
@@ -116,10 +119,20 @@ def readColmapCameras(model_params, cam_extrinsics, cam_intrinsics, images_folde
         image = Image.open(image_path.replace("/colmap/", "/renders/").replace("/images/", "/color/"))
         
         diffuse_image_path = image_path.replace("/color_", "/diffuse_").replace("/colmap/", "/renders/").replace("/images/", "/diffuse/")
-        diffuse_image = Image.open(diffuse_image_path).convert("RGB")
+        if model_params.linear_space:
+            diffuse_image = cv2.imread(diffuse_image_path.replace(".png", ".exr"), cv2.IMREAD_UNCHANGED)
+            assert diffuse_image is not None, f"Diffuse image not found at {diffuse_image_path}"
+            diffuse_image = cv2.cvtColor(diffuse_image, cv2.COLOR_BGR2RGB) * EXR_EXPOSURE
+        else:
+            diffuse_image = Image.open(diffuse_image_path).convert("RGB") 
 
         glossy_image_path = image_path.replace("/color_", "/glossy_").replace("/colmap/", "/renders/").replace("/images/", "/glossy/")
-        glossy_image = Image.open(glossy_image_path).convert("RGB")
+        if model_params.linear_space:
+            glossy_image = cv2.imread(glossy_image_path.replace(".png", ".exr"), cv2.IMREAD_UNCHANGED)
+            assert glossy_image is not None, f"Glossy image not found at {glossy_image_path}"
+            glossy_image = cv2.cvtColor(glossy_image, cv2.COLOR_BGR2RGB) * EXR_EXPOSURE
+        else:
+            glossy_image = Image.open(glossy_image_path).convert("RGB") 
         
         normal_image_path = image_path.replace("/color_", "/normal_").replace(".png", ".exr").replace("/colmap/", "/renders/").replace("/images/", "/normal/")
         normal_image = cv2.imread(normal_image_path, cv2.IMREAD_UNCHANGED)
@@ -275,10 +288,20 @@ def readCamerasFromTransforms(model_params, path, transformsfile, white_backgrou
             image = Image.open(image_path)
             
             diffuse_image_path = image_path.replace("/color_", "/diffuse_").replace("/colmap/", "/renders/").replace("/color/", "/diffuse/")
-            diffuse_image = Image.open(diffuse_image_path).convert("RGB")
+            if model_params.linear_space:
+                diffuse_image = cv2.imread(diffuse_image_path.replace(".png", ".exr"), cv2.IMREAD_UNCHANGED)
+                assert diffuse_image is not None, f"Diffuse image not found at {diffuse_image_path}"
+                diffuse_image = cv2.cvtColor(diffuse_image, cv2.COLOR_BGR2RGB) * EXR_EXPOSURE
+            else:
+                diffuse_image = Image.open(diffuse_image_path).convert("RGB")
 
             glossy_image_path = image_path.replace("/color_", "/glossy_").replace("/colmap/", "/renders/").replace("/color/", "/glossy/")
-            glossy_image = Image.open(glossy_image_path).convert("RGB")
+            if model_params.linear_space:
+                glossy_image = cv2.imread(glossy_image_path.replace(".png", ".exr"), cv2.IMREAD_UNCHANGED)
+                assert glossy_image is not None, f"Glossy image not found at {glossy_image_path}"
+                glossy_image = cv2.cvtColor(glossy_image, cv2.COLOR_BGR2RGB) * EXR_EXPOSURE
+            else:
+                glossy_image = Image.open(glossy_image_path).convert("RGB")
             
             normal_image_path = image_path.replace("/color_", "/normal_").replace(".png", ".exr").replace("/colmap/", "/renders/").replace("/color/", "/normal/")
             normal_image = cv2.imread(normal_image_path, cv2.IMREAD_UNCHANGED)

@@ -28,12 +28,12 @@ class ParamGroup:
             value = value if not fill_none else None 
             if shorthand:
                 if t == bool:
-                    group.add_argument("--" + key, ("-" + key[0:1]), default=value, action="store_true")
+                    group.add_argument("--" + ("no_" + key if value else key), ("-" + key[0:1]), action="store_false" if value else "store_true", dest=key)
                 else:
                     group.add_argument("--" + key, ("-" + key[0:1]), default=value, type=t)
             else:
                 if t == bool:
-                    group.add_argument("--" + key, default=value, action="store_true")
+                    group.add_argument("--" + ("no_" + key if value else key),  action="store_false" if value else "store_true", dest=key)
                 else:
                     group.add_argument("--" + key, default=value, type=t)
 
@@ -65,13 +65,14 @@ class ModelParams(ParamGroup):
         self.densify_dual = False
         self.skip_primal = False
         
-        self.brdf = False
-        self.brdf_f0_grid = False
-        self.fused_scene = False
+        self.brdf = True
+        self.fused_scene = True
+        self.use_masks = False
 
         self.freeze_brdf = False
         self.optimize_roughness = False
         self.freeze_optimize_roughness = False
+        self.optimize_position = False
         self.optimize_normals = False
         self.freeze_optimize_normals = False
         self.mlp_brdf = False
@@ -80,6 +81,8 @@ class ModelParams(ParamGroup):
         self.max_images = 9999999
         self.num_init_points = 100_000 # 100_000
         self.opacity_modulation = False
+
+        self.linear_space = True
 
         self.raytrace_primal = False
 
@@ -105,6 +108,9 @@ class OptimizationParams(ParamGroup):
         self.position_lr_final = 0.0000016
         self.position_lr_delay_mult = 0.01
         self.position_lr_max_steps = 30_000
+        self.normal_lr = 0.0025
+        self.position_lr = 0.0025
+        self.brdf_params_lr = 0.0025
         self.feature_lr = 0.0025
         self.opacity_lr = 0.05
         self.scaling_lr = 0.005
@@ -120,6 +126,8 @@ class OptimizationParams(ParamGroup):
         self.densify_from_iter = 500
         self.densify_until_iter = 15_000
         self.densify_grad_threshold = 0.0002
+
+        self.disable_bounce_grads = False
 
         self.sh_slowdown_factor = 20.0
         self.mlp_lr = 0.001 #!!! was 1e-3 for mlp, reduced for feature grid

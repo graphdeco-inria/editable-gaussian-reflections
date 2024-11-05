@@ -120,7 +120,7 @@ def training(model_params: ModelParams, optParams: OptimizationParams, pipeParam
         if model_params.skip_primal:
             image = viewpoint_cam.diffuse_image.cuda()
         else:
-            render_pkg = render(viewpoint_cam, gaussians, pipeParams, bg, raytracing_renderer=raytracing_renderer if args.fused_scene else None, target=viewpoint_cam.diffuse_image.cuda(), rays_from_camera=True)
+            render_pkg = render(viewpoint_cam, gaussians, pipeParams, bg, raytracing_renderer=raytracing_renderer if args.fused_scene else None, target=viewpoint_cam.diffuse_image.cuda(), rays_from_camera=True, target_position=viewpoint_cam.position_image.cuda(), target_normal=viewpoint_cam.normal_image.cuda(), target_roughness=viewpoint_cam.roughness_image.cuda().mean(dim=0, keepdim=True), target_F0=viewpoint_cam.F0_image.cuda())
             if not args.fused_scene:
                 image, viewspace_point_tensor, visibility_filter, radii = render_pkg["render"], render_pkg["viewspace_points"], render_pkg["visibility_filter"], render_pkg["radii"]
             else:
@@ -214,6 +214,9 @@ def training(model_params: ModelParams, optParams: OptimizationParams, pipeParam
                         #!!!!!! missing opacity reset
                         # dual_gaussians.reset_opacity()
 
+            print("normals grad:", gaussians._normal.grad.abs().sum())
+            print("xyz grad:", gaussians._xyz.grad.abs().sum())
+            
             # Optimizer step
             if iteration < optParams.iterations:
                 if not args.skip_primal:
@@ -324,10 +327,12 @@ def training_report(tb_writer, iteration, Ll1, loss, l1_loss, elapsed, testing_i
                         pred_image = glossy_image
                         gt_image = glossy_gt_image
 
-                    roughness_image = torch.clamp(glossy_package["roughness"], 0.0, 1.0)
-                    normal_image = torch.clamp(glossy_package["normal"] / 2 + 0.5, 0.0, 1.0) 
-                    brdf_image = torch.clamp(glossy_package["brdf"], 0.0, 1.0)
-                    F0_image = torch.clamp(glossy_package["F0"], 0.0, 1.0)
+                    #!!!!!! review taking things from package vs glossy package
+                    roughness_image = torch.clamp(package["roughness"], 0.0, 1.0)
+                    normal_image = torch.clamp(package["normal"], 0.0, 1.0) #  / 2 + 0.5
+                    position_image = torch.clamp(package["position"], 0.0, 1.0)
+                    brdf_image = torch.clamp(package["brdf"], 0.0, 1.0)
+                    F0_image = torch.clamp(package["F0"], 0.0, 1.0)
                     refl_ray_o_image = torch.clamp(glossy_package["refl_ray_o"], 0.0, 1.0)
                     refl_ray_d_image = torch.clamp(glossy_package["refl_ray_d"], 0.0, 1.0)
                     # n_dot_v_image = torch.clamp(glossy_package["n_dot_v"], 0.0, 1.0)
@@ -336,16 +341,17 @@ def training_report(tb_writer, iteration, Ll1, loss, l1_loss, elapsed, testing_i
                     roughness_gt_image = torch.clamp(viewpoint.roughness_image.to("cuda"), 0.0, 1.0)
                     albedo_gt_image = torch.clamp(viewpoint.albedo_image.to("cuda"), 0.0, 1.0)
                     normal_gt_image = torch.clamp(viewpoint.normal_image.to("cuda") / 2 + 0.5, 0.0, 1.0)
+                    position_gt_image = torch.clamp(viewpoint.position_image.to("cuda"), 0.0, 1.0)
                     metalness_gt_image = torch.clamp(viewpoint.metalness_image.to("cuda"), 0.0, 1.0)
 
-                    F0_gt_image = (1.0 - metalness_gt_image) * 0.04 + metalness_gt_image * albedo_gt_image
+                    F0_gt_image = torch.clamp(viewpoint.F0_image.to("cuda"), 0.0, 1.0)
                     if tb_writer and (idx < 5): 
                         save_image(torch.stack([roughness_image.cuda(), roughness_gt_image]), tb_writer.log_dir + "/" + f"{config['name']}_view/iter_{iteration:09}_{idx}_roughness.png", nrow=2)
-                        save_image(torch.stack([normal_image.cuda(), normal_gt_image]), tb_writer.log_dir + "/" + f"{config['name']}_view/iter_{iteration:09}_{idx}_normal.png", nrow=2)
                         save_image(torch.stack([brdf_image.cuda()]), tb_writer.log_dir + "/" + f"{config['name']}_view/iter_{iteration:09}_{idx}_brdf.png", nrow=2)
-                        save_image(torch.stack([F0_image.cuda() / F0_image.cuda().amax(), F0_gt_image]), tb_writer.log_dir + "/" + f"{config['name']}_view/iter_{iteration:09}_{idx}_F0.png", nrow=2)
+                        save_image(torch.stack([F0_image.cuda(), F0_gt_image]), tb_writer.log_dir + "/" + f"{config['name']}_view/iter_{iteration:09}_{idx}_F0.png", nrow=2)
                         if args.skip_primal:
                             save_image(torch.stack([glossy_image, glossy_gt_image]), tb_writer.log_dir + "/" + f"{config['name']}_view/iter_{iteration:09}_{idx}.png", nrow=2)
+                        save_image(torch.stack([position_image.cuda(), position_gt_image]), tb_writer.log_dir + "/" + f"{config['name']}_view/iter_{iteration:09}_{idx}_position.png", nrow=2)
                         save_image(torch.stack([normal_image.cuda(), normal_gt_image]), tb_writer.log_dir + "/" + f"{config['name']}_view/iter_{iteration:09}_{idx}_normal.png", nrow=2)
                         save_image(torch.stack([refl_ray_o_image, refl_ray_d_image]), tb_writer.log_dir + "/" + f"{config['name']}_view/iter_{iteration:09}_{idx}_refl_ray.png", nrow=2)
                         # save_image(torch.stack([n_dot_v_image]), tb_writer.log_dir + "/" + f"{config['name']}_view/iter_{iteration:09}_{idx}_n_dot_v.png", nrow=2)
@@ -410,6 +416,7 @@ if __name__ == "__main__":
     # network_gui.init(args.ip, args.port)
     torch.autograd.set_detect_anomaly(args.detect_anomaly)
     model_params = lp.extract(args)
+
     training(model_params, op.extract(args), pp.extract(args), args.test_iterations, args.save_iterations, args.checkpoint_iterations, args.start_checkpoint, args.debug_from)
 
     # All done

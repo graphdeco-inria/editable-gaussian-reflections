@@ -47,11 +47,17 @@ def loadCam(args, id, cam_info, resolution_scale):
         loaded_mask = resized_image_rgb[3:4, ...]
 
     if cam_info.diffuse_image is not None:
-        resized_diffuse_image_rgb = PILtoTorch(cam_info.diffuse_image, resolution)
-        diffuse_image = resized_diffuse_image_rgb[:3, ...]
+        if isinstance(cam_info.diffuse_image, np.ndarray):
+            diffuse_image = torch.nn.functional.interpolate(torch.from_numpy(cam_info.diffuse_image).moveaxis(-1, 0)[None], (resolution[1], resolution[0]), mode="bicubic", antialias=True)[0]
+        else:
+            resized_diffuse_image_rgb = PILtoTorch(cam_info.diffuse_image, resolution)
+            diffuse_image = resized_diffuse_image_rgb[:3, ...]
 
-        resized_glossy_image_rgb = PILtoTorch(cam_info.glossy_image, resolution)
-        glossy_image = resized_glossy_image_rgb[:3, ...]
+        if isinstance(cam_info.glossy_image, np.ndarray):
+            glossy_image = torch.nn.functional.interpolate(torch.from_numpy(cam_info.glossy_image).moveaxis(-1, 0)[None], (resolution[1], resolution[0]), mode="bicubic", antialias=True)[0]
+        else:
+            resized_glossy_image_rgb = PILtoTorch(cam_info.glossy_image, resolution)
+            glossy_image = resized_glossy_image_rgb[:3, ...]
 
         resized_position_image_rgb = torch.from_numpy(cam_info.position_image).moveaxis(-1, 0)
         position_image = torch.nn.functional.interpolate(resized_position_image_rgb[:3, ...][None], (resolution[1], resolution[0]), mode="nearest")[0]
