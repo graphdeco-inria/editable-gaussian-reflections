@@ -61,7 +61,7 @@ class Scene:
             json_cams = []
             camlist = []
             if scene_info.test_cameras:
-                camlist.extend(scene_info.test_cameras)
+                camlist.extend(scene_info_synthetic.test_cameras)
             if scene_info.train_cameras:
                 camlist.extend(scene_info.train_cameras)
             for id, cam in enumerate(camlist):
@@ -71,7 +71,7 @@ class Scene:
 
         if shuffle:
             random.shuffle(scene_info.train_cameras)  # Multi-res consistent random shuffling
-            random.shuffle(scene_info.test_cameras)  # Multi-res consistent random shuffling
+            # random.shuffle(scene_info.test_cameras)  # Multi-res consistent random shuffling
 
         self.cameras_extent = scene_info.nerf_normalization["radius"]
         
@@ -79,7 +79,7 @@ class Scene:
             print("Loading Training Cameras")
             self.train_cameras[resolution_scale] = cameraList_from_camInfos(scene_info.train_cameras, resolution_scale, model_params)
             print("Loading Test Cameras")
-            self.test_cameras[resolution_scale] = cameraList_from_camInfos(scene_info.test_cameras, resolution_scale, model_params)
+            self.test_cameras[resolution_scale] = cameraList_from_camInfos(scene_info_synthetic.test_cameras, resolution_scale, model_params)
 
         print(f"I have {len(self.train_cameras)} cameras")
 

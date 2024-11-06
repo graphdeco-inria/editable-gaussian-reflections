@@ -149,6 +149,7 @@ def render_set(model_params, model_path, split, iteration, views, gaussians, pip
         
         for label, quality in [("hq", "18"), ("lq", "30")]:
             kwargs = dict(fps=30, options={"crf": quality})
+
             torchvision.io.write_video(path.format(name=f"renders_{label}", dir="videos/"), torch.stack(all_renders), **kwargs)
             torchvision.io.write_video(path.format(name=f"gts_{label}", dir="videos/"), torch.stack(all_gts), **kwargs)
             torchvision.io.write_video(path.format(name=f"comparison_{label}", dir="videos/"), torch.cat([torch.stack(all_renders), torch.stack(all_gts)], dim=2), **kwargs)
@@ -171,7 +172,7 @@ def render_set(model_params, model_path, split, iteration, views, gaussians, pip
                 path.format(name="comparison_hq", dir="")
             )
 
-def render_sets(model_params: ModelParams, iteration: int, pipeline: PipelineParams, skip_train: bool, skip_test: bool):
+def render_sets(model_params: ModelParams, iteration: int, pipeline: PipelineParams):
     dynModelParams = copy.deepcopy(model_params)
     dynModelParams.dynamic_gaussians = True
     dynModelParams.dynamic_diffuse = True
@@ -194,16 +195,10 @@ def render_sets(model_params: ModelParams, iteration: int, pipeline: PipelinePar
 
         raytracer = GaussianRaytracer(gaussians, scene.getTrainCameras()[0])
 
-        if not skip_train:
+        if args.train_views:
             render_set(model_params, model_params.model_path, "train", scene.loaded_iter, scene.getTrainCameras(), gaussians, pipeline, background, raytracer)
-
-        # if not skip_test:
-        #     label = "test"
-        #     if args.sliced:
-        #         label += "_sliced"
-        #     if args.fixed_pov:
-        #         label += "_fixed"
-        #     render_set(model_params, model_params.model_path, label, scene.loaded_iter, glossy_scene.getTrainCameras(), gaussians, pipeline, background, raytracer, **kwargs) #!!!!!! renders the train images, this is a bug
+        else:
+            render_set(model_params, model_params.model_path, "test", scene.loaded_iter, scene.getTestCameras(), gaussians, pipeline, background, raytracer) 
         
 if __name__ == "__main__":
     # Set up command line argument parser
@@ -211,8 +206,7 @@ if __name__ == "__main__":
     model = ModelParams(parser, sentinel=True)
     pipeline = PipelineParams(parser)
     parser.add_argument("--iteration", default=-1, type=int)
-    parser.add_argument("--skip_train", action="store_true")
-    parser.add_argument("--skip_test", action="store_true")
+    parser.add_argument("--train_views", action="store_true")
     parser.add_argument("--sliced", action="store_true")
     parser.add_argument("--render_scene", action="store_true")
     parser.add_argument("--quiet", action="store_true")
@@ -225,4 +219,4 @@ if __name__ == "__main__":
     # Initialize system state (RNG)
     safe_state(args.quiet)
 
-    render_sets(model.extract(args), args.iteration, pipeline.extract(args), args.skip_train, args.skip_test)
+    render_sets(model.extract(args), args.iteration, pipeline.extract(args))
