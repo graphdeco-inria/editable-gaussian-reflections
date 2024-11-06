@@ -28,7 +28,7 @@ import numpy as np
 import torch.nn.functional as F
 
 
-def render_set(model_params, model_path, split, iteration, views, gaussians, pipeline, background, raytracing_renderer, dual_gaussians=None):
+def render_set(model_params, model_path, split, iteration, views, gaussians, pipeline, background, raytracing_renderer, glossy_gaussians=None):
     render_path = os.path.join(model_path, split, "ours_{}".format(iteration), "renders")
     gts_path = os.path.join(model_path, split, "ours_{}".format(iteration), "gt")
     diffuse_render_path = os.path.join(model_path, split, "ours_{}".format(iteration), "diffuse_renders")
@@ -116,9 +116,9 @@ def render_set(model_params, model_path, split, iteration, views, gaussians, pip
             view.update()
             print(view.world_view_transform)
 
-            glossy_package = render(view, dual_gaussians, pipeline, background, render_depth=True, raytracing_renderer=raytracing_renderer, nomask=True, rays_from_camera=True)
+            glossy_package = render(view, glossy_gaussians, pipeline, background, render_depth=True, raytracing_renderer=raytracing_renderer, nomask=True, rays_from_camera=True)
         else:
-            glossy_package = render(view, dual_gaussians, pipeline, background, secondary_view=views[0] if args.fixed_pov else None, raytracing_renderer=raytracing_renderer)
+            glossy_package = render(view, glossy_gaussians, pipeline, background, secondary_view=views[0] if args.fixed_pov else None, raytracing_renderer=raytracing_renderer)
         if not model_params.skip_primal:
             package = render(view, gaussians, pipeline, background, secondary_view=views[0] if args.fixed_pov else None, render_depth=True, raytracing_renderer=raytracing_renderer, rays_from_camera=True)
             diffuse_image = torch.clamp(package["render"], 0.0, 1.0)
@@ -199,10 +199,10 @@ def render_sets(model_params: ModelParams, iteration: int, pipeline: PipelinePar
 
         if not model_params.fused_scene:
             model_params.diffuse_only = True
-            dualModelParams = copy.deepcopy(model_params)
-            dualModelParams.dual = True
-            dual_gaussians = GaussianModel(dualModelParams, model_params.sh_degree)
-            dual_scene = Scene(dualModelParams, dual_gaussians, load_iteration=iteration, dual=True, shuffle=False)
+            glossyModelParams = copy.deepcopy(model_params)
+            glossyModelParams.glossy = True
+            glossy_gaussians = GaussianModel(glossyModelParams, model_params.sh_degree)
+            glossy_scene = Scene(glossyModelParams, glossy_gaussians, load_iteration=iteration, glossy=True, shuffle=False)
 
         if args.red_region:
             bbox_min = [0.22, -0.5, -0.22]
@@ -211,12 +211,12 @@ def render_sets(model_params: ModelParams, iteration: int, pipeline: PipelinePar
             mask = (gaussians.get_xyz < torch.tensor(bbox_max, device="cuda")).all(dim=-1).logical_and((gaussians.get_xyz > torch.tensor(bbox_min, device="cuda")).all(dim=-1))
             gaussians._features_dc[mask] = torch.tensor([1.0, 0.0, 0.0], device="cuda")
 
-        kwargs = dict(dual_gaussians=gaussians) if model_params.fused_scene else dict(dual_gaussians=dual_gaussians)
+        kwargs = dict(glossy_gaussians=gaussians) if model_params.fused_scene else dict(glossy_gaussians=glossy_gaussians)
 
         bg_color = [0.5, 0.5, 0.5] if args.sliced else [0, 0, 0]
         background = torch.tensor(bg_color, dtype=torch.float32, device="cuda")
 
-        raytracing_renderer = RaytracingRenderer(gaussians if model_params.fused_scene else dual_gaussians, scene.getTrainCameras()[0])
+        raytracing_renderer = RaytracingRenderer(gaussians if model_params.fused_scene else glossy_gaussians, scene.getTrainCameras()[0])
 
         if not skip_train:
             render_set(model_params, model_params.model_path, "train", scene.loaded_iter, scene.getTrainCameras(), gaussians, pipeline, background, raytracing_renderer, **kwargs)
@@ -227,7 +227,7 @@ def render_sets(model_params: ModelParams, iteration: int, pipeline: PipelinePar
         #         label += "_sliced"
         #     if args.fixed_pov:
         #         label += "_fixed"
-        #     render_set(model_params, model_params.model_path, label, scene.loaded_iter, dual_scene.getTrainCameras(), gaussians, pipeline, background, raytracing_renderer, **kwargs) #!!!!!! renders the train images, this is a bug
+        #     render_set(model_params, model_params.model_path, label, scene.loaded_iter, glossy_scene.getTrainCameras(), gaussians, pipeline, background, raytracing_renderer, **kwargs) #!!!!!! renders the train images, this is a bug
         
 if __name__ == "__main__":
     # Set up command line argument parser

@@ -215,8 +215,9 @@ class GaussianModel:
         self.spatial_lr_scale = spatial_lr_scale
         fused_point_cloud = torch.tensor(np.asarray(pcd.points)).float().cuda()
         fused_color = RGB2SH(torch.tensor(np.asarray(pcd.colors)).float().cuda())
+        fused_normal = torch.tensor(np.asarray(pcd.normals)).float().cuda()
         if self.model_params.diffuse_only:
-            features = torch.zeros((fused_color.shape[0], 3, 2)).float().cuda()  # 2  if self.model_params.dual else 1
+            features = torch.zeros((fused_color.shape[0], 3, 2)).float().cuda()  # 2  if self.model_params.glossy else 1
             #!!! set to 2 instead of 1 for an experiment
         else:
             features = torch.zeros((fused_color.shape[0], 3, (self.max_sh_degree + 1) ** 2)).float().cuda()
@@ -235,11 +236,12 @@ class GaussianModel:
         opacities = inverse_sigmoid(0.1 * torch.ones((fused_point_cloud.shape[0], 1), dtype=torch.float, device="cuda"))
 
         self._xyz = nn.Parameter(fused_point_cloud.requires_grad_(True))
-        self._position = nn.Parameter(fused_point_cloud.requires_grad_(True))
-        self._normal = nn.Parameter(torch.zeros_like(self._xyz).requires_grad_(True))
-        self._brdf_params = nn.Parameter(torch.zeros_like(self._xyz).requires_grad_(True))
-        self._features_dc = nn.Parameter(features[:,:,0:1].transpose(1, 2).contiguous().requires_grad_(True))
-        self._features_rest = nn.Parameter(features[:,:,1:].transpose(1, 2).contiguous().requires_grad_(True))
+        
+        self._position = nn.Parameter(fused_point_cloud.clone()) 
+        self._normal = nn.Parameter(fused_normal.clone())
+        self._brdf_params = nn.Parameter(torch.cat([fused_color.clone(), torch.zeros_like(fused_color)[..., :1]], dim=-1))
+        self._features_dc = nn.Parameter(features[:,:,0:1].transpose(1, 2).contiguous())
+        self._features_rest = nn.Parameter(features[:,:,1:].transpose(1, 2).contiguous())
         self._scaling = nn.Parameter(scales.requires_grad_(True))
         self._rotation = nn.Parameter(rots.requires_grad_(True))
         self._opacity = nn.Parameter(opacities.requires_grad_(True))
@@ -338,7 +340,7 @@ class GaussianModel:
         self._opacity = optimizable_tensors["opacity"]
         self._opacity.grad = torch.zeros_like(self._opacity)
 
-    def load_ply(self, path, dual):
+    def load_ply(self, path, glossy):
         plydata = PlyData.read(path)
 
         xyz = np.stack((np.asarray(plydata.elements[0]["x"]),
@@ -356,15 +358,15 @@ class GaussianModel:
         
         nf = 2 
         
-         #if self.model_params.dual else 1 
+         #if self.model_params.glossy else 1 
         # assert len(extra_f_names) == 3*nf - 3, (len(extra_f_names), 3*nf - 3)
         if self.model_params.diffuse_only:
             features_extra = np.zeros((xyz.shape[0], len(extra_f_names)))
             for idx, attr_name in enumerate(extra_f_names):
                 features_extra[:, idx] = np.asarray(plydata.elements[0][attr_name])
             # Reshape (P,F*SH_coeffs) to (P, F, SH_coeffs except DC)
-            print(dual, features_extra.shape)
-            features_extra = features_extra.reshape((features_extra.shape[0], 3, 1)) #1 if dual else 0
+            print(glossy, features_extra.shape)
+            features_extra = features_extra.reshape((features_extra.shape[0], 3, 1)) #1 if glossy else 0
         else:
             features_extra = np.zeros((xyz.shape[0], len(extra_f_names)))
             for idx, attr_name in enumerate(extra_f_names):
@@ -572,7 +574,7 @@ class GaussianModel:
         self._scaling.grad = torch.zeros_like(self._scaling)
         self._rotation.grad = torch.zeros_like(self._rotation)
 
-    def densify_and_prune_dual(self, max_grad, min_opacity, extent):
+    def densify_and_prune_glossy(self, max_grad, min_opacity, extent):
         grads = self.xyz_gradient_accum / self.denom
         grads[grads.isnan()] = 0.0
 
@@ -614,7 +616,7 @@ class GaussianModel:
 
         torch.cuda.empty_cache()
 
-    def add_densification_stats_dual(self, xyz, update_filter):
+    def add_densification_stats_glossy(self, xyz, update_filter):
         if xyz.grad is not None:
             self.xyz_gradient_accum[update_filter] += torch.norm(xyz.grad, dim=-1, keepdim=True)
         self.denom[update_filter] += 1

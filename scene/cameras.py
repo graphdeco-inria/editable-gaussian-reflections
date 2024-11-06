@@ -13,6 +13,7 @@ import torch
 from torch import nn
 import numpy as np
 from utils.graphics_utils import getWorld2View2, getProjectionMatrix
+import os 
 
 class Camera(nn.Module):
     def __init__(self, colmap_id, R, T, FoVx, FoVy, image, gt_alpha_mask,
@@ -38,12 +39,20 @@ class Camera(nn.Module):
 
         self.diffuse_image = diffuse_image * (1.0 - metalness_image) #!!!
         self.glossy_image = glossy_image
+        
         self.normal_image = normal_image
         self.position_image = position_image
+
+        # self.position_shift = -self.position_image.min()
+        # self.position_image = self.position_image + self.position_shift
+        # self.position_scale = self.position_image.max()
+        # self.position_image = self.position_image / self.position_scale
+
         self.roughness_image = roughness_image
         self.metalness_image = metalness_image
         self.albedo_image = albedo_image
         self.spec_brdf_image = spec_brdf_image
+
         self.F0_image = self.albedo_image * self.metalness_image # + 0.08 * self.specular_image
 
         try:

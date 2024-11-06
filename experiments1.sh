@@ -4,7 +4,7 @@ q a40 <<< "python train.py -s renders/hard_kitchen_vanilla --split_spec_diff --n
 q a40 <<< "python train.py -s renders/hard_kitchen_vanilla --split_spec_diff --num_init_points 8000 --label 8k_points"
 q a40 <<< "python train.py -s renders/hard_kitchen_vanilla --split_spec_diff --num_init_points 16000 --label 16k_points"
 
-q a40 <<< "python train.py -s renders/hard_kitchen_vanilla --split_spec_diff --num_init_points 1000 --dual_bbox_size_mult 1.0 --label bbox_1"
-q a40 <<< "python train.py -s renders/hard_kitchen_vanilla --split_spec_diff --num_init_points 1000 --dual_bbox_size_mult 2.0 --label bbox_2"
-q a40 <<< "python train.py -s renders/hard_kitchen_vanilla --split_spec_diff --num_init_points 1000 --dual_bbox_size_mult 4.0 --label bbox_4"
-q a40 <<< "python train.py -s renders/hard_kitchen_vanilla --split_spec_diff --num_init_points 1000 --dual_bbox_size_mult 8.0 --label bbox_8"
+q a40 <<< "python train.py -s renders/hard_kitchen_vanilla --split_spec_diff --num_init_points 1000 --glossy_bbox_size_mult 1.0 --label bbox_1"
+q a40 <<< "python train.py -s renders/hard_kitchen_vanilla --split_spec_diff --num_init_points 1000 --glossy_bbox_size_mult 2.0 --label bbox_2"
+q a40 <<< "python train.py -s renders/hard_kitchen_vanilla --split_spec_diff --num_init_points 1000 --glossy_bbox_size_mult 4.0 --label bbox_4"
+q a40 <<< "python train.py -s renders/hard_kitchen_vanilla --split_spec_diff --num_init_points 1000 --glossy_bbox_size_mult 8.0 --label bbox_8"

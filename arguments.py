@@ -57,17 +57,19 @@ class ModelParams(ParamGroup):
         self.eval = False
         self.diffuse_only = False 
         self.convert_mlp = False 
-        self.dual = False 
-        self.dual_bbox_size_mult = 4.0
+        self.glossy = False 
+        self.glossy_bbox_size_mult = 4.0
         self.num_feat_per_gaussian_channel = 16 
         self.use_tcnn = False
         self.split_spec_diff = True
-        self.densify_dual = False
+        self.densify_glossy = False
         self.skip_primal = False
         
         self.brdf = True
         self.fused_scene = True
         self.use_masks = False
+
+        self.disable_bounce_grads = False
 
         self.freeze_brdf = False
         self.optimize_roughness = False
@@ -81,6 +83,11 @@ class ModelParams(ParamGroup):
         self.max_images = 9999999
         self.num_init_points = 100_000 # 100_000
         self.opacity_modulation = False
+
+        self.remap_position = False 
+        # self.aux_randn_init = False 
+
+        self.num_bounces = 1
 
         self.linear_space = True
 
@@ -126,8 +133,6 @@ class OptimizationParams(ParamGroup):
         self.densify_from_iter = 500
         self.densify_until_iter = 15_000
         self.densify_grad_threshold = 0.0002
-
-        self.disable_bounce_grads = False
 
         self.sh_slowdown_factor = 20.0
         self.mlp_lr = 0.001 #!!! was 1e-3 for mlp, reduced for feature grid

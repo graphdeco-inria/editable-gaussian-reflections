@@ -18,7 +18,7 @@ BUGS
 LOW PRIO
 
 - Make sure jointly training the diffuse works
-- Nerf synthetic init for the dual scene only
+- Nerf synthetic init for the glossy scene only
 - Faster camera loading for colmap also
 
 =============

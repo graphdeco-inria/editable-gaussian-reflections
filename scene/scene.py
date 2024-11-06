@@ -24,7 +24,7 @@ import torch
 class Scene:
     gaussians : GaussianModel
 
-    def __init__(self, model_params : ModelParams, gaussians : GaussianModel, load_iteration=None, shuffle=True, resolution_scales=[1.0], dual=False, extend_point_cloud=None):
+    def __init__(self, model_params : ModelParams, gaussians : GaussianModel, load_iteration=None, shuffle=True, resolution_scales=[1.0], glossy=False, extend_point_cloud=None):
         """b
         :param path: Path to colmap scene main folder.
         """
@@ -32,7 +32,7 @@ class Scene:
         self.model_path = model_params.model_path
         self.loaded_iter = None
         self.gaussians = gaussians
-        self.dual = dual
+        self.glossy = glossy
 
         if load_iteration:
             if load_iteration == -1:
@@ -44,14 +44,14 @@ class Scene:
         self.train_cameras = {}
         self.test_cameras = {}
 
-        if model_params.dual:
+        if model_params.glossy:
             source_path = model_params.source_path.replace("colmap/", "renders/").replace("/train", "")
         elif not model_params.skip_primal:
             source_path = model_params.source_path.replace("renders/", "colmap/") + "/train"
         else:
             source_path = model_params.source_path
 
-        if model_params.dual:
+        if model_params.glossy:
             assert os.path.exists(os.path.join(source_path, "transforms_train.json")), source_path
             scene_info = readNerfSyntheticInfo(model_params, source_path, model_params.white_background, model_params.eval)
         else:
@@ -98,7 +98,7 @@ class Scene:
 
         print(f"I have {len(self.train_cameras)} cameras")
 
-        if not self.model_params.dual and self.model_params.skip_primal:
+        if not self.model_params.glossy and self.model_params.skip_primal:
             return 
 
         if extend_point_cloud is not None:
@@ -119,25 +119,25 @@ class Scene:
             #         os.path.join(self.model_path,
             #                         "point_cloud",
             #                         "iteration_" + str(self.loaded_iter),
-            #                         f"{'dual_' if self.dual else ''}mlp.pt")
+            #                         f"{'glossy_' if self.glossy else ''}mlp.pt")
             #     )
             self.gaussians.load_ply(os.path.join(self.model_path,
                                                            "point_cloud",
                                                            "iteration_" + str(self.loaded_iter),
-                                                           f"{'dual_' if self.dual else ''}point_cloud.ply"), self.dual)
+                                                           f"{'glossy_' if self.glossy else ''}point_cloud.ply"), self.glossy)
         else:
             self.gaussians.create_from_pcd(scene_info.point_cloud, self.cameras_extent)
 
     def save(self, iteration):
         point_cloud_path = os.path.join(self.model_path, "point_cloud/iteration_{}".format(iteration))
-        self.gaussians.save_ply(os.path.join(point_cloud_path, f"{'dual_' if self.dual else ''}point_cloud.ply"))
+        self.gaussians.save_ply(os.path.join(point_cloud_path, f"{'glossy_' if self.glossy else ''}point_cloud.ply"))
         if self.model_params.convert_mlp:
-            torch.save(self.gaussians.mlp, os.path.join(point_cloud_path, f"{'dual_' if self.dual else ''}mlp.pt"))
+            torch.save(self.gaussians.mlp, os.path.join(point_cloud_path, f"{'glossy_' if self.glossy else ''}mlp.pt"))
             if self.model_params.use_tcnn:
                 import io
                 buff = io.BytesIO()
                 torch.save(self.gaussians.mlp.state_dict()['params'], buff)
-                with open(os.path.join(point_cloud_path, f"{'dual_' if self.dual else ''}mlp.bin"), "wb") as f:
+                with open(os.path.join(point_cloud_path, f"{'glossy_' if self.glossy else ''}mlp.bin"), "wb") as f:
                     f.write(buff.getvalue())
 
     def getTrainCameras(self, scale=1.0):

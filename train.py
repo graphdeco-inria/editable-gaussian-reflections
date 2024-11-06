@@ -32,7 +32,7 @@ try:
 except ImportError:
     TENSORBOARD_FOUND = False
 
-from gaussian_renderer import RaytracingRenderer
+from gaussian_renderer import GaussianRaytracer
 
 def training(model_params: ModelParams, optParams: OptimizationParams, pipeParams: PipelineParams, testing_iterations, saving_iterations, checkpoint_iterations, checkpoint, debug_from):
     first_iter = 0
@@ -41,15 +41,15 @@ def training(model_params: ModelParams, optParams: OptimizationParams, pipeParam
     model_params.diffuse_only = True
         
 
-    dualModelParams = copy.deepcopy(model_params)
-    dualModelParams.dual = True
+    glossyModelParams = copy.deepcopy(model_params)
+    glossyModelParams.glossy = True
 
     if model_params.fused_scene:
-        tmp_gaussians = GaussianModel(dualModelParams, 0)
-        tmp_scene = Scene(dualModelParams, tmp_gaussians, dual=True)
+        tmp_gaussians = GaussianModel(glossyModelParams, 0)
+        tmp_scene = Scene(glossyModelParams, tmp_gaussians, glossy=True)
     else:
-        dual_gaussians = GaussianModel(dualModelParams, 0)
-        dual_scene = Scene(dualModelParams, dual_gaussians, dual=True)
+        glossy_gaussians = GaussianModel(glossyModelParams, 0)
+        glossy_scene = Scene(glossyModelParams, glossy_gaussians, glossy=True)
     
     if not args.skip_primal:
         gaussians = GaussianModel(model_params, 0)
@@ -58,15 +58,15 @@ def training(model_params: ModelParams, optParams: OptimizationParams, pipeParam
         gaussians.training_setup(optParams)
 
     if model_params.fused_scene:
-        dual_gaussians = gaussians
-        dual_scene = scene
+        glossy_gaussians = gaussians
+        glossy_scene = scene
 
-    dual_gaussians.training_setup(optParams)
+    glossy_gaussians.training_setup(optParams)
 
     if checkpoint:
         (model_params, first_iter) = torch.load(checkpoint)
         gaussians.restore(model_params, optParams)
-        dual_gaussians.restore(model_params, optParams, dual=True)
+        glossy_gaussians.restore(model_params, optParams, glossy=True)
 
     bg_color = [1, 1, 1] if model_params.white_background else [0, 0, 0]
     background = torch.tensor(bg_color, dtype=torch.float32, device="cuda")
@@ -74,8 +74,8 @@ def training(model_params: ModelParams, optParams: OptimizationParams, pipeParam
     iter_start = torch.cuda.Event(enable_timing = True)
     iter_end = torch.cuda.Event(enable_timing = True)
 
-    viewpoint_stack = dual_scene.getTrainCameras().copy()
-    raytracing_renderer = RaytracingRenderer(dual_gaussians, viewpoint_stack[0])
+    viewpoint_stack = glossy_scene.getTrainCameras().copy()
+    raytracer = GaussianRaytracer(glossy_gaussians, viewpoint_stack[0])
 
     ema_loss_for_log = 0.0
     progress_bar = tqdm(range(first_iter, optParams.iterations), desc="Training progress")
@@ -89,7 +89,7 @@ def training(model_params: ModelParams, optParams: OptimizationParams, pipeParam
                 custom_cam, do_training, pipeParams.convert_SHs_python, pipeParams.compute_cov3D_python, keep_alive, scaling_modifer = network_gui.receive()
                 if custom_cam != None:
                     net_image = render(custom_cam, gaussians, pipeParams, background, scaling_modifer)["render"] 
-                    # todo send dual gaussians pass
+                    # todo send glossy gaussians pass
                     net_image_bytes = memoryview((torch.clamp(net_image, min=0, max=1.0) * 255).byte().permute(1, 2, 0).contiguous().cpu().numpy())
                 network_gui.send(net_image_bytes, model_params.source_path)
                 if do_training and ((iteration < int(optParams.iterations)) or not keep_alive):
@@ -100,12 +100,12 @@ def training(model_params: ModelParams, optParams: OptimizationParams, pipeParam
         iter_start.record()
         if not args.skip_primal:
             gaussians.update_learning_rate(iteration)
-        dual_gaussians.update_learning_rate(iteration)
+        glossy_gaussians.update_learning_rate(iteration)
 
         # Pick a random Camera
         if not viewpoint_stack:
             if args.skip_primal:
-                viewpoint_stack = dual_scene.getTrainCameras().copy()
+                viewpoint_stack = glossy_scene.getTrainCameras().copy()
             else:
                 viewpoint_stack = scene.getTrainCameras().copy()
         
@@ -120,21 +120,25 @@ def training(model_params: ModelParams, optParams: OptimizationParams, pipeParam
         if model_params.skip_primal:
             image = viewpoint_cam.diffuse_image.cuda()
         else:
-            render_pkg = render(viewpoint_cam, gaussians, pipeParams, bg, raytracing_renderer=raytracing_renderer if args.fused_scene else None, target=viewpoint_cam.diffuse_image.cuda(), rays_from_camera=True, target_position=viewpoint_cam.position_image.cuda(), target_normal=viewpoint_cam.normal_image.cuda(), target_roughness=viewpoint_cam.roughness_image.cuda().mean(dim=0, keepdim=True), target_F0=viewpoint_cam.F0_image.cuda())
+            render_pkg = render(viewpoint_cam, gaussians, pipeParams, bg, raytracer=raytracer if args.fused_scene else None, target=viewpoint_cam.diffuse_image.cuda(), rays_from_camera=True, target_position=viewpoint_cam.position_image.cuda(), target_normal=viewpoint_cam.normal_image.cuda(), target_roughness=viewpoint_cam.roughness_image.cuda().mean(dim=0, keepdim=True), target_F0=viewpoint_cam.F0_image.cuda())
             if not args.fused_scene:
                 image, viewspace_point_tensor, visibility_filter, radii = render_pkg["render"], render_pkg["viewspace_points"], render_pkg["visibility_filter"], render_pkg["radii"]
             else:
                 image = render_pkg["render"]
         
         gt_glossy_image = viewpoint_cam.glossy_image.cuda()
-        dual_render_pkg = render(viewpoint_cam, dual_gaussians, pipeParams, bg, raytracing_renderer=raytracing_renderer, target=gt_glossy_image, primal_pc=gaussians)
-        dual_image = dual_render_pkg["render"]
-        dual_visibility_filter = dual_render_pkg["visibility_filter"]
+        if args.disable_bounce_grads:
+            with torch.no_grad():
+                glossy_render_pkg = render(viewpoint_cam, glossy_gaussians, pipeParams, bg, raytracer=raytracer, target=gt_glossy_image, primal_pc=gaussians)
+        else:
+            glossy_render_pkg = render(viewpoint_cam, glossy_gaussians, pipeParams, bg, raytracer=raytracer, target=gt_glossy_image, primal_pc=gaussians)
+        glossy_image = glossy_render_pkg["render"]
+        glossy_visibility_filter = glossy_render_pkg["visibility_filter"]
 
         gt_glossy_image = viewpoint_cam.glossy_image.cuda()
 
-        Ll1_glossy = l1_loss(dual_image, gt_glossy_image)
-        loss_glossy = (1.0 - optParams.lambda_dssim) * Ll1_glossy + optParams.lambda_dssim * (1.0 - ssim(dual_image, gt_glossy_image))
+        Ll1_glossy = l1_loss(glossy_image, gt_glossy_image)
+        loss_glossy = (1.0 - optParams.lambda_dssim) * Ll1_glossy + optParams.lambda_dssim * (1.0 - ssim(glossy_image, gt_glossy_image))
 
         if model_params.skip_primal:
             Ll1_diffuse = 0.0
@@ -181,12 +185,12 @@ def training(model_params: ModelParams, optParams: OptimizationParams, pipeParam
             #     tb_writer.add_scalar('train_loss_patches/normal_loss', ema_normal_for_log, iteration)
 
             # Log and save
-            training_report(tb_writer, iteration, Ll1, loss, l1_loss, iter_start.elapsed_time(iter_end), testing_iterations, None if args.skip_primal else scene, dual_scene, render, (pipeParams, background), raytracing_renderer=raytracing_renderer)
+            training_report(tb_writer, iteration, Ll1, loss, l1_loss, iter_start.elapsed_time(iter_end), testing_iterations, None if args.skip_primal else scene, glossy_scene, render, (pipeParams, background), raytracer=raytracer)
             if (iteration in saving_iterations):
                 print("\n[ITER {}] Saving Gaussians".format(iteration))
                 if not args.skip_primal and not args.fused_scene:
                     scene.save(iteration)
-                dual_scene.save(iteration)
+                glossy_scene.save(iteration)
 
             # Densification
             if iteration < optParams.densify_until_iter:
@@ -195,24 +199,24 @@ def training(model_params: ModelParams, optParams: OptimizationParams, pipeParam
                     gaussians.max_radii2D[visibility_filter] = torch.max(gaussians.max_radii2D[visibility_filter], radii[visibility_filter])
                     gaussians.add_densification_stats(viewspace_point_tensor, visibility_filter)
                     
-                # dual_gaussians.max_radii2D[dual_visibility_filter] = torch.max(dual_gaussians.max_radii2D[dual_visibility_filter], dual_radii[dual_visibility_filter])
-                dual_gaussians.add_densification_stats(gaussians._xyz, dual_visibility_filter)
+                # glossy_gaussians.max_radii2D[glossy_visibility_filter] = torch.max(glossy_gaussians.max_radii2D[glossy_visibility_filter], glossy_radii[glossy_visibility_filter])
+                glossy_gaussians.add_densification_stats(gaussians._xyz, glossy_visibility_filter)
                 
                 if not args.fused_scene:
                     if iteration > optParams.densify_from_iter and iteration % optParams.densification_interval == 0 and not args.skip_primal:
                         size_threshold = 20 if iteration > optParams.opacity_reset_interval else None
                         gaussians.densify_and_prune(optParams.densify_grad_threshold, 0.005, scene.cameras_extent, size_threshold)
-                        if  args.densify_dual:  
-                            dual_gaussians.densify_and_prune_dual(optParams.densify_grad_threshold, 0.005, scene.cameras_extent)
-                            print("Number of gaussians: ", dual_gaussians.get_xyz.shape[0])
-                            assert dual_gaussians.get_xyz.shape[0] > 0
-                            raytracing_renderer.rebuild_bvh()
+                        if  args.densify_glossy:  
+                            glossy_gaussians.densify_and_prune_glossy(optParams.densify_grad_threshold, 0.005, scene.cameras_extent)
+                            print("Number of gaussians: ", glossy_gaussians.get_xyz.shape[0])
+                            assert glossy_gaussians.get_xyz.shape[0] > 0
+                            raytracer.rebuild_bvh()
                     
                     if iteration % optParams.opacity_reset_interval == 0 or (model_params.white_background and iteration == optParams.densify_from_iter):
                         if not args.skip_primal and not args.fused_scene:
                             gaussians.reset_opacity() 
                         #!!!!!! missing opacity reset
-                        # dual_gaussians.reset_opacity()
+                        # glossy_gaussians.reset_opacity()
 
             print("normals grad:", gaussians._normal.grad.abs().sum())
             print("xyz grad:", gaussians._xyz.grad.abs().sum())
@@ -223,14 +227,14 @@ def training(model_params: ModelParams, optParams: OptimizationParams, pipeParam
                     gaussians.optimizer.step()
                     gaussians.optimizer.zero_grad(set_to_none = False) #!!
                 if not args.fused_scene:
-                    dual_gaussians.optimizer.step()
-                    dual_gaussians.optimizer.zero_grad(set_to_none = False)
-                raytracing_renderer.zero_grad()
+                    glossy_gaussians.optimizer.step()
+                    glossy_gaussians.optimizer.zero_grad(set_to_none = False)
+                raytracer.zero_grad()
 
             if iteration in checkpoint_iterations:
                 print("\n[ITER {}] Saving Checkpoint".format(iteration))
                 torch.save((gaussians.capture(), iteration), scene.model_path + "/chkpnt" + str(iteration) + ".pth")
-                torch.save((dual_gaussians.capture(), iteration), scene.model_path + "/chkpnt_dual" + str(iteration) + ".pth")
+                torch.save((glossy_gaussians.capture(), iteration), scene.model_path + "/chkpnt_glossy" + str(iteration) + ".pth")
 
 def prepare_output_and_logger(args: ModelParams):    
     if not args.model_path:
@@ -252,7 +256,7 @@ def prepare_output_and_logger(args: ModelParams):
     return tb_writer
 
 @torch.no_grad()
-def training_report(tb_writer, iteration, Ll1, loss, l1_loss, elapsed, testing_iterations, scene : Scene, dual_scene, renderFunc, renderArgs, raytracing_renderer=None):
+def training_report(tb_writer, iteration, Ll1, loss, l1_loss, elapsed, testing_iterations, scene : Scene, glossy_scene, renderFunc, renderArgs, raytracer=None):
     if tb_writer:
         tb_writer.add_scalar('train_loss_patches/l1_loss', Ll1.item(), iteration)
         tb_writer.add_scalar('train_loss_patches/total_loss', loss.item(), iteration)
@@ -261,8 +265,8 @@ def training_report(tb_writer, iteration, Ll1, loss, l1_loss, elapsed, testing_i
     # Report test and samples of training set
     if iteration in testing_iterations:
         torch.cuda.empty_cache()
-        validation_configs = ({'name': 'test', 'cameras' : dual_scene.getTestCameras()}, 
-                            {'name': 'train', 'cameras' : [dual_scene.getTrainCameras()[idx % len(dual_scene.getTrainCameras())] for idx in range(5, 30, 5)]})
+        validation_configs = ({'name': 'test', 'cameras' : glossy_scene.getTestCameras()}, 
+                            {'name': 'train', 'cameras' : [glossy_scene.getTrainCameras()[idx % len(glossy_scene.getTrainCameras())] for idx in range(5, 30, 5)]})
 
         for config in validation_configs:
             if config['cameras'] and len(config['cameras']) > 0:
@@ -277,7 +281,7 @@ def training_report(tb_writer, iteration, Ll1, loss, l1_loss, elapsed, testing_i
 
                 for idx, viewpoint in enumerate(config['cameras']):
                     if not args.skip_primal:
-                        package = renderFunc(viewpoint, scene.gaussians, *renderArgs, render_depth=True, raytracing_renderer=raytracing_renderer if args.fused_scene else None, rays_from_camera=True)
+                        package = renderFunc(viewpoint, scene.gaussians, *renderArgs, render_depth=True, raytracer=raytracer if args.fused_scene else None, rays_from_camera=True)
 
                         #2DGS code below
                         # from utils.general_utils import colormap
@@ -305,7 +309,7 @@ def training_report(tb_writer, iteration, Ll1, loss, l1_loss, elapsed, testing_i
                         # tb_writer.add_images(config['name'] + "_view_{}/rend_dist".format(viewpoint.image_name), rend_dist[None], global_step=iteration)
 
                         diffuse_image = torch.clamp(package["render"], 0.0, 1.0)
-                        glossy_package = renderFunc(viewpoint, dual_scene.gaussians, *renderArgs, raytracing_renderer=raytracing_renderer, primal_pc=scene.gaussians)
+                        glossy_package = renderFunc(viewpoint, glossy_scene.gaussians, *renderArgs, raytracer=raytracer, primal_pc=scene.gaussians)
                         glossy_image = torch.clamp(glossy_package["render"], 0.0, 1.0)
                         diffuse_gt_image = torch.clamp(viewpoint.diffuse_image.to("cuda"), 0.0, 1.0)
                         normal_gt_image = torch.clamp(viewpoint.normal_image.to("cuda") / 2 + 0.5, 0.0, 1.0)
@@ -319,7 +323,7 @@ def training_report(tb_writer, iteration, Ll1, loss, l1_loss, elapsed, testing_i
                         diffuse_l1_test += l1_loss(diffuse_image, diffuse_gt_image).mean().double()
                         diffuse_psnr_test += psnr(diffuse_image, diffuse_gt_image).mean().double()
                     else:
-                        glossy_package = renderFunc(viewpoint, dual_scene.gaussians, *renderArgs, raytracing_renderer=raytracing_renderer, primal_pc=scene.gaussians)
+                        glossy_package = renderFunc(viewpoint, glossy_scene.gaussians, *renderArgs, raytracer=raytracer, primal_pc=scene.gaussians)
                         glossy_image = torch.clamp(glossy_package["render"], 0.0, 1.0)
                         diffuse_gt_image = torch.clamp(viewpoint.diffuse_image.to("cuda"), 0.0, 1.0)
                         glossy_gt_image = torch.clamp(viewpoint.glossy_image.to("cuda"), 0.0, 1.0)
@@ -346,16 +350,16 @@ def training_report(tb_writer, iteration, Ll1, loss, l1_loss, elapsed, testing_i
 
                     F0_gt_image = torch.clamp(viewpoint.F0_image.to("cuda"), 0.0, 1.0)
                     if tb_writer and (idx < 5): 
-                        save_image(torch.stack([roughness_image.cuda(), roughness_gt_image]), tb_writer.log_dir + "/" + f"{config['name']}_view/iter_{iteration:09}_{idx}_roughness.png", nrow=2)
-                        save_image(torch.stack([brdf_image.cuda()]), tb_writer.log_dir + "/" + f"{config['name']}_view/iter_{iteration:09}_{idx}_brdf.png", nrow=2)
-                        save_image(torch.stack([F0_image.cuda(), F0_gt_image]), tb_writer.log_dir + "/" + f"{config['name']}_view/iter_{iteration:09}_{idx}_F0.png", nrow=2)
+                        save_image(torch.stack([roughness_image.cuda(), roughness_gt_image]), tb_writer.log_dir + "/" + f"{config['name']}_view/iter_{iteration:09}_{idx}_roughness.png", nrow=2, padding=0)
+                        save_image(torch.stack([brdf_image.cuda()]), tb_writer.log_dir + "/" + f"{config['name']}_view/iter_{iteration:09}_{idx}_brdf.png", nrow=2, padding=0)
+                        save_image(torch.stack([F0_image.cuda(), F0_gt_image]), tb_writer.log_dir + "/" + f"{config['name']}_view/iter_{iteration:09}_{idx}_F0.png", nrow=2, padding=0)
                         if args.skip_primal:
-                            save_image(torch.stack([glossy_image, glossy_gt_image]), tb_writer.log_dir + "/" + f"{config['name']}_view/iter_{iteration:09}_{idx}.png", nrow=2)
-                        save_image(torch.stack([position_image.cuda(), position_gt_image]), tb_writer.log_dir + "/" + f"{config['name']}_view/iter_{iteration:09}_{idx}_position.png", nrow=2)
-                        save_image(torch.stack([normal_image.cuda(), normal_gt_image]), tb_writer.log_dir + "/" + f"{config['name']}_view/iter_{iteration:09}_{idx}_normal.png", nrow=2)
-                        save_image(torch.stack([refl_ray_o_image, refl_ray_d_image]), tb_writer.log_dir + "/" + f"{config['name']}_view/iter_{iteration:09}_{idx}_refl_ray.png", nrow=2)
+                            save_image(torch.stack([glossy_image, glossy_gt_image]), tb_writer.log_dir + "/" + f"{config['name']}_view/iter_{iteration:09}_{idx}.png", nrow=2, padding=0)
+                        save_image(torch.stack([position_image.cuda(), position_gt_image]), tb_writer.log_dir + "/" + f"{config['name']}_view/iter_{iteration:09}_{idx}_position.png", nrow=2, padding=0)
+                        save_image(torch.stack([normal_image.cuda(), normal_gt_image]), tb_writer.log_dir + "/" + f"{config['name']}_view/iter_{iteration:09}_{idx}_normal.png", nrow=2, padding=0)
+                        save_image(torch.stack([refl_ray_o_image, refl_ray_d_image]), tb_writer.log_dir + "/" + f"{config['name']}_view/iter_{iteration:09}_{idx}_refl_ray.png", nrow=1, padding=0)
                         # save_image(torch.stack([n_dot_v_image]), tb_writer.log_dir + "/" + f"{config['name']}_view/iter_{iteration:09}_{idx}_n_dot_v.png", nrow=2)
-                        save_image(torch.stack([mask_image]), tb_writer.log_dir + "/" + f"{config['name']}_view/iter_{iteration:09}_{idx}_mask.png", nrow=2)
+                        save_image(torch.stack([mask_image]), tb_writer.log_dir + "/" + f"{config['name']}_view/iter_{iteration:09}_{idx}_mask.png", nrow=2, padding=0)
                     glossy_l1_test += l1_loss(glossy_image, glossy_gt_image).mean().double()
                     glossy_psnr_test += psnr(glossy_image, glossy_gt_image).mean().double()
                     l1_test += l1_loss(pred_image, gt_image).mean().double()
