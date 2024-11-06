@@ -19,7 +19,8 @@ import torchvision
 from utils.general_utils import safe_state
 from argparse import ArgumentParser
 from arguments import ModelParams, PipelineParams, get_combined_args
-from gaussian_renderer import GaussianModel, RaytracingRenderer
+from gaussian_renderer import GaussianModel, GaussianRaytracer
+from gaussian_renderer import render, network_gui, render
 import copy
 import imageio
 import shutil
@@ -28,7 +29,7 @@ import numpy as np
 import torch.nn.functional as F
 
 
-def render_set(model_params, model_path, split, iteration, views, gaussians, pipeline, background, raytracing_renderer, glossy_gaussians=None):
+def render_set(model_params, model_path, split, iteration, views, gaussians, pipeline, background, raytracer, glossy_gaussians=None):
     render_path = os.path.join(model_path, split, "ours_{}".format(iteration), "renders")
     gts_path = os.path.join(model_path, split, "ours_{}".format(iteration), "gt")
     diffuse_render_path = os.path.join(model_path, split, "ours_{}".format(iteration), "diffuse_renders")
@@ -59,10 +60,6 @@ def render_set(model_params, model_path, split, iteration, views, gaussians, pip
                 view0.FoVx = 2.0944 * 2 #!!!
                 view0.FoVy = -2.0944 * 2 #?? why negative
             view = view0
-            # import cv2 
-            # import torch.nn.functional as F
-            # view.position_image = F.interpolate(torch.from_numpy(cv2.imread("position_dir_00.exr", cv2.IMREAD_UNCHANGED)).moveaxis(2, 0).cuda()[None], (view.image_height, view.image_width))[0]
-            # view.normal_image = F.interpolate(torch.from_numpy(cv2.imread("normals_dir_00.exr", cv2.IMREAD_UNCHANGED)).moveaxis(2, 0).cuda()[None], (view.image_height, view.image_width))[0]
 
             R_colmap_init = view.R
             _R_blender = -R_colmap_init
@@ -93,8 +90,6 @@ def render_set(model_params, model_path, split, iteration, views, gaussians, pip
                     (0.10798710584640503, 0.994147777557373, 0.003032323671504855))
                             )
 
-            
-
             if args.mode == "env_rot_1":
                 T_blender = np.array([0.0, -0.2, 0.2])
             elif args.mode == "env_rot_2":
@@ -116,24 +111,17 @@ def render_set(model_params, model_path, split, iteration, views, gaussians, pip
             view.update()
             print(view.world_view_transform)
 
-            glossy_package = render(view, glossy_gaussians, pipeline, background, render_depth=True, raytracing_renderer=raytracing_renderer, nomask=True, rays_from_camera=True)
-        else:
-            glossy_package = render(view, glossy_gaussians, pipeline, background, secondary_view=views[0] if args.fixed_pov else None, raytracing_renderer=raytracing_renderer)
-        if not model_params.skip_primal:
-            package = render(view, gaussians, pipeline, background, secondary_view=views[0] if args.fixed_pov else None, render_depth=True, raytracing_renderer=raytracing_renderer, rays_from_camera=True)
-            diffuse_image = torch.clamp(package["render"], 0.0, 1.0)
-        glossy_image = torch.clamp(glossy_package["render"], 0.0, 1.0)
+        package = render(view, gaussians, pipeline, background,raytracer=raytracer)
+        
         diffuse_gt_image = torch.clamp(view.diffuse_image.to("cuda"), 0.0, 1.0)
         glossy_gt_image = torch.clamp(view.glossy_image.to("cuda"), 0.0, 1.0)
         gt_image = torch.clamp(view.original_image.to("cuda"), 0.0, 1.0)
             
         torchvision.utils.save_image(gt_image, os.path.join(gts_path, '{0:05d}'.format(idx) + ".png"))
-        
-        if not model_params.skip_primal:
-            torchvision.utils.save_image(diffuse_image, os.path.join(diffuse_render_path, '{0:05d}'.format(idx) + ".png"))
-            torchvision.utils.save_image(diffuse_gt_image, os.path.join(diffuse_gts_path, '{0:05d}'.format(idx) + ".png"))
+        torchvision.utils.save_image(package.diffuse.render, os.path.join(diffuse_render_path, '{0:05d}'.format(idx) + ".png"))
+        torchvision.utils.save_image(diffuse_gt_image, os.path.join(diffuse_gts_path, '{0:05d}'.format(idx) + ".png"))
 
-        torchvision.utils.save_image(glossy_image, os.path.join(glossy_render_path, '{0:05d}'.format(idx) + ".png"))
+        torchvision.utils.save_image(package.glossy.render, os.path.join(glossy_render_path, '{0:05d}'.format(idx) + ".png"))
         torchvision.utils.save_image(glossy_gt_image, os.path.join(glossy_gts_path, '{0:05d}'.format(idx) + ".png"))
         
         # pred_image = torch.clamp((glossy_package["render"]**1.6 + package["render"]**1.6)**(1/1.6), 0.0, 1.0)
@@ -142,17 +130,16 @@ def render_set(model_params, model_path, split, iteration, views, gaussians, pip
             image = F.interpolate(image[None], (image.shape[-2] // 2 * 2, image.shape[-1] // 2 * 2), mode="bilinear")[0]
             return (image.clamp(0, 1) * 255).to(torch.uint8).moveaxis(0, -1).cpu()
 
-        if not model_params.skip_primal:
-            pred_image = torch.clamp((glossy_package["render"] + package["render"]), 0.0, 1.0)
-            torchvision.utils.save_image(pred_image, os.path.join(render_path, '{0:05d}'.format(idx) + ".png"))
+        pred_image = torch.clamp(package.diffuse.render + package.glossy.render, 0.0, 1.0)
+        torchvision.utils.save_image(pred_image, os.path.join(render_path, '{0:05d}'.format(idx) + ".png"))
 
-            all_renders.append(format_image(pred_image))
-            all_gts.append(format_image(gt_image))
-        
-            all_diffuse_renders.append(format_image(diffuse_image))
-            all_diffuse_gts.append(format_image(diffuse_gt_image))
+        all_renders.append(format_image(pred_image))
+        all_gts.append(format_image(gt_image))
+    
+        all_diffuse_renders.append(format_image(package.diffuse.render))
+        all_diffuse_gts.append(format_image(diffuse_gt_image))
 
-        all_glossy_renders.append(format_image(glossy_image))
+        all_glossy_renders.append(format_image(package.diffuse.render))
         all_glossy_gts.append(format_image(glossy_gt_image))
 
     os.makedirs(os.path.join(model_params.model_path, "videos/"), exist_ok=True)
@@ -162,14 +149,13 @@ def render_set(model_params, model_path, split, iteration, views, gaussians, pip
         
         for label, quality in [("hq", "18"), ("lq", "30")]:
             kwargs = dict(fps=30, options={"crf": quality})
-            if not model_params.skip_primal:
-                torchvision.io.write_video(path.format(name=f"renders_{label}", dir="videos/"), torch.stack(all_renders), **kwargs)
-                torchvision.io.write_video(path.format(name=f"gts_{label}", dir="videos/"), torch.stack(all_gts), **kwargs)
-                torchvision.io.write_video(path.format(name=f"comparison_{label}", dir="videos/"), torch.cat([torch.stack(all_renders), torch.stack(all_gts)], dim=2), **kwargs)
-                
-                torchvision.io.write_video(path.format(name=f"diffuse_renders_{label}", dir="videos/"), torch.stack(all_diffuse_renders), **kwargs)
-                torchvision.io.write_video(path.format(name=f"diffuse_gts_{label}", dir="videos/"), torch.stack(all_diffuse_gts), **kwargs)
-                torchvision.io.write_video(path.format(name=f"diffuse_comparison_{label}", dir="videos/"), torch.cat([torch.stack(all_diffuse_renders), torch.stack(all_diffuse_gts)], dim=2), **kwargs)
+            torchvision.io.write_video(path.format(name=f"renders_{label}", dir="videos/"), torch.stack(all_renders), **kwargs)
+            torchvision.io.write_video(path.format(name=f"gts_{label}", dir="videos/"), torch.stack(all_gts), **kwargs)
+            torchvision.io.write_video(path.format(name=f"comparison_{label}", dir="videos/"), torch.cat([torch.stack(all_renders), torch.stack(all_gts)], dim=2), **kwargs)
+            
+            torchvision.io.write_video(path.format(name=f"diffuse_renders_{label}", dir="videos/"), torch.stack(all_diffuse_renders), **kwargs)
+            torchvision.io.write_video(path.format(name=f"diffuse_gts_{label}", dir="videos/"), torch.stack(all_diffuse_gts), **kwargs)
+            torchvision.io.write_video(path.format(name=f"diffuse_comparison_{label}", dir="videos/"), torch.cat([torch.stack(all_diffuse_renders), torch.stack(all_diffuse_gts)], dim=2), **kwargs)
             
             torchvision.io.write_video(path.format(name=f"glossy_renders_{label}", dir="videos/"), torch.stack(all_glossy_renders), **kwargs)
             torchvision.io.write_video(path.format(name=f"glossy_gts_{label}", dir="videos/"), torch.stack(all_glossy_gts), **kwargs)
@@ -196,13 +182,6 @@ def render_sets(model_params: ModelParams, iteration: int, pipeline: PipelinePar
         gaussians = GaussianModel(model_params)
         scene = Scene(model_params, gaussians, load_iteration=iteration, shuffle=False)
 
-        if not model_params.fused_scene:
-            model_params.diffuse_only = True
-            glossyModelParams = copy.deepcopy(model_params)
-            glossyModelParams.glossy = True
-            glossy_gaussians = GaussianModel(glossyModelParams)
-            glossy_scene = Scene(glossyModelParams, glossy_gaussians, load_iteration=iteration, glossy=True, shuffle=False)
-
         if args.red_region:
             bbox_min = [0.22, -0.5, -0.22]
             bbox_max = [0.46, -0.13, -0.05]
@@ -210,15 +189,13 @@ def render_sets(model_params: ModelParams, iteration: int, pipeline: PipelinePar
             mask = (gaussians.get_xyz < torch.tensor(bbox_max, device="cuda")).all(dim=-1).logical_and((gaussians.get_xyz > torch.tensor(bbox_min, device="cuda")).all(dim=-1))
             gaussians._features_dc[mask] = torch.tensor([1.0, 0.0, 0.0], device="cuda")
 
-        kwargs = dict(glossy_gaussians=gaussians) if model_params.fused_scene else dict(glossy_gaussians=glossy_gaussians)
-
         bg_color = [0.5, 0.5, 0.5] if args.sliced else [0, 0, 0]
         background = torch.tensor(bg_color, dtype=torch.float32, device="cuda")
 
-        raytracing_renderer = RaytracingRenderer(gaussians if model_params.fused_scene else glossy_gaussians, scene.getTrainCameras()[0])
+        raytracer = GaussianRaytracer(gaussians, scene.getTrainCameras()[0])
 
         if not skip_train:
-            render_set(model_params, model_params.model_path, "train", scene.loaded_iter, scene.getTrainCameras(), gaussians, pipeline, background, raytracing_renderer, **kwargs)
+            render_set(model_params, model_params.model_path, "train", scene.loaded_iter, scene.getTrainCameras(), gaussians, pipeline, background, raytracer)
 
         # if not skip_test:
         #     label = "test"
@@ -226,7 +203,7 @@ def render_sets(model_params: ModelParams, iteration: int, pipeline: PipelinePar
         #         label += "_sliced"
         #     if args.fixed_pov:
         #         label += "_fixed"
-        #     render_set(model_params, model_params.model_path, label, scene.loaded_iter, glossy_scene.getTrainCameras(), gaussians, pipeline, background, raytracing_renderer, **kwargs) #!!!!!! renders the train images, this is a bug
+        #     render_set(model_params, model_params.model_path, label, scene.loaded_iter, glossy_scene.getTrainCameras(), gaussians, pipeline, background, raytracer, **kwargs) #!!!!!! renders the train images, this is a bug
         
 if __name__ == "__main__":
     # Set up command line argument parser
@@ -238,7 +215,6 @@ if __name__ == "__main__":
     parser.add_argument("--skip_test", action="store_true")
     parser.add_argument("--sliced", action="store_true")
     parser.add_argument("--render_scene", action="store_true")
-    parser.add_argument("--fixed_pov", action="store_true")
     parser.add_argument("--quiet", action="store_true")
     parser.add_argument("--mode", type=str, choices=["normal", "env_rot_1", "env_rot_2", "env_move_1", "env_move_2"], default="test")
     parser.add_argument("--skip_video", action="store_true")

@@ -46,7 +46,6 @@ class ParamGroup:
 
 class ModelParams(ParamGroup): 
     def __init__(self, parser, sentinel=False):
-        self.label = "unlabeled"
         self._source_path = ""
         self._model_path = ""
         self._images = "images"
@@ -54,13 +53,9 @@ class ModelParams(ParamGroup):
         self._white_background = False
         self.data_device = "cuda"
         self.eval = False
-        self.diffuse_only = True
         self.glossy_bbox_size_mult = 4.0
         self.num_feat_per_gaussian_channel = 16 
         self.use_tcnn = False
-        self.split_spec_diff = True
-        self.densify_glossy = False
-        self.skip_primal = False
         
         self.brdf = True
         self.fused_scene = True

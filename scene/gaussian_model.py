@@ -274,10 +274,10 @@ class GaussianModel:
                         np.asarray(plydata.elements[0]["z"])),  axis=1)
         opacities = np.asarray(plydata.elements[0]["opacity"])[..., np.newaxis]
 
-        diffuse = np.zeros((xyz.shape[0], 3, 1))
-        diffuse[:, 0, 0] = np.asarray(plydata.elements[0][f"f_dc_0"])
-        diffuse[:, 1, 0] = np.asarray(plydata.elements[0][f"f_dc_1"])
-        diffuse[:, 2, 0] = np.asarray(plydata.elements[0][f"f_dc_2"])
+        diffuse = np.zeros((xyz.shape[0], 3))
+        diffuse[:, 0] = np.asarray(plydata.elements[0][f"f_dc_0"])
+        diffuse[:, 1] = np.asarray(plydata.elements[0][f"f_dc_1"])
+        diffuse[:, 2] = np.asarray(plydata.elements[0][f"f_dc_2"])
         
         scale_names = [p.name for p in plydata.elements[0].properties if p.name.startswith("scale_")]
         scale_names = sorted(scale_names, key = lambda x: int(x.split('_')[-1]))
@@ -294,12 +294,11 @@ class GaussianModel:
         self._xyz = nn.Parameter(torch.tensor(xyz, dtype=torch.float, device="cuda"))
         self._position = nn.Parameter(torch.tensor(xyz, dtype=torch.float, device="cuda"))
         self._normal = nn.Parameter(torch.zeros_like(self._xyz))
-        self._brdf_params = nn.Parameter(torch.zeros_like(self._xyz))
+        self._brdf_params = nn.Parameter(torch.zeros(self._xyz.shape[0], 4, device="cuda"))
         self._diffuse = nn.Parameter(torch.tensor(diffuse, dtype=torch.float, device="cuda"))
         self._opacity = nn.Parameter(torch.tensor(opacities, dtype=torch.float, device="cuda"))
         self._scaling = nn.Parameter(torch.tensor(scales, dtype=torch.float, device="cuda"))
         self._rotation = nn.Parameter(torch.tensor(rots, dtype=torch.float, device="cuda"))
-
 
 
     def replace_tensor_to_optimizer(self, tensor, name):

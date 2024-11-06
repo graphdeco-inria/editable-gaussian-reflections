@@ -30,7 +30,7 @@ import numpy as np
 
 import os 
 
-def render(camera: Camera, gaussians: GaussianModel, raytracer: GaussianRaytracer, pipe_params: PipelineParams, bg_color: torch.Tensor,  is_diffuse_pass=False):
+def render_pass(camera: Camera, gaussians: GaussianModel, raytracer: GaussianRaytracer, pipe_params: PipelineParams, bg_color: torch.Tensor,  is_diffuse_pass=False):
     """
     Render the scene. 
     
@@ -83,9 +83,9 @@ def render(camera: Camera, gaussians: GaussianModel, raytracer: GaussianRaytrace
     return package 
 
 
-def render_multipass(camera: Camera, gaussians: GaussianModel, pipe_params: PipelineParams, bg_color: torch.Tensor, raytracer: GaussianRaytracer):
+def render(camera: Camera, gaussians: GaussianModel, pipe_params: PipelineParams, bg_color: torch.Tensor, raytracer: GaussianRaytracer):
     class package:
-        diffuse = render(camera, gaussians, raytracer, pipe_params, bg_color, is_diffuse_pass=True)
-        glossy = render(camera, gaussians, raytracer, pipe_params, bg_color)
+        diffuse = render_pass(camera, gaussians, raytracer, pipe_params, bg_color, is_diffuse_pass=True)
+        glossy = render_pass(camera, gaussians, raytracer, pipe_params, bg_color)
 
     return package

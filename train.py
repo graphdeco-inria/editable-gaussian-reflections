@@ -13,7 +13,7 @@ import os
 import torch
 from random import randint
 from utils.loss_utils import l1_loss, ssim
-from gaussian_renderer import render, network_gui, render_multipass
+from gaussian_renderer import render, network_gui, render
 import sys
 from scene import Scene, GaussianModel, SurfelModel
 from utils.general_utils import safe_state
@@ -26,6 +26,7 @@ from torchvision.utils import save_image
 import copy 
 from utils.graphics_utils import BasicPointCloud
 from gaussian_renderer import GaussianRaytracer
+from datetime import datetime
 
 try:
     from torch.utils.tensorboard import SummaryWriter
@@ -35,8 +36,7 @@ except ImportError:
 
 def prepare_output_and_logger(args: ModelParams):    
     if not args.model_path:
-        unique_str = args.label
-    args.model_path = os.path.join("./output/", unique_str)
+        args.model_path = os.path.join("./output/", datetime.isoformat(timespec="seconds"))
 
     # Set up output folder
     print("Output folder: {}".format(args.model_path))
@@ -71,7 +71,7 @@ def training_report(tb_writer, iteration, elpased):
                 diffuse_psnr_test = 0.0
 
                 for idx, viewpoint in enumerate(config['cameras']):
-                    package = render_multipass(viewpoint, gaussians, pipe_params, bg, raytracer=raytracer)
+                    package = render(viewpoint, gaussians, pipe_params, bg, raytracer=raytracer)
                     os.makedirs(tb_writer.log_dir + "/" + f"{config['name']}_view", exist_ok=True)
 
                     diffuse_image = torch.clamp(package.diffuse.render, 0.0, 1.0)
@@ -223,7 +223,7 @@ for iteration in range(first_iter, opt_params.iterations + 1):
     bg = torch.rand((3), device="cuda") if opt_params.random_background else background
 
     # run fused forward + backprop
-    render_multipass(viewpoint_cam, gaussians, pipe_params, bg, raytracer=raytracer) 
+    render(viewpoint_cam, gaussians, pipe_params, bg, raytracer=raytracer) 
     
     iter_end.record()
 
@@ -244,11 +244,8 @@ for iteration in range(first_iter, opt_params.iterations + 1):
                 if iteration > opt_params.densify_from_iter and iteration % opt_params.densification_interval == 0:
                     size_threshold = 20 if iteration > opt_params.opacity_reset_interval else None
                     gaussians.densify_and_prune(opt_params.densify_grad_threshold, 0.005, scene.cameras_extent, size_threshold)
-                    if  args.densify_glossy:  
-                        glossy_gaussians.densify_and_prune_glossy(opt_params.densify_grad_threshold, 0.005, scene.cameras_extent)
-                        print("Number of gaussians: ", glossy_gaussians.get_xyz.shape[0])
-                        assert glossy_gaussians.get_xyz.shape[0] > 0
-                        raytracer.rebuild_bvh()
+                    # glossy_gaussians.densify_and_prune_glossy(opt_params.densify_grad_threshold, 0.005, scene.cameras_extent)
+                    raytracer.rebuild_bvh()
                 
                 if iteration % opt_params.opacity_reset_interval == 0 or (model_params.white_background and iteration == opt_params.densify_from_iter):
                     gaussians.reset_opacity() 

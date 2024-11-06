@@ -63,7 +63,7 @@ class GaussianRaytracer:
         self.gaussian_rgb_buffer = torch.zeros_like(pc.get_xyz).detach().requires_grad_()
         self.gaussian_rgb_buffer_grad = torch.zeros_like(self.gaussian_rgb_buffer)
 
-        self.gaussian_brdf_params = torch.zeros(pc.get_xyz.shape[0], 4).cuda().detach().requires_grad_() #!!!!!!!! should be 4, not
+        self.gaussian_brdf_params = torch.zeros(pc.get_xyz.shape[0], 4).cuda().detach().requires_grad_()
         self.gaussian_brdf_params_grad = torch.zeros_like(self.gaussian_brdf_params)
 
         self.output_visibility_buffer = torch.zeros(example_camera.image_height * example_camera.image_width, dtype=torch.int32, device="cuda")
@@ -200,9 +200,9 @@ class GaussianRaytracer:
         """
 
         if gaussians.model_params.linear_space:
-            colors_precomp = torch.nn.functional.softplus(gaussians._diffuse)
+            colors = torch.nn.functional.softplus(gaussians._diffuse)
         else:
-            colors_precomp = gaussians._diffuse.sigmoid()
+            colors = gaussians._diffuse.sigmoid()
 
         scaling = gaussians.get_scaling
         rotation = gaussians.get_rotation
@@ -231,7 +231,7 @@ class GaussianRaytracer:
             self.gaussian_normal_buffer.copy_(gaussians.get_normal)
             self.gaussian_brdf_params.copy_(gaussians.get_brdf_params)
             self.gaussian_opacity_buffer.copy_(opacity)
-            self.gaussian_rgb_buffer.copy_(colors_precomp)
+            self.gaussian_rgb_buffer.copy_(colors)
             # self.gaussian_extra_features_buffer.copy_(...) # todo the attribution to scale space
             self.mask_buffer.copy_(mask.flatten())
             self.input_roughness_buffer.copy_(roughness.moveaxis(0, -1).flatten())
@@ -296,7 +296,7 @@ class GaussianRaytracer:
                 gaussians._rotation.grad.add_(torch.autograd.grad(rotation, [gaussians._rotation], grad_outputs=self.gaussian_rotations_buffer_grad)[0])
                 gaussians._xyz.grad.add_(torch.autograd.grad(xyz, [gaussians._xyz], grad_outputs=self.gaussian_xyz_buffer_grad)[0])
                 gaussians._opacity.grad.add_(torch.autograd.grad(opacity, [gaussians._opacity], grad_outputs=self.gaussian_opacity_buffer_grad)[0])
-                rgb_grad = torch.autograd.grad(colors_precomp, [gaussians._diffuse], grad_outputs=self.gaussian_rgb_buffer_grad)[0]
+                rgb_grad = torch.autograd.grad(colors, [gaussians._diffuse], grad_outputs=self.gaussian_rgb_buffer_grad)[0]
                 gaussians._diffuse.grad.add_(rgb_grad)
                 if rays_from_camera and target_position is not None:
                     gaussians._position.grad.add_(self.gaussian_position_buffer_grad)
