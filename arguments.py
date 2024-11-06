@@ -55,9 +55,7 @@ class ModelParams(ParamGroup):
         self._white_background = False
         self.data_device = "cuda"
         self.eval = False
-        self.diffuse_only = False 
-        self.convert_mlp = False 
-        self.glossy = False 
+        self.diffuse_only = True
         self.glossy_bbox_size_mult = 4.0
         self.num_feat_per_gaussian_channel = 16 
         self.use_tcnn = False
@@ -77,7 +75,6 @@ class ModelParams(ParamGroup):
         self.optimize_position = False
         self.optimize_normals = False
         self.freeze_optimize_normals = False
-        self.mlp_brdf = False
         self.gaussian_subsets = False
         self.keep_every_kth_view = 1
         self.max_images = 9999999
@@ -135,7 +132,6 @@ class OptimizationParams(ParamGroup):
         self.densify_grad_threshold = 0.0002
 
         self.sh_slowdown_factor = 20.0
-        self.mlp_lr = 0.001 #!!! was 1e-3 for mlp, reduced for feature grid
         self.random_background = False
 
         super().__init__(parser, "Optimization Parameters")

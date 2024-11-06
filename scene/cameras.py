@@ -25,7 +25,7 @@ class Camera(nn.Module):
                  roughness_image,
                  metalness_image,
                  albedo_image,
-                 spec_brdf_image,
+                 brdf_image,
                  trans=np.array([0.0, 0.0, 0.0]), scale=1.0, data_device = "cuda",
                  ):
         super(Camera, self).__init__()
@@ -43,15 +43,10 @@ class Camera(nn.Module):
         self.normal_image = normal_image
         self.position_image = position_image
 
-        # self.position_shift = -self.position_image.min()
-        # self.position_image = self.position_image + self.position_shift
-        # self.position_scale = self.position_image.max()
-        # self.position_image = self.position_image / self.position_scale
-
         self.roughness_image = roughness_image
         self.metalness_image = metalness_image
         self.albedo_image = albedo_image
-        self.spec_brdf_image = spec_brdf_image
+        self.brdf_image = brdf_image
 
         self.F0_image = self.albedo_image * self.metalness_image # + 0.08 * self.specular_image
 
@@ -76,6 +71,10 @@ class Camera(nn.Module):
         self.T = T
 
         self.update()
+
+        incident = self.position_image.moveaxis(0, -1) - self.camera_center.cpu()
+        incident = incident / incident.norm(dim=-1, keepdim=True)
+        self.reflection_ray_image = (incident - 2 * (incident * self.normal_image.moveaxis(0, -1)).sum(dim=-1).unsqueeze(-1) * self.normal_image.moveaxis(0, -1)).moveaxis(-1, 0)
 
 
     def update(self):

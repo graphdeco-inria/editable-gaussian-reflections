@@ -74,11 +74,11 @@ def loadCam(args, id, cam_info, resolution_scale):
         resized_albedo_image_rgb = torch.from_numpy(cam_info.albedo_image).moveaxis(-1, 0)
         albedo_image = torch.nn.functional.interpolate(resized_albedo_image_rgb[:3, ...][None], (resolution[1], resolution[0]), mode="nearest")[0]
 
-        if cam_info.spec_brdf_image is not None:
-            resized_spec_brdf_image_rgb = torch.from_numpy(cam_info.spec_brdf_image).moveaxis(-1, 0)
-            spec_brdf_image = torch.nn.functional.interpolate(resized_spec_brdf_image_rgb[:3, ...][None], (resolution[1], resolution[0]), mode="nearest")[0]
+        if cam_info.brdf_image is not None:
+            resized_brdf_image_rgb = torch.from_numpy(cam_info.brdf_image).moveaxis(-1, 0)
+            brdf_image = torch.nn.functional.interpolate(resized_brdf_image_rgb[:3, ...][None], (resolution[1], resolution[0]), mode="nearest")[0]
         else:
-            spec_brdf_image = None
+            brdf_image = None
     else:
         diffuse_image = None 
         glossy_image = None
@@ -87,12 +87,12 @@ def loadCam(args, id, cam_info, resolution_scale):
         roughness_image = None
         metalness_image = None
         albedo_image = None
-        spec_brdf_image = None
+        brdf_image = None
 
     return Camera(colmap_id=cam_info.uid, R=cam_info.R, T=cam_info.T, 
                   FoVx=cam_info.FovX, FoVy=cam_info.FovY, 
                   image=gt_image, gt_alpha_mask=loaded_mask,
-                  image_name=cam_info.image_name, uid=id, data_device=args.data_device, diffuse_image=diffuse_image, glossy_image=glossy_image, position_image=position_image, normal_image=normal_image, roughness_image=roughness_image, metalness_image=metalness_image, albedo_image=albedo_image, spec_brdf_image=spec_brdf_image)
+                  image_name=cam_info.image_name, uid=id, data_device=args.data_device, diffuse_image=diffuse_image, glossy_image=glossy_image, position_image=position_image, normal_image=normal_image, roughness_image=roughness_image, metalness_image=metalness_image, albedo_image=albedo_image, brdf_image=brdf_image)
 
 def cameraList_from_camInfos(cam_infos, resolution_scale, args):
     camera_list = []

@@ -187,7 +187,6 @@ def render_set(model_params, model_path, split, iteration, views, gaussians, pip
 
 def render_sets(model_params: ModelParams, iteration: int, pipeline: PipelineParams, skip_train: bool, skip_test: bool):
     dynModelParams = copy.deepcopy(model_params)
-    dynModelParams.convert_mlp = True 
     dynModelParams.dynamic_gaussians = True
     dynModelParams.dynamic_diffuse = True
     dynModelParams.diffuse_only = False

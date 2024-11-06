@@ -46,7 +46,7 @@ class CameraInfo:
     roughness_image: None
     metalness_image: None
     albedo_image: None
-    spec_brdf_image: None
+    brdf_image: None
 
 @dataclass
 class SceneInfo:
@@ -159,16 +159,16 @@ def readColmapCameras(model_params, cam_extrinsics, cam_intrinsics, images_folde
         assert albedo_image is not None, f"Albedo image not found at {albedo_path}"
         albedo_image = cv2.cvtColor(albedo_image, cv2.COLOR_BGR2RGB)
 
-        spec_brdf_path = image_path.replace("/color_", "/spec_brdf_").replace(".png", ".exr").replace("/colmap/", "/renders/").replace("/images/", "/spec_brdf/")
-        if os.path.exists(spec_brdf_path):
-            spec_brdf_image = cv2.imread(spec_brdf_path, cv2.IMREAD_UNCHANGED)
-            assert spec_brdf_image is not None, f"Albedo image not found at {spec_brdf_path}"
-            spec_brdf_image = cv2.cvtColor(spec_brdf_image, cv2.COLOR_BGR2RGB)
+        brdf_path = image_path.replace("/color_", "/spec_brdf_").replace(".png", ".exr").replace("/colmap/", "/renders/").replace("/images/", "/brdf/")
+        if os.path.exists(brdf_path):
+            brdf_image = cv2.imread(brdf_path, cv2.IMREAD_UNCHANGED)
+            assert brdf_image is not None, f"Albedo image not found at {brdf_path}"
+            brdf_image = cv2.cvtColor(brdf_image, cv2.COLOR_BGR2RGB)
         else:
-            spec_brdf_image = None
+            brdf_image = None
 
         cam_info = CameraInfo(uid=uid, R=R, T=T, FovY=FovY, FovX=FovX, image=image,
-                              image_path=image_path, image_name=image_name, width=width, height=height, diffuse_image=diffuse_image, glossy_image=glossy_image, position_image=position_image, normal_image=normal_image, roughness_image=roughness_image, metalness_image=metalness_image, albedo_image=albedo_image, spec_brdf_image=spec_brdf_image)
+                              image_path=image_path, image_name=image_name, width=width, height=height, diffuse_image=diffuse_image, glossy_image=glossy_image, position_image=position_image, normal_image=normal_image, roughness_image=roughness_image, metalness_image=metalness_image, albedo_image=albedo_image, brdf_image=brdf_image)
 
         cam_infos.append(cam_info)
     
@@ -327,12 +327,12 @@ def readCamerasFromTransforms(model_params, path, transformsfile, white_backgrou
             albedo_image = cv2.cvtColor(albedo_image, cv2.COLOR_BGR2RGB)
             assert albedo_image is not None, f"Albedo image not found at {albedo_path}"
 
-            spec_brdf_path = image_path.replace("/color_", "/spec_brdf_").replace(".png", ".exr").replace("/colmap/", "/renders/").replace("/color/", "/spec_brdf/")
-            if os.path.exists(spec_brdf_path):
-                spec_brdf_image = cv2.imread(spec_brdf_path, cv2.IMREAD_UNCHANGED)
-                spec_brdf_image = cv2.cvtColor(spec_brdf_image, cv2.COLOR_BGR2RGB)
+            brdf_path = image_path.replace("/color_", "/spec_brdf_").replace(".png", ".exr").replace("/colmap/", "/renders/").replace("/color/", "/brdf/")
+            if os.path.exists(brdf_path):
+                brdf_image = cv2.imread(brdf_path, cv2.IMREAD_UNCHANGED)
+                brdf_image = cv2.cvtColor(brdf_image, cv2.COLOR_BGR2RGB)
             else:
-                spec_brdf_image = None
+                brdf_image = None
 
             im_data = np.array(image.convert("RGBA"))
 
@@ -346,7 +346,7 @@ def readCamerasFromTransforms(model_params, path, transformsfile, white_backgrou
             FovX = fovx
 
             cam_infos.append(CameraInfo(uid=idx, R=R, T=T, FovY=FovY, FovX=FovX, image=image,
-                            image_path=image_path, image_name=image_name, width=image.size[0], height=image.size[1], diffuse_image=diffuse_image, glossy_image=glossy_image, position_image=position_image, normal_image=normal_image, roughness_image=roughness_image, metalness_image=metalness_image, albedo_image=albedo_image, spec_brdf_image=spec_brdf_image))
+                            image_path=image_path, image_name=image_name, width=image.size[0], height=image.size[1], diffuse_image=diffuse_image, glossy_image=glossy_image, position_image=position_image, normal_image=normal_image, roughness_image=roughness_image, metalness_image=metalness_image, albedo_image=albedo_image, brdf_image=brdf_image))
 
         with ThreadPoolExecutor() as executor: 
             futures = []

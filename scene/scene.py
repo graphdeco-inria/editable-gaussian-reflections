@@ -22,9 +22,9 @@ from utils.camera_utils import cameraList_from_camInfos, camera_to_JSON
 import torch
  
 class Scene:
-    gaussians : GaussianModel
+    gaussians: GaussianModel
 
-    def __init__(self, model_params : ModelParams, gaussians : GaussianModel, load_iteration=None, shuffle=True, resolution_scales=[1.0], glossy=False, extend_point_cloud=None):
+    def __init__(self, model_params: ModelParams, gaussians: GaussianModel, load_iteration=None, shuffle=True, resolution_scales=[1.0], glossy=False, extend_point_cloud=None):
         """b
         :param path: Path to colmap scene main folder.
         """
@@ -44,30 +44,15 @@ class Scene:
         self.train_cameras = {}
         self.test_cameras = {}
 
-        if model_params.glossy:
-            source_path = model_params.source_path.replace("colmap/", "renders/").replace("/train", "")
-        elif not model_params.skip_primal:
-            source_path = model_params.source_path.replace("renders/", "colmap/") + "/train"
-        else:
-            source_path = model_params.source_path
-
-        if model_params.glossy:
-            assert os.path.exists(os.path.join(source_path, "transforms_train.json")), source_path
-            scene_info = readNerfSyntheticInfo(model_params, source_path, model_params.white_background, model_params.eval)
-        else:
-            assert os.path.exists(os.path.join(source_path, "sparse")), source_path
-            scene_info = readColmapSceneInfo(model_params, source_path, model_params.images, model_params.eval)
+        source_path_synthetic = model_params.source_path.replace("colmap/", "renders/").replace("/train", "")
+        assert os.path.exists(os.path.join(source_path_synthetic, "transforms_train.json")), source_path_synthetic
+        scene_info_synthetic = readNerfSyntheticInfo(model_params, source_path_synthetic, model_params.white_background, model_params.eval)
+        
+        source_path_colmap = model_params.source_path + "/train"
+        assert os.path.exists(os.path.join(source_path_colmap, "sparse")), source_path_colmap
+        scene_info = readColmapSceneInfo(model_params, source_path_colmap, model_params.images, model_params.eval)
 
         self.scene_info = scene_info
-            
-        # if os.path.exists(os.path.join(source_path, "sparse")):
-        #     scene_info = readColmapSceneInfo(model_params, source_path, model_params.images, model_params.eval)
-        # elif os.path.exists(os.path.join(source_path, "transforms_train.json")):
-        #     print("Found transforms_train.json file, assuming Blender data set!")
-        #     scene_info = readNerfSyntheticInfo(model_params, source_path, model_params.white_background, model_params.eval)
-        # else:
-        #     assert False, "Could not recognize scene type!"
-
         scene_info.train_cameras = scene_info.train_cameras[::model_params.keep_every_kth_view]
 
         if not self.loaded_iter:
@@ -98,29 +83,13 @@ class Scene:
 
         print(f"I have {len(self.train_cameras)} cameras")
 
-        if not self.model_params.glossy and self.model_params.skip_primal:
-            return 
-
-        if extend_point_cloud is not None:
-            # scene_info.point_cloud = BasicPointCloud(
-            #     np.concatenate([scene_info.point_cloud.points, extend_point_cloud.points]),
-            #     np.concatenate([scene_info.point_cloud.colors, extend_point_cloud.colors]),
-            #     np.concatenate([scene_info.point_cloud.normals, extend_point_cloud.normals]),
-            # )
-            scene_info.point_cloud = BasicPointCloud(
-                np.concatenate([scene_info.point_cloud.points, extend_point_cloud.points]),
-                np.concatenate([scene_info.point_cloud.colors, extend_point_cloud.colors]),
-                np.concatenate([scene_info.point_cloud.normals, extend_point_cloud.normals]),
-            )
+        scene_info.point_cloud = BasicPointCloud(
+            np.concatenate([scene_info.point_cloud.points, scene_info_synthetic.point_cloud.points]),
+            np.concatenate([scene_info.point_cloud.colors, scene_info_synthetic.point_cloud.colors]),
+            np.concatenate([scene_info.point_cloud.normals, scene_info_synthetic.point_cloud.normals]),
+        )
 
         if self.loaded_iter:
-            # if self.model_params.convert_mlp:
-            #     self.gaussians.mlp = torch.load(
-            #         os.path.join(self.model_path,
-            #                         "point_cloud",
-            #                         "iteration_" + str(self.loaded_iter),
-            #                         f"{'glossy_' if self.glossy else ''}mlp.pt")
-            #     )
             self.gaussians.load_ply(os.path.join(self.model_path,
                                                            "point_cloud",
                                                            "iteration_" + str(self.loaded_iter),
@@ -131,14 +100,6 @@ class Scene:
     def save(self, iteration):
         point_cloud_path = os.path.join(self.model_path, "point_cloud/iteration_{}".format(iteration))
         self.gaussians.save_ply(os.path.join(point_cloud_path, f"{'glossy_' if self.glossy else ''}point_cloud.ply"))
-        if self.model_params.convert_mlp:
-            torch.save(self.gaussians.mlp, os.path.join(point_cloud_path, f"{'glossy_' if self.glossy else ''}mlp.pt"))
-            if self.model_params.use_tcnn:
-                import io
-                buff = io.BytesIO()
-                torch.save(self.gaussians.mlp.state_dict()['params'], buff)
-                with open(os.path.join(point_cloud_path, f"{'glossy_' if self.glossy else ''}mlp.bin"), "wb") as f:
-                    f.write(buff.getvalue())
 
     def getTrainCameras(self, scale=1.0):
         return self.train_cameras[scale]

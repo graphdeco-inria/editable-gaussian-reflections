@@ -21,7 +21,7 @@ port = 6009
 conn = None
 addr = None
 
-listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+listener = None #!!! socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
 def init(wish_host, wish_port):
     global host, port, listener
