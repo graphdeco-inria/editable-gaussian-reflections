@@ -175,7 +175,7 @@ if args.viewer:
     network_gui.init(args.ip, args.port)
 
 first_iter = 0
-tb_writer = prepare_output_and_logger(model_params) # todo: make sure cfg_args is ok
+tb_writer = prepare_output_and_logger(model_params) 
 
 gaussians = GaussianModel(model_params, 0)
 scene = Scene(model_params, gaussians)

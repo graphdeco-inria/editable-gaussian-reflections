@@ -1,4 +1,0 @@
-- review combined init
-- implement render_multipass
-- clean up image logging
-- remove all features rest & reference to sh 
