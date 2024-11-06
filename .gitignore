@@ -12,3 +12,4 @@ screenshots
 submodules/diff-surfel-rasterization/
 renders
 *.ply
+*.std
