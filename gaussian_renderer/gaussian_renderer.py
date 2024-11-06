@@ -26,20 +26,9 @@ from gaussian_renderer.gaussian_raytracer import GaussianRaytracer
 from scene.cameras import Camera
 
 import nerfacc
-from gauss_render import * 
 import numpy as np 
 
 import os 
-
-
-brdf_lut_path = "data/ibl_brdf_lut.png"
-brdf_lut = cv2.imread(brdf_lut_path)
-brdf_lut = cv2.cvtColor(brdf_lut, cv2.COLOR_BGR2RGB)
-brdf_lut = brdf_lut.astype(np.float32)
-brdf_lut /= 255.0
-brdf_lut = torch.tensor(brdf_lut).to("cuda")
-brdf_lut = brdf_lut.permute((2, 0, 1))
-
 
 def render(camera: Camera, gaussians: GaussianModel, raytracer: GaussianRaytracer, pipe_params: PipelineParams, bg_color: torch.Tensor,  is_diffuse_pass=False):
     """
@@ -90,9 +79,6 @@ def render(camera: Camera, gaussians: GaussianModel, raytracer: GaussianRaytrace
 
         "These results are reshaped to (num_gaussians, _)"
         visibility_filter = raytracing_pkg["visibility_filter"]
-
-        # todo also include losses
-
 
     return package 
 

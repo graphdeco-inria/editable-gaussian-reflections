@@ -14,7 +14,7 @@ from gaussian_renderer import render
 import torch.nn.functional as F
 
 
-pc = GaussianModel(None, 0)
+pc = GaussianModel(None)
 pc.load_ply("hard_kitchen_7k_pc.ply")
 
 save_image(F.avg_pool2d(render(camera_colmap, pc, args)['render'][None], 2), "render_splat.png")

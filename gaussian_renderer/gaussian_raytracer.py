@@ -145,15 +145,6 @@ class GaussianRaytracer:
             ref.random_numbers
         )
 
-        if False:
-            self.optim = torch.optim.Adam([
-                dict(params=[pc._opacity], lr=0.025),
-                dict(params=[pc._features_dc, pc._features_rest], lr=0.0025),
-                dict(params=[pc._xyz], lr=0.00016), 
-                dict(params=[pc._rotation], lr=0.001),
-                dict(params=[pc._scaling], lr=0.0005) # *** 0.005 in 3dgs
-            ],  betas=[0.9, 0.999]) 
-
         self.pc = pc
 
     @torch.no_grad()
@@ -183,8 +174,7 @@ class GaussianRaytracer:
         self.gaussian_normal_buffer.copy_(self.pc.get_normal)
         self.gaussian_brdf_params_buffer.copy_(self.pc.get_brdf_params)
         self.gaussian_opacity_buffer.copy_(self.pc.get_opacity)
-        self.gaussian_rgb_buffer.copy_(self.pc._features_dc[:, 0])
-        self.gaussian_extra_features_buffer.copy_(self.pc._features_rest[:, 0]) 
+        self.gaussian_rgb_buffer.copy_(self.pc._diffuse[:, 0])
         
         self.output_visibility_buffer.resize_(new_size)
         self.output_visibility_buffer.zero_()
@@ -210,9 +200,9 @@ class GaussianRaytracer:
         """
 
         if gaussians.model_params.linear_space:
-            colors_precomp = torch.nn.functional.softplus(gaussians._features_dc[:, 0])
+            colors_precomp = torch.nn.functional.softplus(gaussians._diffuse)
         else:
-            colors_precomp = gaussians._features_dc[:, 0].sigmoid()
+            colors_precomp = gaussians._diffuse.sigmoid()
 
         scaling = gaussians.get_scaling
         rotation = gaussians.get_rotation
@@ -242,7 +232,7 @@ class GaussianRaytracer:
             self.gaussian_brdf_params.copy_(gaussians.get_brdf_params)
             self.gaussian_opacity_buffer.copy_(opacity)
             self.gaussian_rgb_buffer.copy_(colors_precomp)
-            self.gaussian_extra_features_buffer.copy_(gaussians._features_rest.squeeze(1))
+            # self.gaussian_extra_features_buffer.copy_(...) # todo the attribution to scale space
             self.mask_buffer.copy_(mask.flatten())
             self.input_roughness_buffer.copy_(roughness.moveaxis(0, -1).flatten())
             self.output_visibility_buffer.zero_()
@@ -306,9 +296,8 @@ class GaussianRaytracer:
                 gaussians._rotation.grad.add_(torch.autograd.grad(rotation, [gaussians._rotation], grad_outputs=self.gaussian_rotations_buffer_grad)[0])
                 gaussians._xyz.grad.add_(torch.autograd.grad(xyz, [gaussians._xyz], grad_outputs=self.gaussian_xyz_buffer_grad)[0])
                 gaussians._opacity.grad.add_(torch.autograd.grad(opacity, [gaussians._opacity], grad_outputs=self.gaussian_opacity_buffer_grad)[0])
-                rgb_grad = torch.autograd.grad(colors_precomp, [gaussians._features_dc], grad_outputs=self.gaussian_rgb_buffer_grad)[0]
-                gaussians._features_dc.grad.add_(rgb_grad)
-                # pc._features_rest.grad.add_(torch.autograd.grad(pc._features_rest, [pc._features_rest], grad_outputs=self.gaussian_extra_features_buffer_grad.unsqueeze(1))[0]) #todo remove all 
+                rgb_grad = torch.autograd.grad(colors_precomp, [gaussians._diffuse], grad_outputs=self.gaussian_rgb_buffer_grad)[0]
+                gaussians._diffuse.grad.add_(rgb_grad)
                 if rays_from_camera and target_position is not None:
                     gaussians._position.grad.add_(self.gaussian_position_buffer_grad)
                 if rays_from_camera and target_normal is not None:

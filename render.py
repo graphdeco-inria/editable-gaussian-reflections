@@ -193,14 +193,14 @@ def render_sets(model_params: ModelParams, iteration: int, pipeline: PipelinePar
     model_params.diffuse_only = True
         
     with torch.no_grad():
-        gaussians = GaussianModel(model_params, model_params.sh_degree)
+        gaussians = GaussianModel(model_params)
         scene = Scene(model_params, gaussians, load_iteration=iteration, shuffle=False)
 
         if not model_params.fused_scene:
             model_params.diffuse_only = True
             glossyModelParams = copy.deepcopy(model_params)
             glossyModelParams.glossy = True
-            glossy_gaussians = GaussianModel(glossyModelParams, model_params.sh_degree)
+            glossy_gaussians = GaussianModel(glossyModelParams)
             glossy_scene = Scene(glossyModelParams, glossy_gaussians, load_iteration=iteration, glossy=True, shuffle=False)
 
         if args.red_region:
