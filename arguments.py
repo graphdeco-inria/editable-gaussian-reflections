@@ -12,6 +12,7 @@
 from argparse import ArgumentParser, Namespace
 import sys
 import os
+from typing import *
 
 class GroupParams:
     pass
@@ -57,8 +58,8 @@ class ModelParams(ParamGroup):
         self.num_feat_per_gaussian_channel = 16 
         self.use_tcnn = False
         
-        self.brdf = True
-        self.fused_scene = True
+        self.brdf_mode: Literal["disabled", "gt", "static_lut", "finetuned_lut"] = "gt"
+        self.use_attached_brdf = False
         self.use_masks = False
 
         self.disable_bounce_grads = False
@@ -113,6 +114,7 @@ class OptimizationParams(ParamGroup):
         self.opacity_lr = 0.05
         self.scaling_lr = 0.005
         self.rotation_lr = 0.001
+        self._brdf_lut_lr = 0.001
         self.percent_dense = 0.01
         self.lambda_dssim = 0.2
         self.lambda_dist = 0.0

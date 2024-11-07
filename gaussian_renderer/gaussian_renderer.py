@@ -30,12 +30,14 @@ import numpy as np
 
 import os 
 
-def render_pass(camera: Camera, gaussians: GaussianModel, raytracer: GaussianRaytracer, pipe_params: PipelineParams, bg_color: torch.Tensor,  is_diffuse_pass=False):
+def render_pass(camera: Camera, gaussians: GaussianModel, raytracer: GaussianRaytracer, pipe_params: PipelineParams, bg_color: torch.Tensor,  is_diffuse_pass=False, diffuse_package=None):
     """
     Render the scene. 
     
     Background tensor (bg_color) must be on GPU!
     """
+    if not is_diffuse_pass:
+        assert diffuse_package is not None
 
     if gaussians.model_params.use_masks and not is_diffuse_pass:
         mask_map = (camera.glossy_image.sum(0) > 0).cuda()
@@ -43,20 +45,31 @@ def render_pass(camera: Camera, gaussians: GaussianModel, raytracer: GaussianRay
         mask_map = torch.ones_like(camera.glossy_image.sum(0))
 
     refl_ray_o_flat = camera.position_image.cuda()
-    refl_ray_d_flat = camera.reflection_ray_image.cuda()
+    refl_ray_d_flat = camera.reflection_ray_image.cuda() # todo don't depend on g.t.
     roughness_map_flat = camera.roughness_image.cuda().mean(dim=0, keepdim=True)
     
-    if gaussians.model_params.brdf:
+    if is_diffuse_pass or gaussians.model_params.brdf_mode == "disabled":
+        input_brdf_map = torch.ones_like(camera.F0_image.cuda())
+    elif gaussians.model_params.brdf_mode == "gt":
         input_brdf_map = camera.brdf_image.cuda()
     else:
-        input_brdf_map = torch.ones_like(roughness_map_flat)
+        assert "lut" in gaussians.model_params.brdf_mode
+        used_normals = diffuse_package.normal / 2 + 0.5 if gaussians.model_params.use_attached_brdf else camera.normal_image.cuda()
+        used_roughness = diffuse_package.roughness if gaussians.model_params.use_attached_brdf else camera.roughness_image.cuda().mean(dim=0, keepdim=True)
+        used_F0 = diffuse_package.F0 if gaussians.model_params.use_attached_brdf else camera.F0_image.cuda()
+
+        incident = -F.normalize(refl_ray_o_flat.moveaxis(0, -1) - camera.camera_center, dim=-1).moveaxis(-1, 0) # todo don't depend on g.t.
+        n_dot_v = (incident * used_normals).sum(dim=0).clamp(0) #*** was missing clamp 0
+        uv = torch.stack([2 * n_dot_v - 1, 2 * used_roughness[0] - 1], -1)
+        lut_values = F.grid_sample(gaussians.get_brdf_lut[None], uv[None], align_corners=True)
+        input_brdf_map = lut_values[:, 0] * used_F0 + lut_values[:, 1]
 
     if is_diffuse_pass:
         target = camera.diffuse_image.cuda()
         target_position = camera.position_image.cuda()
         target_normal = camera.normal_image.cuda()
         target_F0 = camera.F0_image.cuda()
-        target_roughness = camera.roughness_image.cuda().mean(dim=0, keepdim=True)
+        target_roughness = camera.roughness_image.cuda().mean(dim=0, keepdim=True) # todo do this averaging during image load
         target_brdf_params = torch.cat([target_F0, target_roughness], dim=0)
     else:
         target = camera.glossy_image.cuda()
@@ -76,6 +89,7 @@ def render_pass(camera: Camera, gaussians: GaussianModel, raytracer: GaussianRay
         position = raytracer.output_position_buffer.clone().detach().reshape(*camera.position_image.shape[1:3], 3).moveaxis(-1, 0)
         normal = raytracer.output_normal_buffer.clone().detach().reshape(*camera.normal_image.shape[1:3], 3).moveaxis(-1, 0)
         mask = mask_map
+        brdf = input_brdf_map
 
         "These results are reshaped to (num_gaussians, _)"
         visibility_filter = raytracing_pkg["visibility_filter"]
@@ -86,6 +100,6 @@ def render_pass(camera: Camera, gaussians: GaussianModel, raytracer: GaussianRay
 def render(camera: Camera, gaussians: GaussianModel, pipe_params: PipelineParams, bg_color: torch.Tensor, raytracer: GaussianRaytracer):
     class package:
         diffuse = render_pass(camera, gaussians, raytracer, pipe_params, bg_color, is_diffuse_pass=True)
-        glossy = render_pass(camera, gaussians, raytracer, pipe_params, bg_color)
+        glossy = render_pass(camera, gaussians, raytracer, pipe_params, bg_color, diffuse_package=diffuse)
 
     return package

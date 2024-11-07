@@ -366,7 +366,6 @@ def readNerfSyntheticInfo(model_params, path, white_background, eval, extension=
     print("Reading Training Transforms")
     train_cam_infos = readCamerasFromTransforms(model_params, path, "transforms_train.json", white_background, extension)
     print("Reading Test Transforms")
-    breakpoint()
     test_cam_infos = readCamerasFromTransforms(model_params, path, "transforms_test.json", white_background, extension)
     
     # if not eval:

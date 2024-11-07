@@ -236,7 +236,7 @@ class GaussianRaytracer:
             self.mask_buffer.copy_(mask.flatten())
             self.input_roughness_buffer.copy_(roughness.moveaxis(0, -1).flatten())
             self.output_visibility_buffer.zero_()
-            if gaussians.model_params.brdf:
+            if gaussians.model_params.brdf_mode != "disabled":
                 self.input_brdf_buffer.copy_(brdf.moveaxis(0, -1).flatten(0, 1))
             self.vertical_fov_radians_buffer.copy_(torch.tensor(viewpoint_camera.FoVy, dtype=torch.float32, device="cuda"))
             
@@ -305,7 +305,7 @@ class GaussianRaytracer:
                 if rays_from_camera and target_brdf_params is not None:
                     gaussians._brdf_params.grad.add_(self.gaussian_brdf_params_grad)
                 
-                if gaussians.model_params.brdf: 
+                if gaussians.model_params.brdf_mode != "disabled": 
                     brdf_grad = self.input_brdf_buffer_grad.moveaxis(0, 1).reshape(brdf.shape)
                     if brdf.grad is None:
                         brdf.grad = brdf_grad.clone()

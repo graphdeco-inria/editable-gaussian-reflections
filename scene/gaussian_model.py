@@ -61,15 +61,16 @@ class GaussianModel:
         self.spatial_lr_scale = 0
         self.setup_functions()
 
-        if self.model_params.brdf:
+        if "lut" in self.model_params.brdf_mode:
             brdf_lut_path = "data/ibl_brdf_lut.png"
             brdf_lut = cv2.imread(brdf_lut_path)
             brdf_lut = cv2.cvtColor(brdf_lut, cv2.COLOR_BGR2RGB)
             brdf_lut = brdf_lut.astype(np.float32)
             brdf_lut /= 255.0
             brdf_lut = torch.tensor(brdf_lut).to("cuda")
-            self.brdf_lut = brdf_lut.permute((2, 0, 1))
-            self.brdf_lut_finetune = nn.Parameter(torch.zeros_like(self.brdf_lut))
+            self._brdf_lut = brdf_lut.permute((2, 0, 1))
+            if self.model_params.brdf_mode == "finetuned_lut":
+                self._brdf_lut_residual = nn.Parameter(torch.zeros_like(self._brdf_lut))
 
     def capture(self):
         return (
@@ -116,7 +117,15 @@ class GaussianModel:
         self._scaling.grad = torch.zeros_like(self._scaling)
         self._rotation.grad = torch.zeros_like(self._rotation)
 
+    @property
+    def get_brdf_lut(self):
+        if self.model_params.brdf_mode == "finetuned_lut":
+            return self._brdf_lut + self._brdf_lut_residual
+        else:
 
+            assert self.model_params.brdf_mode == "static_lut"
+            return self._brdf_lut
+    
     @property
     def get_scaling(self):
         return self.scaling_activation(self._scaling)
@@ -213,8 +222,11 @@ class GaussianModel:
             {'params': [self._diffuse], 'lr': training_args.feature_lr, "name": "f_dc"},
             {'params': [self._opacity], 'lr': training_args.opacity_lr, "name": "opacity"},
             {'params': [self._scaling], 'lr': training_args.scaling_lr, "name": "scaling"},
-            {'params': [self._rotation], 'lr': training_args.rotation_lr, "name": "rotation"}
+            {'params': [self._rotation], 'lr': training_args.rotation_lr, "name": "rotation"},
         ]
+
+        if self.model_params.brdf_mode == "finetuned_lut":
+            l.append({'params': [self._brdf_lut_residual], 'lr': training_args.brdf_lut_lr, "name": "brdf_lut_residual"})
 
         self.optimizer = torch.optim.Adam(l, lr=0.0, eps=1e-15)
         self.xyz_scheduler_args = get_expon_lr_func(lr_init=training_args.position_lr_init*self.spatial_lr_scale,
@@ -260,13 +272,17 @@ class GaussianModel:
         el = PlyElement.describe(elements, 'vertex')
         PlyData([el]).write(path)
 
+        if self.model_params.brdf_mode == "finetuned_lut":
+            brdf_lut_path = path.replace("point_cloud.ply", "brdf_lut_residuals.pt")
+            torch.save(self._brdf_lut_residual, brdf_lut_path)
+
     def reset_opacity(self):
         opacities_new = inverse_sigmoid(torch.min(self.get_opacity, torch.ones_like(self.get_opacity)*0.01))
         optimizable_tensors = self.replace_tensor_to_optimizer(opacities_new, "opacity")
         self._opacity = optimizable_tensors["opacity"]
         self._opacity.grad = torch.zeros_like(self._opacity)
 
-    def load_ply(self, path, glossy):
+    def load_ply(self, path):
         plydata = PlyData.read(path)
 
         xyz = np.stack((np.asarray(plydata.elements[0]["x"]),
@@ -299,7 +315,8 @@ class GaussianModel:
         self._opacity = nn.Parameter(torch.tensor(opacities, dtype=torch.float, device="cuda"))
         self._scaling = nn.Parameter(torch.tensor(scales, dtype=torch.float, device="cuda"))
         self._rotation = nn.Parameter(torch.tensor(rots, dtype=torch.float, device="cuda"))
-
+        if "lut" in self.model_params.brdf_mode:
+            self._brdf_lut_residual = nn.Parameter(torch.load(path.replace("point_cloud.ply", "brdf_lut_residuals.pt")).to("cuda"))
 
     def replace_tensor_to_optimizer(self, tensor, name):
         optimizable_tensors = {}

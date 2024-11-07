@@ -92,13 +92,15 @@ def training_report(tb_writer, iteration, elpased):
                     position_image = torch.clamp(package.diffuse.position, 0.0, 1.0)
                     F0_image = torch.clamp(package.diffuse.F0, 0.0, 1.0)
                     mask_image = torch.clamp(package.glossy.mask, 0.0, 1.0)
+                    if model_params.brdf_mode != "disabled":
+                        brdf_image = torch.clamp(package.glossy.brdf, 0.0, 1.0)
 
-                    if viewpoint.brdf_image is not None:
-                        brdf_gt_image = torch.clamp(viewpoint.brdf_image.to("cuda"), 0.0, 1.0)
                     normal_gt_image = torch.clamp(viewpoint.normal_image.to("cuda") / 2 + 0.5, 0.0, 1.0)
                     position_gt_image = torch.clamp(viewpoint.position_image.to("cuda"), 0.0, 1.0)
                     F0_gt_image = torch.clamp(viewpoint.F0_image.to("cuda"), 0.0, 1.0)
                     roughness_gt_image = torch.clamp(viewpoint.roughness_image.to("cuda"), 0.0, 1.0)
+                    if model_params.brdf_mode != "disabled":
+                        brdf_gt_image = torch.clamp(viewpoint.brdf_image.to("cuda"), 0.0, 1.0)
 
                     if tb_writer and (idx < 5): 
                         save_image(torch.stack([roughness_image.cuda(), roughness_gt_image]), tb_writer.log_dir + "/" + f"{config['name']}_view/iter_{iteration:09}_{idx}_roughness.png", nrow=2, padding=0)
@@ -109,8 +111,8 @@ def training_report(tb_writer, iteration, elpased):
                         save_image(torch.stack([position_image.cuda(), position_gt_image]), tb_writer.log_dir + "/" + f"{config['name']}_view/iter_{iteration:09}_{idx}_position.png", nrow=2, padding=0)
                         save_image(torch.stack([normal_image.cuda(), normal_gt_image]), tb_writer.log_dir + "/" + f"{config['name']}_view/iter_{iteration:09}_{idx}_normal.png", nrow=2, padding=0)
                         save_image(torch.stack([mask_image]), tb_writer.log_dir + "/" + f"{config['name']}_view/iter_{iteration:09}_{idx}_mask.png", nrow=2, padding=0)
-                        if viewpoint.brdf_image is not None:
-                            save_image(torch.stack([brdf_gt_image.cuda()]), tb_writer.log_dir + "/" + f"{config['name']}_view/iter_{iteration:09}_{idx}_brdf.png", nrow=2, padding=0)
+                        if model_params.brdf_mode != "disabled":
+                            save_image(torch.stack([brdf_image, brdf_gt_image.cuda()]), tb_writer.log_dir + "/" + f"{config['name']}_view/iter_{iteration:09}_{idx}_brdf.png", nrow=2, padding=0)
                     glossy_l1_test += l1_loss(glossy_image, glossy_gt_image).mean().double()
                     glossy_psnr_test += psnr(glossy_image, glossy_gt_image).mean().double()
                     l1_test += l1_loss(pred_image, gt_image).mean().double()
