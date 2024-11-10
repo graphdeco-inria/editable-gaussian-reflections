@@ -24,7 +24,7 @@ class Camera(nn.Module):
                  normal_image,
                  roughness_image,
                  metalness_image,
-                 albedo_image,
+                 base_color_image,
                  brdf_image,
                  trans=np.array([0.0, 0.0, 0.0]), scale=1.0, data_device = "cuda",
                  ):
@@ -37,7 +37,7 @@ class Camera(nn.Module):
         self.FoVy = FoVy
         self.image_name = image_name
 
-        self.diffuse_image = diffuse_image * (1.0 - metalness_image) #!!!
+        self.diffuse_image = diffuse_image #* (1.0 - metalness_image) #!!! why did I have this again?
         self.glossy_image = glossy_image
         
         self.normal_image = normal_image
@@ -45,10 +45,10 @@ class Camera(nn.Module):
 
         self.roughness_image = roughness_image
         self.metalness_image = metalness_image
-        self.albedo_image = albedo_image
+        self.base_color_image = base_color_image
         self.brdf_image = brdf_image
 
-        self.F0_image = self.albedo_image * self.metalness_image # + 0.08 * self.specular_image
+        self.F0_image = (1.0 - self.metalness_image) * 0.08 * self.roughness_image + self.metalness_image * self.base_color_image
 
         try:
             self.data_device = torch.device(data_device)

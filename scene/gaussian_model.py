@@ -68,7 +68,7 @@ class GaussianModel:
             brdf_lut = brdf_lut.astype(np.float32)
             brdf_lut /= 255.0
             brdf_lut = torch.tensor(brdf_lut).to("cuda")
-            self._brdf_lut = brdf_lut.permute((2, 0, 1))
+            self._brdf_lut = torch.log(brdf_lut.permute((2, 0, 1)))
             if self.model_params.brdf_mode == "finetuned_lut":
                 self._brdf_lut_residual = nn.Parameter(torch.zeros_like(self._brdf_lut))
 
@@ -120,11 +120,10 @@ class GaussianModel:
     @property
     def get_brdf_lut(self):
         if self.model_params.brdf_mode == "finetuned_lut":
-            return self._brdf_lut + self._brdf_lut_residual
+            return torch.exp(self._brdf_lut + self._brdf_lut_residual)
         else:
-
             assert self.model_params.brdf_mode == "static_lut"
-            return self._brdf_lut
+            return torch.exp(self._brdf_lut)
     
     @property
     def get_scaling(self):
@@ -336,6 +335,8 @@ class GaussianModel:
     def _prune_optimizer(self, mask):
         optimizable_tensors = {}
         for group in self.optimizer.param_groups:
+            if group["name"] == "brdf_lut_residual":
+                continue
             stored_state = self.optimizer.state.get(group['params'][0], None)
             if stored_state is not None:
                 stored_state["exp_avg"] = stored_state["exp_avg"][mask]
@@ -372,6 +373,8 @@ class GaussianModel:
     def cat_tensors_to_optimizer(self, tensors_dict):
         optimizable_tensors = {}
         for group in self.optimizer.param_groups:
+            if group["name"] == "brdf_lut_residual":
+                continue
             assert len(group["params"]) == 1
             extension_tensor = tensors_dict[group["name"]]
             stored_state = self.optimizer.state.get(group['params'][0], None)

@@ -44,8 +44,9 @@ def render_pass(camera: Camera, gaussians: GaussianModel, raytracer: GaussianRay
     else:
         mask_map = torch.ones_like(camera.glossy_image.sum(0))
 
-    refl_ray_o_flat = camera.position_image.cuda()
+    refl_ray_o_flat = camera.position_image.cuda() # todo don't depend on g.t.
     refl_ray_d_flat = camera.reflection_ray_image.cuda() # todo don't depend on g.t.
+    refl_ray_o_flat = refl_ray_o_flat + gaussians.model_params.ray_offset * refl_ray_d_flat
     roughness_map_flat = camera.roughness_image.cuda().mean(dim=0, keepdim=True)
     
     if is_diffuse_pass or gaussians.model_params.brdf_mode == "disabled":
@@ -54,7 +55,7 @@ def render_pass(camera: Camera, gaussians: GaussianModel, raytracer: GaussianRay
         input_brdf_map = camera.brdf_image.cuda()
     else:
         assert "lut" in gaussians.model_params.brdf_mode
-        used_normals = diffuse_package.normal / 2 + 0.5 if gaussians.model_params.use_attached_brdf else camera.normal_image.cuda()
+        used_normals = diffuse_package.normal if gaussians.model_params.use_attached_brdf else camera.normal_image.cuda() # / 2 + 0.5
         used_roughness = diffuse_package.roughness if gaussians.model_params.use_attached_brdf else camera.roughness_image.cuda().mean(dim=0, keepdim=True)
         used_F0 = diffuse_package.F0 if gaussians.model_params.use_attached_brdf else camera.F0_image.cuda()
 
@@ -80,6 +81,10 @@ def render_pass(camera: Camera, gaussians: GaussianModel, raytracer: GaussianRay
         target_brdf_params = None
 
     raytracing_pkg = raytracer(refl_ray_o_flat, refl_ray_d_flat, mask_map, roughness_map_flat, input_brdf_map, camera, gaussians, pipe_params, bg_color,  target=target, rays_from_camera=is_diffuse_pass, target_position=target_position, target_normal=target_normal, target_brdf_params=target_brdf_params)
+
+    if not is_diffuse_pass and gaussians.model_params.brdf_mode == "finetune_lut" and torch.is_grad_enabled(): 
+        gaussians._brdf_lut_residual.grad = torch.autograd.grad(input_brdf_map, gaussians._brdf_lut_residual, input_brdf_map.grad)[0]
+
 
     class package:
         "All of these results are reshaped to (C, H, W)"

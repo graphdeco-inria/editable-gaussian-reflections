@@ -14,6 +14,13 @@ import sys
 import os
 from typing import *
 
+
+# DIFFUSE_LOSS_WEIGHT
+# REFLECTION_LOSS_WEIGHT
+# NORMAL_LOSS_WEIGHT
+# POSITION_LOSS_WEIGHT
+# BRDF_PARAMS_LOSS_WEIGHT 
+
 class GroupParams:
     pass
 
@@ -62,6 +69,8 @@ class ModelParams(ParamGroup):
         self.use_attached_brdf = False
         self.use_masks = False
 
+        self.raytracer_version = "build" #"build_v0.1_attached_brdf"
+
         self.disable_bounce_grads = False
 
         self.freeze_brdf = False
@@ -77,11 +86,14 @@ class ModelParams(ParamGroup):
         self.opacity_modulation = False
 
         self.remap_position = False 
-        # self.aux_randn_init = False 
+        # self.aux_randn_init = False
+        # 
+        self.ray_offset = 0.0 
 
         self.num_bounces = 1
 
         self.linear_space = True
+        self.exposure = 5 # note: use 10 for one bounce image
 
         self.raytrace_primal = False
 

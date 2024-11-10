@@ -22,17 +22,17 @@ def normalize(x, dim=-1):
 
 # ----------------------------------------
 
-def cook_torrence(normals, view_dir, light_dir, albedo, metalness, roughness):
+def cook_torrence(normals, view_dir, light_dir, base_color, metalness, roughness):
     halfway = normalize(view_dir + light_dir)
 
     diffuse = dotpos(normals, light_dir) / math.pi
     
     D = D_ggx(normals, halfway, roughness)
-    G = G_ggx(normals, view_dir, light_dir, albedo, roughness)
+    G = G_ggx(normals, view_dir, light_dir, base_color, roughness)
     specular = D * G / (4.0 * dotpos(normals, view_dir) * dotpos(normals, light_dir) + 1e-8)
     
-    k = F_schlick(normals, halfway, albedo, metalness).clamp(0.0)
-    return (1.0 - k) * diffuse * albedo + k * specular
+    k = F_schlick(normals, halfway, base_color, metalness).clamp(0.0)
+    return (1.0 - k) * diffuse * base_color + k * specular
 
 def cook_torrence_specular(normals, view_dir, light_dir, metalness, roughness):
     halfway = normalize(view_dir + light_dir)
@@ -47,8 +47,8 @@ def F_schlick_specular(normals, halfway, metalness, base_reflectivity=0.04):
     r0 = (1.0 - metalness) * base_reflectivity + metalness 
     return r0 + (1.0 - r0) * (1.0 - dotpos(normals, halfway))**5
 
-def F_schlick(normals, halfway, albedo, metalness, base_reflectivity=0.04):
-    r0 = (1.0 - metalness) * base_reflectivity + metalness * albedo 
+def F_schlick(normals, halfway, base_color, metalness, base_reflectivity=0.04):
+    r0 = (1.0 - metalness) * base_reflectivity + metalness * base_color 
     return r0 + (1.0 - r0) * (1.0 - dotpos(normals, halfway))**5
 
 def D_ggx(normals, halfway, roughness):

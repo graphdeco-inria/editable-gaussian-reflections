@@ -1,10 +1,9 @@
 
 To implement:
 
-- Make sure BRDF finetuning works with densification (bring back old checks for mlp)
+- Constrain LUT to positive values 
+- Double check that the sampling is correct by viewing which cells are fined-tuned
 
-- Save the BRDF LUT images, finetuned and direct
-- Write down the convention for the BRDF LUT (in both uv format & pixel coordinates)
 
 -------------------------
 
@@ -18,9 +17,5 @@ To compare:
 
 ---------------
 
-- Add a flag to render bounce 1 
-- Figure out what to do with antialiasing. How do I get multiple samples, where only the first one goes thru each pixel?
-
-- Update the scene so theres no weird shaders.
-- Double check the scene in the small study folder
-- Upload new scenes & re-render
+- Upload new scenes & re-render 1 frame, then aall frames
+- Download the 2 frames and double check the scene in the small study folder

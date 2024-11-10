@@ -88,7 +88,7 @@ def training_report(tb_writer, iteration, elpased):
                     diffuse_psnr_test += psnr(diffuse_image, diffuse_gt_image).mean().double()
 
                     roughness_image = torch.clamp(package.diffuse.roughness, 0.0, 1.0)
-                    normal_image = torch.clamp(package.diffuse.normal, 0.0, 1.0) #  / 2 + 0.5
+                    normal_image = torch.clamp(package.diffuse.normal / 2 + 0.5, 0.0, 1.0) 
                     position_image = torch.clamp(package.diffuse.position, 0.0, 1.0)
                     F0_image = torch.clamp(package.diffuse.F0, 0.0, 1.0)
                     mask_image = torch.clamp(package.glossy.mask, 0.0, 1.0)
@@ -101,7 +101,7 @@ def training_report(tb_writer, iteration, elpased):
                     roughness_gt_image = torch.clamp(viewpoint.roughness_image.to("cuda"), 0.0, 1.0)
                     if model_params.brdf_mode != "disabled":
                         brdf_gt_image = torch.clamp(viewpoint.brdf_image.to("cuda"), 0.0, 1.0)
-
+                        
                     if tb_writer and (idx < 5): 
                         save_image(torch.stack([roughness_image.cuda(), roughness_gt_image]), tb_writer.log_dir + "/" + f"{config['name']}_view/iter_{iteration:09}_{idx}_roughness.png", nrow=2, padding=0)
                         save_image(torch.stack([F0_image.cuda(), F0_gt_image]), tb_writer.log_dir + "/" + f"{config['name']}_view/iter_{iteration:09}_{idx}_F0.png", nrow=2, padding=0)
@@ -113,10 +113,18 @@ def training_report(tb_writer, iteration, elpased):
                         save_image(torch.stack([mask_image]), tb_writer.log_dir + "/" + f"{config['name']}_view/iter_{iteration:09}_{idx}_mask.png", nrow=2, padding=0)
                         if model_params.brdf_mode != "disabled":
                             save_image(torch.stack([brdf_image, brdf_gt_image.cuda()]), tb_writer.log_dir + "/" + f"{config['name']}_view/iter_{iteration:09}_{idx}_brdf.png", nrow=2, padding=0)
+
                     glossy_l1_test += l1_loss(glossy_image, glossy_gt_image).mean().double()
                     glossy_psnr_test += psnr(glossy_image, glossy_gt_image).mean().double()
                     l1_test += l1_loss(pred_image, gt_image).mean().double()
                     psnr_test += psnr(pred_image, gt_image).mean().double()
+
+                if model_params.brdf_mode == "static_lut":
+                    save_image(torch.stack([ gaussians.get_brdf_lut ]).abs(), os.path.join(tb_writer.log_dir, f"{config['name']}_view/lut_iter_{iteration:09}.png"), nrow=1)
+                elif model_params.brdf_mode == "finetuned_lut":
+                    save_image(torch.stack([ gaussians._brdf_lut.exp(), gaussians.get_brdf_lut ]), os.path.join(tb_writer.log_dir, f"{config['name']}_view/lut_iter_{iteration:09}.png"), nrow=1)
+                    save_image(torch.stack([ gaussians._brdf_lut_residual, gaussians._brdf_lut_residual * 5, gaussians._brdf_lut_residual * 10, gaussians._brdf_lut_residual * 20, gaussians._brdf_lut_residual * 50, gaussians._brdf_lut_residual * 200 ]).abs(), os.path.join(tb_writer.log_dir, f"{config['name']}_view/lut_residual_amplified_iter_{iteration:09}.png"), nrow=1, padding=0)
+
 
                 psnr_test /= len(config['cameras'])
                 l1_test /= len(config['cameras'])
@@ -199,7 +207,9 @@ raytracer = GaussianRaytracer(gaussians, viewpoint_stack[0])
 ema_loss_for_log = 0.0
 progress_bar = tqdm(range(first_iter, opt_params.iterations), desc="Training progress")
 first_iter += 1
-for iteration in range(first_iter, opt_params.iterations + 1):        
+for iteration in range(first_iter, opt_params.iterations + 1):      
+
+
     if network_gui.conn == None:
         network_gui.try_connect()
     while network_gui.conn != None:
@@ -224,17 +234,18 @@ for iteration in range(first_iter, opt_params.iterations + 1):
 
     bg = torch.rand((3), device="cuda") if opt_params.random_background else background
 
-    # run fused forward + backprop
+    # *** run fused forward + backprop
     render(viewpoint_cam, gaussians, pipe_params, bg, raytracer=raytracer) 
     
     iter_end.record()
 
     with torch.no_grad():
         # Log and save
-        training_report(tb_writer, iteration, iter_start.elapsed_time(iter_end))
+        training_report(tb_writer, iteration, 0.0) #! buggy iter_start.elapsed_time(iter_end), RuntimeError: CUDA error: device not ready
         if iteration in args.save_iterations:
             print("\n[ITER {}] Saving Gaussians".format(iteration))
             scene.save(iteration)
+
 
         # Densification
         if False:

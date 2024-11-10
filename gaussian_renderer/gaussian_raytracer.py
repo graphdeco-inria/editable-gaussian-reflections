@@ -18,12 +18,16 @@ from utils.sh_utils import eval_sh
 from torchvision.utils import save_image
 from arguments import ModelParams, PipelineParams, OptimizationParams
 
-torch.classes.load_library("/home/ypoirier/optix/gausstracer/build/libgausstracer.so")
 
-DEBUG_SCENE = False
+LOADED = False
 
 class GaussianRaytracer:
     def __init__(self, pc: GaussianModel, example_camera):
+        global LOADED
+        if not LOADED:
+            torch.classes.load_library(f"/home/ypoirier/optix/gausstracer/{pc.model_params.raytracer_version}/libgausstracer.so")
+            LOADED = True
+            
         self.image_sizes_buffer = torch.tensor([example_camera.image_width, example_camera.image_height], device="cuda")
         self.vertical_fov_radians_buffer = torch.tensor(example_camera.FoVy, dtype=torch.float32, device="cuda")
 
@@ -258,7 +262,7 @@ class GaussianRaytracer:
             self.target_position_buffer.zero_()
         
         if rays_from_camera and target_normal is not None:
-            self.target_normal_buffer.copy_(target_normal.moveaxis(0, -1) / 2 + 0.5) 
+            self.target_normal_buffer.copy_(target_normal.moveaxis(0, -1)) 
         else:
             self.target_normal_buffer.zero_()
 
@@ -327,8 +331,6 @@ class GaussianRaytracer:
         return {
             "render": self.output_rgbt_buffer[:, :, :3].clone(),
             "visibility_filter" : self.output_visibility_buffer.clone(),
-            # "viewspace_points": screenspace_points,
-            # "radii": radii
         }
         
 
