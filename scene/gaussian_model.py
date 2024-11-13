@@ -68,7 +68,7 @@ class GaussianModel:
             brdf_lut = brdf_lut.astype(np.float32)
             brdf_lut /= 255.0
             brdf_lut = torch.tensor(brdf_lut).to("cuda")
-            self._brdf_lut = torch.log(brdf_lut.permute((2, 0, 1)))
+            self._brdf_lut = brdf_lut.permute((2, 0, 1))
             if self.model_params.brdf_mode == "finetuned_lut":
                 self._brdf_lut_residual = nn.Parameter(torch.zeros_like(self._brdf_lut))
 
@@ -120,10 +120,10 @@ class GaussianModel:
     @property
     def get_brdf_lut(self):
         if self.model_params.brdf_mode == "finetuned_lut":
-            return torch.exp(self._brdf_lut + self._brdf_lut_residual)
+            return self._brdf_lut * torch.exp(self._brdf_lut_residual)
         else:
             assert self.model_params.brdf_mode == "static_lut"
-            return torch.exp(self._brdf_lut)
+            return self._brdf_lut
     
     @property
     def get_scaling(self):

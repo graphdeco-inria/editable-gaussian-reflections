@@ -123,8 +123,6 @@ def render_set(model_params, model_path, split, iteration, views, gaussians, pip
 
         torchvision.utils.save_image(package.glossy.render, os.path.join(glossy_render_path, '{0:05d}'.format(idx) + ".png"))
         torchvision.utils.save_image(glossy_gt_image, os.path.join(glossy_gts_path, '{0:05d}'.format(idx) + ".png"))
-        
-        # pred_image = torch.clamp((glossy_package["render"]**1.6 + package["render"]**1.6)**(1/1.6), 0.0, 1.0)
 
         def format_image(image):
             image = F.interpolate(image[None], (image.shape[-2] // 2 * 2, image.shape[-1] // 2 * 2), mode="bilinear")[0]

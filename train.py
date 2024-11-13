@@ -122,8 +122,9 @@ def training_report(tb_writer, iteration, elpased):
                 if model_params.brdf_mode == "static_lut":
                     save_image(torch.stack([ gaussians.get_brdf_lut ]).abs(), os.path.join(tb_writer.log_dir, f"{config['name']}_view/lut_iter_{iteration:09}.png"), nrow=1)
                 elif model_params.brdf_mode == "finetuned_lut":
+                    
                     save_image(torch.stack([ gaussians._brdf_lut.exp(), gaussians.get_brdf_lut ]), os.path.join(tb_writer.log_dir, f"{config['name']}_view/lut_iter_{iteration:09}.png"), nrow=1)
-                    save_image(torch.stack([ gaussians._brdf_lut_residual, gaussians._brdf_lut_residual * 5, gaussians._brdf_lut_residual * 10, gaussians._brdf_lut_residual * 20, gaussians._brdf_lut_residual * 50, gaussians._brdf_lut_residual * 200 ]).abs(), os.path.join(tb_writer.log_dir, f"{config['name']}_view/lut_residual_amplified_iter_{iteration:09}.png"), nrow=1, padding=0)
+                    save_image(torch.stack([ gaussians._brdf_lut_residual, gaussians._brdf_lut_residual * 5, gaussians._brdf_lut_residual * 10, gaussians._brdf_lut_residual * 20, gaussians._brdf_lut_residual * 50, gaussians._brdf_lut_residual * 200, gaussians._brdf_lut_residual * 10000 ]).abs(), os.path.join(tb_writer.log_dir, f"{config['name']}_view/lut_residual_amplified_iter_{iteration:09}.png"), nrow=1, padding=0)
 
 
                 psnr_test /= len(config['cameras'])
@@ -207,9 +208,8 @@ raytracer = GaussianRaytracer(gaussians, viewpoint_stack[0])
 ema_loss_for_log = 0.0
 progress_bar = tqdm(range(first_iter, opt_params.iterations), desc="Training progress")
 first_iter += 1
+
 for iteration in range(first_iter, opt_params.iterations + 1):      
-
-
     if network_gui.conn == None:
         network_gui.try_connect()
     while network_gui.conn != None:
@@ -237,6 +237,9 @@ for iteration in range(first_iter, opt_params.iterations + 1):
     # *** run fused forward + backprop
     render(viewpoint_cam, gaussians, pipe_params, bg, raytracer=raytracer) 
     
+    # if model_params.num_warmup_iters > 0 and iteration == model_params.num_warmup_iters:
+    #     raytracer = GaussianRaytracer(gaussians, viewpoint_stack[0])
+
     iter_end.record()
 
     with torch.no_grad():
@@ -245,7 +248,6 @@ for iteration in range(first_iter, opt_params.iterations + 1):
         if iteration in args.save_iterations:
             print("\n[ITER {}] Saving Gaussians".format(iteration))
             scene.save(iteration)
-
 
         # Densification
         if False:
@@ -277,4 +279,4 @@ for iteration in range(first_iter, opt_params.iterations + 1):
 # All done
 print("\nTraining complete.")
 
-os.system(f"python render.py -s {args.source_path} -m {model_params.model_path} --skip_train")
+os.system(f"python render.py -s {args.source_path} -m {model_params.model_path}")

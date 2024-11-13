@@ -47,6 +47,7 @@ class CameraInfo:
     metalness_image: None
     base_color_image: None
     brdf_image: None
+    specular_image: None
 
 @dataclass
 class SceneInfo:
@@ -147,6 +148,11 @@ def readColmapCameras(model_params, cam_extrinsics, cam_intrinsics, images_folde
         assert roughness_image is not None, f"Roughness image not found at {roughness_image_path}"
         roughness_image = cv2.cvtColor(roughness_image, cv2.COLOR_BGR2RGB)
 
+        specular_image_path = image_path.replace("/render_", "/specular_").replace(".png", ".exr").replace("/colmap/", "/renders/").replace("/images/", "/specular/")
+        specular_image = cv2.imread(specular_image_path, cv2.IMREAD_UNCHANGED)
+        assert specular_image is not None, f"Specular image not found at {specular_image_path}"
+        specular_image = cv2.cvtColor(specular_image, cv2.COLOR_BGR2RGB)
+
         metalness_path = image_path.replace("/render_", "/metalness_").replace(".png", ".exr").replace("/colmap/", "/renders/").replace("/images/", "/metalness/")
         metalness_image = cv2.imread(metalness_path, cv2.IMREAD_UNCHANGED)
         assert metalness_image is not None, f"Metalness image not found at {metalness_path}"
@@ -163,7 +169,7 @@ def readColmapCameras(model_params, cam_extrinsics, cam_intrinsics, images_folde
         assert brdf_image is not None, f"brdf image not found at {brdf_path}"
 
         cam_info = CameraInfo(uid=uid, R=R, T=T, FovY=FovY, FovX=FovX, image=image,
-                              image_path=image_path, image_name=image_name, width=width, height=height, diffuse_image=diffuse_image, glossy_image=glossy_image, position_image=position_image, normal_image=normal_image, roughness_image=roughness_image, metalness_image=metalness_image, base_color_image=base_color_image, brdf_image=brdf_image)
+                              image_path=image_path, image_name=image_name, width=width, height=height, diffuse_image=diffuse_image, glossy_image=glossy_image, position_image=position_image, normal_image=normal_image, roughness_image=roughness_image, metalness_image=metalness_image, base_color_image=base_color_image, brdf_image=brdf_image, specular_image=specular_image)
 
         cam_infos.append(cam_info)
     
@@ -312,6 +318,11 @@ def readCamerasFromTransforms(model_params, path, transformsfile, white_backgrou
             roughness_image = cv2.cvtColor(roughness_image, cv2.COLOR_BGR2RGB)
             assert roughness_image is not None, f"Roughness image not found at {roughness_image_path}"
 
+            specular_image_path = image_path.replace("/render_", "/specular_").replace(".png", ".exr").replace("/colmap/", "/renders/").replace("/render/", "/specular/")
+            specular_image = cv2.imread(specular_image_path, cv2.IMREAD_UNCHANGED)
+            specular_image = cv2.cvtColor(specular_image, cv2.COLOR_BGR2RGB)
+            assert specular_image is not None, f"Specular image not found at {specular_image_path}"
+
             metalness_path = image_path.replace("/render_", "/metalness_").replace(".png", ".exr").replace("/colmap/", "/renders/").replace("/render/", "/metalness/")
             metalness_image = cv2.imread(metalness_path, cv2.IMREAD_UNCHANGED)
             metalness_image = cv2.cvtColor(metalness_image, cv2.COLOR_BGR2RGB)
@@ -339,7 +350,7 @@ def readCamerasFromTransforms(model_params, path, transformsfile, white_backgrou
             FovX = fovx
 
             cam_infos.append(CameraInfo(uid=idx, R=R, T=T, FovY=FovY, FovX=FovX, image=image,
-                            image_path=image_path, image_name=image_name, width=image.size[0], height=image.size[1], diffuse_image=diffuse_image, glossy_image=glossy_image, position_image=position_image, normal_image=normal_image, roughness_image=roughness_image, metalness_image=metalness_image, base_color_image=base_color_image, brdf_image=brdf_image))
+                            image_path=image_path, image_name=image_name, width=image.size[0], height=image.size[1], diffuse_image=diffuse_image, glossy_image=glossy_image, position_image=position_image, normal_image=normal_image, roughness_image=roughness_image, metalness_image=metalness_image, base_color_image=base_color_image, brdf_image=brdf_image, specular_image=specular_image))
 
         with ThreadPoolExecutor() as executor: 
             futures = []
