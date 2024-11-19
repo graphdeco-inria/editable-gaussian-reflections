@@ -19,8 +19,7 @@ import torchvision
 from utils.general_utils import safe_state
 from argparse import ArgumentParser
 from arguments import ModelParams, PipelineParams, get_combined_args
-from gaussian_renderer import GaussianModel, GaussianRaytracer
-from gaussian_renderer import render, network_gui, render
+from gaussian_renderer import GaussianModel, GaussianRaytracer, render
 import copy
 import imageio
 import shutil
@@ -28,14 +27,22 @@ import math
 import numpy as np 
 import torch.nn.functional as F
 
-
-def render_set(model_params, model_path, split, iteration, views, gaussians, pipeline, background, raytracer, glossy_gaussians=None):
+@torch.no_grad()
+def render_set(model_params, model_path, split, iteration, views, gaussians, pipeline, background, raytracer):
     render_path = os.path.join(model_path, split, "ours_{}".format(iteration), "renders")
     gts_path = os.path.join(model_path, split, "ours_{}".format(iteration), "gt")
     diffuse_render_path = os.path.join(model_path, split, "ours_{}".format(iteration), "diffuse_renders")
     diffuse_gts_path = os.path.join(model_path, split, "ours_{}".format(iteration), "diffuse_gt")
     glossy_render_path = os.path.join(model_path, split, "ours_{}".format(iteration), "glossy_renders")
     glossy_gts_path = os.path.join(model_path, split, "ours_{}".format(iteration), "glossy_gt")
+    position_path = os.path.join(model_path, split, "ours_{}".format(iteration), "position")
+    position_gts_path = os.path.join(model_path, split, "ours_{}".format(iteration), "position_gt")
+    normal_path = os.path.join(model_path, split, "ours_{}".format(iteration), "normal")
+    normal_gts_path = os.path.join(model_path, split, "ours_{}".format(iteration), "normal_gt")
+    roughness_path = os.path.join(model_path, split, "ours_{}".format(iteration), "roughness")
+    roughness_gts_path = os.path.join(model_path, split, "ours_{}".format(iteration), "roughness_gt")
+    F0_path = os.path.join(model_path, split, "ours_{}".format(iteration), "F0")
+    F0_gts_path = os.path.join(model_path, split, "ours_{}".format(iteration), "F0_gt")
 
     makedirs(render_path, exist_ok=True)
     makedirs(gts_path, exist_ok=True)
@@ -43,6 +50,14 @@ def render_set(model_params, model_path, split, iteration, views, gaussians, pip
     makedirs(diffuse_gts_path, exist_ok=True)
     makedirs(glossy_render_path, exist_ok=True)
     makedirs(glossy_gts_path, exist_ok=True)
+    makedirs(position_path, exist_ok=True)
+    makedirs(position_gts_path, exist_ok=True)
+    makedirs(normal_path, exist_ok=True)
+    makedirs(normal_gts_path, exist_ok=True)
+    makedirs(roughness_path, exist_ok=True)
+    makedirs(roughness_gts_path, exist_ok=True)
+    makedirs(F0_path, exist_ok=True)
+    makedirs(F0_gts_path, exist_ok=True)
 
     all_renders = []
     all_gts = []
@@ -53,11 +68,25 @@ def render_set(model_params, model_path, split, iteration, views, gaussians, pip
     all_glossy_renders = []
     all_glossy_gts = []
 
+    all_position_renders = []
+    all_position_gts = []
+
+    all_normal_renders = []
+    all_normal_gts = []
+
+    all_roughness_renders = []
+    all_roughness_gts = []
+
+    all_F0_renders = []
+    all_F0_gts = []
+    
+    # todo expected termination depth
+
     for idx, view in enumerate(tqdm(views, desc="Rendering progress")):
         if "env" in args.mode:
             if idx == 0:
                 view0 = view
-                view0.FoVx = 2.0944 * 2 #!!!
+                view0.FoVx = 2.0944 * 2 # ??? wrong value still works?
                 view0.FoVy = -2.0944 * 2 #?? why negative
             view = view0
 
@@ -111,11 +140,15 @@ def render_set(model_params, model_path, split, iteration, views, gaussians, pip
             view.update()
             print(view.world_view_transform)
 
-        package = render(view, gaussians, pipeline, background,raytracer=raytracer)
+        package = render(view, gaussians, pipeline, background, raytracer=raytracer)
         
         diffuse_gt_image = torch.clamp(view.diffuse_image.to("cuda"), 0.0, 1.0)
         glossy_gt_image = torch.clamp(view.glossy_image.to("cuda"), 0.0, 1.0)
         gt_image = torch.clamp(view.original_image.to("cuda"), 0.0, 1.0)
+        position_gt_image = view.position_image.to("cuda")
+        normal_gt_image = view.normal_image.to("cuda") 
+        roughness_gt_image = view.roughness_image.to("cuda")
+        F0_gt_image = view.F0_image.to("cuda")
             
         torchvision.utils.save_image(gt_image, os.path.join(gts_path, '{0:05d}'.format(idx) + ".png"))
         torchvision.utils.save_image(package.diffuse.render, os.path.join(diffuse_render_path, '{0:05d}'.format(idx) + ".png"))
@@ -123,6 +156,18 @@ def render_set(model_params, model_path, split, iteration, views, gaussians, pip
 
         torchvision.utils.save_image(package.glossy.render, os.path.join(glossy_render_path, '{0:05d}'.format(idx) + ".png"))
         torchvision.utils.save_image(glossy_gt_image, os.path.join(glossy_gts_path, '{0:05d}'.format(idx) + ".png"))
+
+        torchvision.utils.save_image(package.diffuse.position, os.path.join(position_path, '{0:05d}'.format(idx) + "_position.png"))
+        torchvision.utils.save_image(position_gt_image, os.path.join(position_gts_path, '{0:05d}'.format(idx) + "_position.png"))
+        
+        torchvision.utils.save_image(package.diffuse.normal / 2 + 0.5, os.path.join(normal_path, '{0:05d}'.format(idx) + "_normal.png"))
+        torchvision.utils.save_image(normal_gt_image / 2 + 0.5, os.path.join(normal_gts_path, '{0:05d}'.format(idx) + "_normal.png"))
+
+        torchvision.utils.save_image(package.diffuse.roughness, os.path.join(roughness_path, '{0:05d}'.format(idx) + "_roughness.png"))
+        torchvision.utils.save_image(roughness_gt_image, os.path.join(roughness_gts_path, '{0:05d}'.format(idx) + "_roughness.png"))
+
+        torchvision.utils.save_image(package.diffuse.F0, os.path.join(F0_path, '{0:05d}'.format(idx) + "_F0.png"))
+        torchvision.utils.save_image(F0_gt_image, os.path.join(F0_gts_path, '{0:05d}'.format(idx) + "_F0.png"))
 
         def format_image(image):
             image = F.interpolate(image[None], (image.shape[-2] // 2 * 2, image.shape[-1] // 2 * 2), mode="bilinear")[0]
@@ -137,10 +182,24 @@ def render_set(model_params, model_path, split, iteration, views, gaussians, pip
         all_diffuse_renders.append(format_image(package.diffuse.render))
         all_diffuse_gts.append(format_image(diffuse_gt_image))
 
-        all_glossy_renders.append(format_image(package.diffuse.render))
+        all_glossy_renders.append(format_image(package.glossy.render))
         all_glossy_gts.append(format_image(glossy_gt_image))
 
+        all_position_renders.append(format_image(package.diffuse.position))
+        all_position_gts.append(format_image(position_gt_image))
+
+        all_normal_renders.append(format_image(package.diffuse.normal / 2 + 0.5))
+        all_normal_gts.append(format_image(normal_gt_image / 2 + 0.5))
+
+        all_roughness_renders.append(format_image(package.diffuse.roughness))
+        all_roughness_gts.append(format_image(roughness_gt_image))
+
+        all_F0_renders.append(format_image(package.diffuse.F0))
+        all_F0_gts.append(format_image(F0_gt_image))
+        
+
     os.makedirs(os.path.join(model_params.model_path, "videos/"), exist_ok=True)
+
     if not args.skip_video:
         print("Writing videos...")
         path = os.path.join(model_params.model_path, f"{{dir}}{split}_{{name}}.mp4")
@@ -160,6 +219,22 @@ def render_set(model_params, model_path, split, iteration, views, gaussians, pip
             torchvision.io.write_video(path.format(name=f"glossy_gts_{label}", dir="videos/"), torch.stack(all_glossy_gts), **kwargs)
             torchvision.io.write_video(path.format(name=f"glossy_comparison_{label}", dir="videos/"), torch.cat([torch.stack(all_glossy_renders), torch.stack(all_glossy_gts)], dim=2), **kwargs)
 
+            torchvision.io.write_video(path.format(name=f"position_renders_{label}", dir="videos/"), torch.stack(all_position_renders), **kwargs)
+            torchvision.io.write_video(path.format(name=f"position_gts_{label}", dir="videos/"), torch.stack(all_position_gts), **kwargs)
+            torchvision.io.write_video(path.format(name=f"position_comparison_{label}", dir="videos/"), torch.cat([torch.stack(all_position_renders), torch.stack(all_position_gts)], dim=2), **kwargs)
+
+            torchvision.io.write_video(path.format(name=f"normal_renders_{label}", dir="videos/"), torch.stack(all_normal_renders), **kwargs)
+            torchvision.io.write_video(path.format(name=f"normal_gts_{label}", dir="videos/"), torch.stack(all_normal_gts), **kwargs)
+            torchvision.io.write_video(path.format(name=f"normal_comparison_{label}", dir="videos/"), torch.cat([torch.stack(all_normal_renders), torch.stack(all_normal_gts)], dim=2), **kwargs)
+
+            torchvision.io.write_video(path.format(name=f"roughness_renders_{label}", dir="videos/"), torch.stack(all_roughness_renders), **kwargs)
+            torchvision.io.write_video(path.format(name=f"roughness_gts_{label}", dir="videos/"), torch.stack(all_roughness_gts), **kwargs)
+            torchvision.io.write_video(path.format(name=f"roughness_comparison_{label}", dir="videos/"), torch.cat([torch.stack(all_roughness_renders), torch.stack(all_roughness_gts)], dim=2), **kwargs)
+
+            torchvision.io.write_video(path.format(name=f"F0_renders_{label}", dir="videos/"), torch.stack(all_F0_renders), **kwargs)
+            torchvision.io.write_video(path.format(name=f"F0_gts_{label}", dir="videos/"), torch.stack(all_F0_gts), **kwargs)
+            torchvision.io.write_video(path.format(name=f"F0_comparison_{label}", dir="videos/"), torch.cat([torch.stack(all_F0_renders), torch.stack(all_F0_gts)], dim=2), **kwargs)
+            
         if split == "test":
             shutil.copy(
                 path.format(name=f"comparison_lq", dir="videos/"), 
@@ -170,51 +245,46 @@ def render_set(model_params, model_path, split, iteration, views, gaussians, pip
                 path.format(name="comparison_hq", dir="")
             )
 
+@torch.no_grad()
 def render_sets(model_params: ModelParams, iteration: int, pipeline: PipelineParams):
-    dynModelParams = copy.deepcopy(model_params)
-    dynModelParams.dynamic_gaussians = True
-    dynModelParams.dynamic_diffuse = True
-    dynModelParams.diffuse_only = False
-    model_params.diffuse_only = True
-        
-    with torch.no_grad():
-        gaussians = GaussianModel(model_params)
-        scene = Scene(model_params, gaussians, load_iteration=iteration, shuffle=False)
+    gaussians = GaussianModel(model_params)
+    scene = Scene(model_params, gaussians, load_iteration=iteration, shuffle=False)
 
-        if args.red_region:
-            bbox_min = [0.22, -0.5, -0.22]
-            bbox_max = [0.46, -0.13, -0.05]
+    if args.red_region:
+        bbox_min = [0.22, -0.5, -0.22]
+        bbox_max = [0.46, -0.13, -0.05]
 
-            mask = (gaussians.get_xyz < torch.tensor(bbox_max, device="cuda")).all(dim=-1).logical_and((gaussians.get_xyz > torch.tensor(bbox_min, device="cuda")).all(dim=-1))
-            gaussians._features_dc[mask] = torch.tensor([1.0, 0.0, 0.0], device="cuda")
+        mask = (gaussians.get_xyz < torch.tensor(bbox_max, device="cuda")).all(dim=-1).logical_and((gaussians.get_xyz > torch.tensor(bbox_min, device="cuda")).all(dim=-1))
+        gaussians._features_dc[mask] = torch.tensor([1.0, 0.0, 0.0], device="cuda")
 
-        bg_color = [0.5, 0.5, 0.5] if args.sliced else [0, 0, 0]
-        background = torch.tensor(bg_color, dtype=torch.float32, device="cuda")
+    background = torch.tensor([0, 0, 0], dtype=torch.float32, device="cuda")
 
-        raytracer = GaussianRaytracer(gaussians, scene.getTrainCameras()[0])
+    raytracer = GaussianRaytracer(gaussians, scene.getTrainCameras()[0])
 
-        if args.train_views:
-            render_set(model_params, model_params.model_path, "train", scene.loaded_iter, scene.getTrainCameras(), gaussians, pipeline, background, raytracer)
-        else:
-            render_set(model_params, model_params.model_path, "test", scene.loaded_iter, scene.getTestCameras(), gaussians, pipeline, background, raytracer) 
-        
+    if args.train_views:
+        render_set(model_params, model_params.model_path, "train", scene.loaded_iter, scene.getTrainCameras(), gaussians, pipeline, background, raytracer)
+    else:
+        render_set(model_params, model_params.model_path, "test", scene.loaded_iter, scene.getTestCameras(), gaussians, pipeline, background, raytracer) 
+    
 if __name__ == "__main__":
     # Set up command line argument parser
     parser = ArgumentParser(description="Testing script parameters")
-    model = ModelParams(parser, sentinel=True)
+    model = ModelParams(parser, sentinel=False) 
     pipeline = PipelineParams(parser)
     parser.add_argument("--iteration", default=-1, type=int)
     parser.add_argument("--train_views", action="store_true")
-    parser.add_argument("--sliced", action="store_true")
-    parser.add_argument("--render_scene", action="store_true")
     parser.add_argument("--quiet", action="store_true")
-    parser.add_argument("--mode", type=str, choices=["normal", "env_rot_1", "env_rot_2", "env_move_1", "env_move_2"], default="test")
+    parser.add_argument("--mode", type=str, choices=["normal", "env_rot_1", "env_rot_2", "env_move_1", "env_move_2"], default="normal")
     parser.add_argument("--skip_video", action="store_true")
     parser.add_argument("--red_region", action="store_true")
     args = get_combined_args(parser)
     print("Rendering " + args.model_path)
 
+    if not args.train_views:
+        args.max_images = min(100, args.max_images)
+
     # Initialize system state (RNG)
     safe_state(args.quiet)
 
-    render_sets(model.extract(args), args.iteration, pipeline.extract(args))
+    model_params = model.extract(args)
+    render_sets(model_params, args.iteration, pipeline.extract(args))

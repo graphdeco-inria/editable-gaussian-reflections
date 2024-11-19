@@ -24,7 +24,6 @@ from arguments import ModelParams
 import cv2 
 
 class GaussianModel:
-
     def setup_functions(self):
         def build_covariance_from_scaling_rotation(scaling, scaling_modifier, rotation):
             L = build_scaling_rotation(scaling_modifier * scaling, rotation)
@@ -42,8 +41,13 @@ class GaussianModel:
 
         self.rotation_activation = torch.nn.functional.normalize
 
+        if self.model_params.linear_space:
+            self.diffuse_activation = torch.nn.functional.softplus
+        else:
+            self.diffuse_activation = torch.sigmoid
 
-    def __init__(self, model_params: ModelParams, ):
+
+    def __init__(self, model_params: ModelParams):
         self.model_params = model_params
         self._xyz = torch.empty(0)
         self._normal = torch.empty(0)
@@ -128,6 +132,10 @@ class GaussianModel:
     @property
     def get_scaling(self):
         return self.scaling_activation(self._scaling)
+
+    @property
+    def get_diffuse(self):
+        return self.diffuse_activation(self._diffuse)
     
     @property
     def get_rotation(self):
@@ -241,32 +249,32 @@ class GaussianModel:
                 param_group['lr'] = lr
                 return lr
 
-    def construct_list_of_attributes(self):
-        l = ['x', 'y', 'z', 'nx', 'ny', 'nz']
-        # All channels except the 3 DC
-        for i in range(self._diffuse.shape[1]):
-            l.append('f_dc_{}'.format(i))
-        l.append('opacity')
-        for i in range(self._scaling.shape[1]):
-            l.append('scale_{}'.format(i))
-        for i in range(self._rotation.shape[1]):
-            l.append('rot_{}'.format(i))
-        return l
-
     def save_ply(self, path):
         mkdir_p(os.path.dirname(path))
 
         xyz = self._xyz.detach().cpu().numpy()
-        normals = np.zeros_like(xyz)
         f_dc = self._diffuse.detach().cpu().numpy()
         opacities = self._opacity.detach().cpu().numpy()
         scale = self._scaling.detach().cpu().numpy()
         rotation = self._rotation.detach().cpu().numpy()
+        position = self._position.detach().cpu().numpy()
+        normal = self._normal.detach().cpu().numpy()
+        brdf_params = self._brdf_params.detach().cpu().numpy()
 
-        dtype_full = [(attribute, 'f4') for attribute in self.construct_list_of_attributes()]
+        all_attributes = [
+            'x', 'y', 'z', 
+            'f_dc_0', 'f_dc_1', 'f_dc_2',
+            'opacity',
+            'scale_0', 'scale_1', 'scale_2',
+            'rot_0', 'rot_1', 'rot_2', 'rot_3',
+            'pos_0', 'pos_1', 'pos_2',
+            'normal_0', 'normal_1', 'normal_2',
+            'brdf_params_0', 'brdf_params_1', 'brdf_params_2', 'brdf_params_3'
+        ]
+        dtype_full = [(attribute, 'f4') for attribute in all_attributes]
 
         elements = np.empty(xyz.shape[0], dtype=dtype_full)
-        attributes = np.concatenate((xyz, normals, f_dc, opacities, scale, rotation), axis=1)
+        attributes = np.concatenate((xyz, f_dc, opacities, scale, rotation, position, normal, brdf_params), axis=1)
         elements[:] = list(map(tuple, attributes))
         el = PlyElement.describe(elements, 'vertex')
         PlyData([el]).write(path)
@@ -306,15 +314,34 @@ class GaussianModel:
         for idx, attr_name in enumerate(rot_names):
             rots[:, idx] = np.asarray(plydata.elements[0][attr_name])
 
+        pos_names = [p.name for p in plydata.elements[0].properties if p.name.startswith("pos")]
+        pos_names = sorted(pos_names, key = lambda x: int(x.split('_')[-1]))
+        positions = np.zeros((xyz.shape[0], len(pos_names)))
+        for idx, attr_name in enumerate(pos_names):
+            positions[:, idx] = np.asarray(plydata.elements[0][attr_name])
+
+        normal_names = [p.name for p in plydata.elements[0].properties if p.name.startswith("normal")]
+        normal_names = sorted(normal_names, key = lambda x: int(x.split('_')[-1]))
+        normals = np.zeros((xyz.shape[0], len(normal_names)))
+        for idx, attr_name in enumerate(normal_names):
+            normals[:, idx] = np.asarray(plydata.elements[0][attr_name])
+        
+        brdf_params_names = [p.name for p in plydata.elements[0].properties if p.name.startswith("brdf_params")]
+        brdf_params_names = sorted(brdf_params_names, key = lambda x: int(x.split('_')[-1]))
+        brdf_params = np.zeros((xyz.shape[0], len(brdf_params_names)))
+        for idx, attr_name in enumerate(brdf_params_names):
+            brdf_params[:, idx] = np.asarray(plydata.elements[0][attr_name])
+
         self._xyz = nn.Parameter(torch.tensor(xyz, dtype=torch.float, device="cuda"))
-        self._position = nn.Parameter(torch.tensor(xyz, dtype=torch.float, device="cuda"))
-        self._normal = nn.Parameter(torch.zeros_like(self._xyz))
-        self._brdf_params = nn.Parameter(torch.zeros(self._xyz.shape[0], 4, device="cuda"))
         self._diffuse = nn.Parameter(torch.tensor(diffuse, dtype=torch.float, device="cuda"))
         self._opacity = nn.Parameter(torch.tensor(opacities, dtype=torch.float, device="cuda"))
         self._scaling = nn.Parameter(torch.tensor(scales, dtype=torch.float, device="cuda"))
         self._rotation = nn.Parameter(torch.tensor(rots, dtype=torch.float, device="cuda"))
-        if "lut" in self.model_params.brdf_mode:
+        self._position = nn.Parameter(torch.tensor(positions, dtype=torch.float, device="cuda"))
+        self._normal = nn.Parameter(torch.tensor(normals, dtype=torch.float, device="cuda"))
+        self._brdf_params = nn.Parameter(torch.tensor(brdf_params, dtype=torch.float, device="cuda"))
+
+        if self.model_params.brdf_mode == "finetuned_lut":
             self._brdf_lut_residual = nn.Parameter(torch.load(path.replace("point_cloud.ply", "brdf_lut_residuals.pt")).to("cuda"))
 
     def replace_tensor_to_optimizer(self, tensor, name):

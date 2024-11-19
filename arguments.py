@@ -63,7 +63,6 @@ class ModelParams(ParamGroup):
         self.eval = False
         self.glossy_bbox_size_mult = 4.0
         self.num_feat_per_gaussian_channel = 16 
-        self.use_tcnn = False
         
         self.brdf_mode: Literal["disabled", "gt", "static_lut", "finetuned_lut"] = "gt"
         self.use_attached_brdf = False
@@ -71,8 +70,9 @@ class ModelParams(ParamGroup):
         self.detach_position = False
         self.detach_roughness = False
         self.detach_F0 = False
-        
+
         self.use_masks = False
+        self.precomp_ray = False
 
         self.raytracer_version = "build" #"build_v0.1_attached_brdf"
 

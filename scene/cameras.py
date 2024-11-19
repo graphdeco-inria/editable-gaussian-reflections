@@ -38,7 +38,7 @@ class Camera(nn.Module):
         self.FoVy = FoVy
         self.image_name = image_name
 
-        self.diffuse_image = diffuse_image #* (1.0 - metalness_image) #!!! why did I have this again?
+        self.diffuse_image = diffuse_image 
         self.glossy_image = glossy_image
         
         self.normal_image = normal_image

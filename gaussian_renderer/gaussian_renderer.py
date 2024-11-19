@@ -30,7 +30,7 @@ import numpy as np
 
 import os 
 
-def render_pass(camera: Camera, gaussians: GaussianModel, raytracer: GaussianRaytracer, pipe_params: PipelineParams, bg_color: torch.Tensor,  is_diffuse_pass=False, diffuse_package=None):
+def render_pass(camera: Camera, gaussians: GaussianModel, raytracer: GaussianRaytracer, pipe_params: PipelineParams, bg_color: torch.Tensor,  is_diffuse_pass=False, diffuse_package=None, iteration=None):
     """
     Render the scene. 
     
@@ -48,19 +48,16 @@ def render_pass(camera: Camera, gaussians: GaussianModel, raytracer: GaussianRay
     refl_ray_d_flat = camera.reflection_ray_image.cuda() 
     refl_ray_o_flat = refl_ray_o_flat + gaussians.model_params.ray_offset * refl_ray_d_flat
     roughness_map_flat = camera.roughness_image.cuda().mean(dim=0, keepdim=True)
-    
-    if is_diffuse_pass or gaussians.model_params.brdf_mode == "disabled":
-        input_brdf_map = torch.ones_like(camera.F0_image.cuda())
-    elif gaussians.model_params.brdf_mode == "gt":
-        input_brdf_map = camera.brdf_image.cuda()
+
+    # todo simplify this code which duplicates what's already happening in cuda (maybe move it all to cuda)
+    # *** moved this here for a sanity check, dont need to recompute when we have gt
+    if is_diffuse_pass:
+        refl_ray_o_flat = camera.position_image.cuda() #not used anyways
+        refl_ray_d_flat = camera.reflection_ray_image.cuda() #not used anyways
+
+        # from torchvision.utils import save_image
+        # save_image(torch.stack([refl_ray_o_flat, refl_ray_d_flat / 2 + 0.5], dim=0), "refl_ray.png")
     else:
-        assert "lut" in gaussians.model_params.brdf_mode
-        used_normals = F.normalize(diffuse_package.normal, dim=0) if gaussians.model_params.use_attached_brdf and not gaussians.model_params.detach_normals else camera.normal_image.cuda() # / 2 + 0.5
-        used_position = diffuse_package.position if gaussians.model_params.use_attached_brdf and not gaussians.model_params.detach_position else camera.position_image.cuda()
-        used_roughness = diffuse_package.roughness if gaussians.model_params.use_attached_brdf and not gaussians.model_params.detach_roughness else camera.roughness_image.cuda().mean(dim=0, keepdim=True)
-        used_F0 = diffuse_package.F0 if gaussians.model_params.use_attached_brdf and not gaussians.model_params.detach_F0 else camera.F0_image.cuda()
-        
-        # todo simplify this code which duplicates what's already happening in cuda (maybe move it all to cuda)
         dim_x = camera.image_width
         dim_y = camera.image_height 
         vertical_fov_radians = camera.FoVy
@@ -68,22 +65,35 @@ def render_pass(camera: Camera, gaussians: GaussianModel, raytracer: GaussianRay
         aspect_ratio = float(dim_x) / float(dim_y)
         y = math.tan(vertical_fov_radians / 2) * (1.0 - 2.0 * ((idx_y + 1 / 2) / float(dim_y)))
         x = aspect_ratio * math.tan(vertical_fov_radians / 2) * (2.0 * ((idx_x + 1 / 2) / (float(dim_x))) - 1.0)
-        R_colmap_init = torch.from_numpy(camera.R).clone().cuda()
+        R_colmap_init = torch.from_numpy(camera.R).clone().cuda().float()
         _R_blender = -R_colmap_init
         _R_blender[:, 0] = -_R_blender[:, 0]
-        R_blender = _R_blender
-        incident = -F.normalize(R_blender[0] * x.unsqueeze(-1) + R_blender[1] * y.unsqueeze(-1) - R_blender[2], dim=-1)
-        incident = torch.tensor([1.0, 0.0, 0.0], device="cuda") * x.unsqueeze(-1) + torch.tensor([0.0, 1.0, 0.0], device="cuda") * y.unsqueeze(-1) - torch.tensor([0.0, 0.0, 1.0], device="cuda")
+        R_blender = _R_blender # R_blender is c2w
+        w2c_R_blender = R_blender.mT
+        incident = F.normalize(w2c_R_blender[0] * x.unsqueeze(-1) + w2c_R_blender[1] * y.unsqueeze(-1) - w2c_R_blender[2], dim=-1)
         incident = incident / incident.norm(dim=-1, keepdim=True)
+        used_normals = F.normalize(diffuse_package.normal, dim=0) if gaussians.model_params.use_attached_brdf and not gaussians.model_params.detach_normals else camera.normal_image.cuda()
         reflection_ray_image = (incident - 2 * (incident * used_normals.moveaxis(0, -1)).sum(dim=-1).unsqueeze(-1) * used_normals.moveaxis(0, -1)).moveaxis(-1, 0)
 
-        n_dot_v = (incident.moveaxis(-1, 0) * used_normals).sum(dim=0).clamp(0) #*** was missing clamp 0
+        used_position = diffuse_package.position if gaussians.model_params.use_attached_brdf and not gaussians.model_params.detach_position else camera.position_image.cuda()
+
+        if not gaussians.model_params.precomp_ray:
+            refl_ray_o_flat = used_position
+            refl_ray_d_flat = reflection_ray_image
+    
+    if is_diffuse_pass or gaussians.model_params.brdf_mode == "disabled":
+        input_brdf_map = torch.ones_like(camera.F0_image.cuda())
+    elif gaussians.model_params.brdf_mode == "gt":
+        input_brdf_map = camera.brdf_image.cuda()
+    else:
+        assert "lut" in gaussians.model_params.brdf_mode
+        used_roughness = diffuse_package.roughness if gaussians.model_params.use_attached_brdf and not gaussians.model_params.detach_roughness else camera.roughness_image.cuda().mean(dim=0, keepdim=True)
+        used_F0 = diffuse_package.F0 if gaussians.model_params.use_attached_brdf and not gaussians.model_params.detach_F0 else camera.F0_image.cuda()
+        
+        n_dot_v = (-incident.moveaxis(-1, 0) * used_normals).sum(dim=0).clamp(0) #*** was missing clamp 0
         uv = torch.stack([2 * n_dot_v - 1, 2 * torch.zeros_like(used_roughness[0]) - 1], -1)
         lut_values = F.grid_sample(gaussians.get_brdf_lut[None], uv[None], align_corners=True)
         input_brdf_map = lut_values[:, 0] * used_F0 + lut_values[:, 1]
-
-        refl_ray_o_flat = used_position
-        refl_ray_d_flat = reflection_ray_image
 
     if is_diffuse_pass:
         target = camera.diffuse_image.cuda()
@@ -100,11 +110,12 @@ def render_pass(camera: Camera, gaussians: GaussianModel, raytracer: GaussianRay
         target_roughness = None
         target_brdf_params = None
 
-    raytracing_pkg = raytracer(refl_ray_o_flat, refl_ray_d_flat, mask_map, roughness_map_flat, input_brdf_map, camera, gaussians, pipe_params, bg_color,  target=target, rays_from_camera=is_diffuse_pass, target_position=target_position, target_normal=target_normal, target_brdf_params=target_brdf_params)
+    do_backprop = torch.is_grad_enabled() and not is_diffuse_pass and iteration > gaussians.model_params.brdf_iter_start if iteration is not None else torch.is_grad_enabled()
+    with torch.set_grad_enabled(do_backprop):
+        raytracing_pkg = raytracer(refl_ray_o_flat, refl_ray_d_flat, mask_map, roughness_map_flat, input_brdf_map, camera, gaussians, pipe_params, bg_color,  target=target, rays_from_camera=is_diffuse_pass, target_position=target_position, target_normal=target_normal, target_brdf_params=target_brdf_params)
 
     if not is_diffuse_pass and gaussians.model_params.brdf_mode == "finetuned_lut" and torch.is_grad_enabled(): 
         gaussians._brdf_lut_residual.grad = torch.autograd.grad(input_brdf_map, gaussians._brdf_lut_residual, input_brdf_map.grad)[0]
-
 
     class package:
         "All of these results are reshaped to (C, H, W)"
@@ -122,7 +133,7 @@ def render_pass(camera: Camera, gaussians: GaussianModel, raytracer: GaussianRay
     return package 
 
 
-def render(camera: Camera, gaussians: GaussianModel, pipe_params: PipelineParams, bg_color: torch.Tensor, raytracer: GaussianRaytracer):
+def render(camera: Camera, gaussians: GaussianModel, pipe_params: PipelineParams, bg_color: torch.Tensor, raytracer: GaussianRaytracer, iteration=None):
     class package:
         diffuse = render_pass(camera, gaussians, raytracer, pipe_params, bg_color, is_diffuse_pass=True)
         glossy = render_pass(camera, gaussians, raytracer, pipe_params, bg_color, diffuse_package=diffuse)

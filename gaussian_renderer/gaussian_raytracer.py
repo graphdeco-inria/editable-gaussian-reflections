@@ -203,10 +203,7 @@ class GaussianRaytracer:
         Background tensor (bg_color) must be on GPU!
         """
 
-        if gaussians.model_params.linear_space:
-            colors = torch.nn.functional.softplus(gaussians._diffuse)
-        else:
-            colors = gaussians._diffuse.sigmoid()
+        colors = gaussians.get_diffuse
 
         scaling = gaussians.get_scaling
         rotation = gaussians.get_rotation
@@ -216,7 +213,7 @@ class GaussianRaytracer:
         with torch.no_grad():
             R = torch.from_numpy(viewpoint_camera.R).cuda().float()
             R_c2w_blender = -R 
-            R_c2w_blender[:, 0] = -R_c2w_blender[:, 0] #*** these do match blender json correctly
+            R_c2w_blender[:, 0] = -R_c2w_blender[:, 0] 
 
             self.camera_c2w_rot_buffer.copy_(R_c2w_blender.contiguous()) 
             self.camera_w2c_rot_buffer.copy_(R_c2w_blender.mT.contiguous()) 

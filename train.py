@@ -13,7 +13,7 @@ import os
 import torch
 from random import randint
 from utils.loss_utils import l1_loss, ssim
-from gaussian_renderer import render, network_gui, render
+from gaussian_renderer import render, network_gui, GaussianRaytracer
 import sys
 from scene import Scene, GaussianModel, SurfelModel
 from utils.general_utils import safe_state
@@ -25,7 +25,6 @@ from arguments import ModelParams, PipelineParams, OptimizationParams
 from torchvision.utils import save_image
 import copy 
 from utils.graphics_utils import BasicPointCloud
-from gaussian_renderer import GaussianRaytracer
 from datetime import datetime
 
 try:
@@ -72,6 +71,7 @@ def training_report(tb_writer, iteration, elpased):
 
                 for idx, viewpoint in enumerate(config['cameras']):
                     package = render(viewpoint, gaussians, pipe_params, bg, raytracer=raytracer)
+                    print(idx, package.glossy.render.amax())
                     os.makedirs(tb_writer.log_dir + "/" + f"{config['name']}_view", exist_ok=True)
 
                     diffuse_image = torch.clamp(package.diffuse.render, 0.0, 1.0)
@@ -123,9 +123,8 @@ def training_report(tb_writer, iteration, elpased):
                     save_image(torch.stack([ gaussians.get_brdf_lut ]).abs(), os.path.join(tb_writer.log_dir, f"{config['name']}_view/lut_iter_{iteration:09}.png"), nrow=1)
                 elif model_params.brdf_mode == "finetuned_lut":
                     
-                    save_image(torch.stack([ gaussians._brdf_lut.exp(), gaussians.get_brdf_lut ]), os.path.join(tb_writer.log_dir, f"{config['name']}_view/lut_iter_{iteration:09}.png"), nrow=1)
+                    save_image(torch.stack([ gaussians._brdf_lut, gaussians.get_brdf_lut ]), os.path.join(tb_writer.log_dir, f"{config['name']}_view/lut_iter_{iteration:09}.png"), nrow=1)
                     save_image(torch.stack([ gaussians._brdf_lut_residual, gaussians._brdf_lut_residual * 5, gaussians._brdf_lut_residual * 10, gaussians._brdf_lut_residual * 20, gaussians._brdf_lut_residual * 50, gaussians._brdf_lut_residual * 200, gaussians._brdf_lut_residual * 10000 ]).abs(), os.path.join(tb_writer.log_dir, f"{config['name']}_view/lut_residual_amplified_iter_{iteration:09}.png"), nrow=1, padding=0)
-
 
                 psnr_test /= len(config['cameras'])
                 l1_test /= len(config['cameras'])
@@ -163,8 +162,8 @@ parser.add_argument('--ip', type=str, default="127.0.0.1")
 parser.add_argument('--port', type=int, default=6009)
 parser.add_argument('--detect_anomaly', action='store_true', default=False)
 parser.add_argument('--flip_camera', action='store_true', default=False)
-parser.add_argument("--test_iterations", nargs="+", type=int, default=[1, 100, 500, 1_000, 2_500, 5_000, 10_000, 20_000, 30_000, 60_000])
-parser.add_argument("--save_iterations", nargs="+", type=int, default=[1, 1_000, 2_500, 7_000, 15_000, 30_000])
+parser.add_argument("--test_iterations", nargs="+", type=int, default=[1, 100, 500, 1_000, 2_500, 5_000, 10_000, 20_000, 30_000, 60_000, 90_000])
+parser.add_argument("--save_iterations", nargs="+", type=int, default=[1, 1_000, 2_500, 7_000, 15_000, 30_000, 60_000, 90_000])
 parser.add_argument("--quiet", action="store_true")
 parser.add_argument("--viewer", action="store_true")
 parser.add_argument("--checkpoint_iterations", nargs="+", type=int, default=[])
@@ -206,10 +205,9 @@ viewpoint_stack = scene.getTrainCameras().copy()
 raytracer = GaussianRaytracer(gaussians, viewpoint_stack[0])
 
 ema_loss_for_log = 0.0
-progress_bar = tqdm(range(first_iter, opt_params.iterations), desc="Training progress")
 first_iter += 1
 
-for iteration in range(first_iter, opt_params.iterations + 1):      
+for iteration in tqdm(range(first_iter, opt_params.iterations + 1), desc="Training progress"):      
     if network_gui.conn == None:
         network_gui.try_connect()
     while network_gui.conn != None:
@@ -235,10 +233,12 @@ for iteration in range(first_iter, opt_params.iterations + 1):
     bg = torch.rand((3), device="cuda") if opt_params.random_background else background
 
     # *** run fused forward + backprop
-    render(viewpoint_cam, gaussians, pipe_params, bg, raytracer=raytracer) 
+    render(viewpoint_cam, gaussians, pipe_params, bg, raytracer=raytracer, iteration=iteration) 
     
     # if model_params.num_warmup_iters > 0 and iteration == model_params.num_warmup_iters:
     #     raytracer = GaussianRaytracer(gaussians, viewpoint_stack[0])
+
+    # todo clamp the min opacities so they don't go under ALPHA_THRESHOLD
 
     iter_end.record()
 
@@ -279,4 +279,4 @@ for iteration in range(first_iter, opt_params.iterations + 1):
 # All done
 print("\nTraining complete.")
 
-os.system(f"python render.py -s {args.source_path} -m {model_params.model_path}")
+os.system(f"python render.py --start_checkpoint {scene.model_path}/chkpnt{iteration}.pth " + " ".join(sys.argv[1:]))
