@@ -48,40 +48,31 @@ def loadCam(args, id, cam_info, resolution_scale):
 
     if cam_info.diffuse_image is not None:
         if isinstance(cam_info.diffuse_image, np.ndarray):
-            diffuse_image = torch.nn.functional.interpolate(torch.from_numpy(cam_info.diffuse_image).moveaxis(-1, 0)[None], (resolution[1], resolution[0]), mode="bicubic", antialias=True)[0]
+            diffuse_image = torch.nn.functional.interpolate(torch.from_numpy(cam_info.diffuse_image).moveaxis(-1, 0)[None], (resolution[1], resolution[0]), mode="bicubic", antialias=True)[0].cuda()
         else:
             resized_diffuse_image_rgb = PILtoTorch(cam_info.diffuse_image, resolution)
-            diffuse_image = resized_diffuse_image_rgb[:3, ...]
+            diffuse_image = resized_diffuse_image_rgb[:3, ...].cuda()
 
         if isinstance(cam_info.glossy_image, np.ndarray):
-            glossy_image = torch.nn.functional.interpolate(torch.from_numpy(cam_info.glossy_image).moveaxis(-1, 0)[None], (resolution[1], resolution[0]), mode="bicubic", antialias=True)[0]
+            glossy_image = torch.nn.functional.interpolate(torch.from_numpy(cam_info.glossy_image).moveaxis(-1, 0)[None], (resolution[1], resolution[0]), mode="bicubic", antialias=True)[0].cuda()
         else:
             resized_glossy_image_rgb = PILtoTorch(cam_info.glossy_image, resolution)
-            glossy_image = resized_glossy_image_rgb[:3, ...]
+            glossy_image = resized_glossy_image_rgb[:3, ...].cuda()
 
-        resized_position_image_rgb = torch.from_numpy(cam_info.position_image).moveaxis(-1, 0)
-        position_image = torch.nn.functional.interpolate(resized_position_image_rgb[:3, ...][None], (resolution[1], resolution[0]), mode="nearest")[0]
+        def resize_property(property_image):
+            x = torch.from_numpy(property_image).moveaxis(-1, 0).cuda()
+            if args.random_pool_props:
+                return x
+            else:
+                return torch.nn.functional.interpolate(x[:3, ...][None], (resolution[1], resolution[0]), mode=args.downsampling_mode)[0]
 
-        resized_normal_image_rgb = torch.from_numpy(cam_info.normal_image).moveaxis(-1, 0)
-        normal_image = torch.nn.functional.interpolate(resized_normal_image_rgb[:3, ...][None], (resolution[1], resolution[0]), mode="nearest")[0]
-
-        resized_roughness_image_rgb = torch.from_numpy(cam_info.roughness_image).moveaxis(-1, 0)
-        roughness_image = torch.nn.functional.interpolate(resized_roughness_image_rgb[:3, ...][None], (resolution[1], resolution[0]), mode="nearest")[0]
-   
-        resized_specular_image_rgb = torch.from_numpy(cam_info.specular_image).moveaxis(-1, 0)
-        specular_image = torch.nn.functional.interpolate(resized_specular_image_rgb[:3, ...][None], (resolution[1], resolution[0]), mode="nearest")[0]
-
-        resized_metalness_image_rgb = torch.from_numpy(cam_info.metalness_image).moveaxis(-1, 0)
-        metalness_image = torch.nn.functional.interpolate(resized_metalness_image_rgb[:3, ...][None], (resolution[1], resolution[0]), mode="nearest")[0]
-
-        resized_base_color_image_rgb = torch.from_numpy(cam_info.base_color_image).moveaxis(-1, 0)
-        base_color_image = torch.nn.functional.interpolate(resized_base_color_image_rgb[:3, ...][None], (resolution[1], resolution[0]), mode="nearest")[0]
-
-        if cam_info.brdf_image is not None:
-            resized_brdf_image_rgb = torch.from_numpy(cam_info.brdf_image).moveaxis(-1, 0)
-            brdf_image = torch.nn.functional.interpolate(resized_brdf_image_rgb[:3, ...][None], (resolution[1], resolution[0]), mode="nearest")[0]
-        else:
-            brdf_image = None
+        position_image = resize_property(cam_info.position_image)
+        normal_image = resize_property(cam_info.normal_image)
+        roughness_image = resize_property(cam_info.roughness_image)
+        metalness_image = resize_property(cam_info.metalness_image)
+        base_color_image = resize_property(cam_info.base_color_image)
+        specular_image = resize_property(cam_info.specular_image)
+        brdf_image = resize_property(cam_info.brdf_image)
     else:
         diffuse_image = None 
         glossy_image = None
@@ -95,7 +86,7 @@ def loadCam(args, id, cam_info, resolution_scale):
     return Camera(colmap_id=cam_info.uid, R=cam_info.R, T=cam_info.T, 
                   FoVx=cam_info.FovX, FoVy=cam_info.FovY, 
                   image=gt_image, gt_alpha_mask=loaded_mask,
-                  image_name=cam_info.image_name, uid=id, data_device=args.data_device, diffuse_image=diffuse_image, glossy_image=glossy_image, position_image=position_image, normal_image=normal_image, roughness_image=roughness_image, metalness_image=metalness_image, base_color_image=base_color_image, brdf_image=brdf_image, specular_image=specular_image)
+                  image_name=cam_info.image_name, uid=id, data_device=args.data_device, diffuse_image=diffuse_image, glossy_image=glossy_image, position_image=position_image, normal_image=normal_image, roughness_image=roughness_image, metalness_image=metalness_image, base_color_image=base_color_image, brdf_image=brdf_image, specular_image=specular_image, random_pool=args.random_pool_props)
 
 def cameraList_from_camInfos(cam_infos, resolution_scale, args):
     camera_list = []

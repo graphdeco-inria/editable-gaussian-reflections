@@ -20,8 +20,10 @@ from arguments import ModelParams, PipelineParams, OptimizationParams
 
 
 LOADED = False
+SHARED_BUFFERS = False
 
 class GaussianRaytracer:
+
     def __init__(self, pc: GaussianModel, example_camera):
         global LOADED
         if not LOADED:
@@ -43,32 +45,53 @@ class GaussianRaytracer:
         self.camera_w2c_rot_buffer = torch.zeros(3, 3, dtype=torch.float32, device="cuda")
         self.camera_position_buffer = torch.zeros(3, dtype=torch.float32, device="cuda")
 
-        self.gaussian_scales_buffer = pc.get_scaling.detach().requires_grad_()
-        self.gaussian_scales_buffer_grad = torch.zeros_like(self.gaussian_scales_buffer)
-
         self.gaussian_extra_features_buffer = pc.get_scaling.detach().requires_grad_()
         self.gaussian_extra_features_buffer_grad = torch.zeros_like(self.gaussian_extra_features_buffer)
 
-        self.gaussian_rotations_buffer = pc.get_rotation.detach().requires_grad_()
+        if SHARED_BUFFERS:
+            self.gaussian_scales_buffer = pc._scaling
+        else:
+            self.gaussian_scales_buffer = pc.get_scaling.detach().requires_grad_()
+        self.gaussian_scales_buffer_grad = torch.zeros_like(self.gaussian_scales_buffer)
+
+        if SHARED_BUFFERS:
+            self.gaussian_rotations_buffer = pc._rotation
+        else:
+            self.gaussian_rotations_buffer = pc.get_rotation.detach().requires_grad_()
         self.gaussian_rotations_buffer_grad = torch.zeros_like(self.gaussian_rotations_buffer)
 
-        self.gaussian_xyz_buffer = pc.get_xyz.detach().requires_grad_()
+        if SHARED_BUFFERS:
+            self.gaussian_xyz_buffer = pc._xyz
+        else:
+            self.gaussian_xyz_buffer = pc.get_xyz.detach().requires_grad_()
         self.gaussian_xyz_buffer_grad = torch.zeros_like(self.gaussian_xyz_buffer)
 
-        self.gaussian_position_buffer = torch.zeros_like(pc.get_xyz).detach().requires_grad_()
+        if SHARED_BUFFERS:
+            self.gaussian_position_buffer = pc._position
+        else:
+            self.gaussian_position_buffer = torch.zeros_like(pc.get_xyz).detach().requires_grad_()
         self.gaussian_position_buffer_grad = torch.zeros_like(self.gaussian_position_buffer)
         
-        self.gaussian_normal_buffer = torch.zeros_like(pc.get_xyz).detach().requires_grad_()
+        if SHARED_BUFFERS:
+            self.gaussian_normal_buffer = pc._normal
+        else:
+            self.gaussian_normal_buffer = torch.zeros_like(pc.get_xyz).detach().requires_grad_()
         self.gaussian_normal_buffer_grad = torch.zeros_like(self.gaussian_normal_buffer)
         
-        self.gaussian_opacity_buffer = pc.get_opacity.detach().requires_grad_()
+        if SHARED_BUFFERS:
+            self.gaussian_opacity_buffer = pc._opacity
+        else:
+            self.gaussian_opacity_buffer = pc.get_opacity.detach().requires_grad_()
         self.gaussian_opacity_buffer_grad = torch.zeros_like(self.gaussian_opacity_buffer)
 
-        self.gaussian_rgb_buffer = torch.zeros_like(pc.get_xyz).detach().requires_grad_()
+        if SHARED_BUFFERS:
+            self.gaussian_rgb_buffer = pc._diffuse
+        else:
+            self.gaussian_rgb_buffer = torch.zeros_like(pc.get_xyz).detach().requires_grad_()
         self.gaussian_rgb_buffer_grad = torch.zeros_like(self.gaussian_rgb_buffer)
 
-        self.gaussian_brdf_params = torch.zeros(pc.get_xyz.shape[0], 4).cuda().detach().requires_grad_()
-        self.gaussian_brdf_params_grad = torch.zeros_like(self.gaussian_brdf_params)
+        self.gaussian_brdf_params_buffer = torch.zeros(pc.get_xyz.shape[0], 4).cuda().detach().requires_grad_()
+        self.gaussian_brdf_params_buffer_grad = torch.zeros_like(self.gaussian_brdf_params_buffer)
 
         self.output_visibility_buffer = torch.zeros(example_camera.image_height * example_camera.image_width, dtype=torch.int32, device="cuda")
 
@@ -84,11 +107,6 @@ class GaussianRaytracer:
         self.target_position_buffer = torch.zeros(example_camera.image_height, example_camera.image_width, 3, dtype=torch.float32, device="cuda")
         self.target_normal_buffer = torch.zeros(example_camera.image_height, example_camera.image_width, 3, dtype=torch.float32, device="cuda")
         self.target_brdf_params_buffer = torch.zeros(example_camera.image_height, example_camera.image_width, 4, dtype=torch.float32, device="cuda")
-    
-        # todo rid of this
-        import sys 
-        sys.path.append("/home/ypoirier/optix/gausstracer")
-        import opt_shared_code as ref
 
         self.cuda_raytracer = torch.classes.gausstracer.Raytracer(
             self.image_sizes_buffer,
@@ -115,8 +133,8 @@ class GaussianRaytracer:
             self.gaussian_position_buffer_grad,
             self.gaussian_normal_buffer,
             self.gaussian_normal_buffer_grad,
-            self.gaussian_brdf_params,
-            self.gaussian_brdf_params_grad,
+            self.gaussian_brdf_params_buffer,
+            self.gaussian_brdf_params_buffer_grad,
             #
             self.gaussian_extra_features_buffer,
             self.gaussian_extra_features_buffer_grad,
@@ -142,12 +160,23 @@ class GaussianRaytracer:
             self.loss_tensor,
             #
             self.output_visibility_buffer,
-            ref.output_max_radii2d,
-            ref.background_rgb,
-            ref.full_T,
-            ref.gaussian_mask,
-            ref.random_numbers
+            torch.tensor(0.0, device="cuda"),
+            torch.tensor(0.0, device="cuda"),
+            torch.tensor(0.0, device="cuda"),
+            torch.tensor(0.0, device="cuda"),
+            torch.tensor(0.0, device="cuda")
+            # ref.output_max_radii2d,
+            # ref.background_rgb,
+            # ref.full_T,
+            # ref.gaussian_mask,
+            # ref.random_numbers
         )
+        
+        # Note: config is build on raytracer construction, so put this after the init...
+        import sys 
+        sys.path.append("/home/ypoirier/optix/gausstracer")
+        import config as raytracer_config
+        self.raytracer_config = raytracer_config
 
         self.pc = pc
 
@@ -155,16 +184,19 @@ class GaussianRaytracer:
     def rebuild_bvh(self):
         new_size = self.pc.get_scaling.shape[0]
 
-        self.gaussian_scales_buffer.requires_grad_(False).requires_grad_(False).resize_(new_size, 3).requires_grad_()
+        if not SHARED_BUFFERS:
+            self.gaussian_scales_buffer.requires_grad_(False).requires_grad_(False).resize_(new_size, 3).requires_grad_()
         self.gaussian_scales_buffer_grad.resize_(new_size, 3)
         self.gaussian_rotations_buffer.requires_grad_(False).resize_(new_size, 4).requires_grad_()
         self.gaussian_rotations_buffer_grad.resize_(new_size, 4)
         self.gaussian_xyz_buffer.requires_grad_(False).resize_(new_size, 3).requires_grad_()
         self.gaussian_xyz_buffer_grad.resize_(new_size, 3)
+        self.gaussian_position_buffer.requires_grad_(False).resize_(new_size, 3).requires_grad_()
+        self.gaussian_position_buffer_grad.resize_(new_size, 3)
         self.gaussian_normal_buffer.requires_grad_(False).resize_(new_size, 3).requires_grad_()
         self.gaussian_normal_buffer_grad.resize_(new_size, 3)
         self.gaussian_brdf_params_buffer.requires_grad_(False).resize_(new_size, 4).requires_grad_()
-        self.gaussian_brdf_params_grad.resize_(new_size, 4)
+        self.gaussian_brdf_params_buffer_grad.resize_(new_size, 4)
         self.gaussian_opacity_buffer.requires_grad_(False).resize_(new_size, 1).requires_grad_()
         self.gaussian_opacity_buffer_grad.resize_(new_size, 1)
         self.gaussian_rgb_buffer.requires_grad_(False).resize_(new_size, 3).requires_grad_()
@@ -175,10 +207,11 @@ class GaussianRaytracer:
         self.gaussian_scales_buffer.copy_(self.pc.get_scaling) 
         self.gaussian_rotations_buffer.copy_(self.pc.get_rotation)
         self.gaussian_xyz_buffer.copy_(self.pc.get_xyz)
+        self.gaussian_position_buffer.copy_(self.pc.get_position)
         self.gaussian_normal_buffer.copy_(self.pc.get_normal)
         self.gaussian_brdf_params_buffer.copy_(self.pc.get_brdf_params)
         self.gaussian_opacity_buffer.copy_(self.pc.get_opacity)
-        self.gaussian_rgb_buffer.copy_(self.pc._diffuse[:, 0])
+        self.gaussian_rgb_buffer.copy_(self.pc._diffuse)
         
         self.output_visibility_buffer.resize_(new_size)
         self.output_visibility_buffer.zero_()
@@ -190,25 +223,35 @@ class GaussianRaytracer:
         self.gaussian_rotations_buffer_grad.zero_()
         self.gaussian_xyz_buffer_grad.zero_()
         self.gaussian_normal_buffer_grad.zero_()
-        self.gaussian_brdf_params_grad.zero_()
+        self.gaussian_brdf_params_buffer_grad.zero_()
         self.gaussian_opacity_buffer_grad.zero_()
         self.gaussian_rgb_buffer_grad.zero_()
         self.gaussian_extra_features_buffer_grad.zero_()
         self.input_brdf_buffer_grad.zero_()
 
-    def __call__(self, ray_o, ray_d, mask, roughness, brdf, viewpoint_camera, gaussians: GaussianModel, pipe_params: PipelineParams, bg_color: torch.Tensor, target = None, rays_from_camera=False, target_position=None, target_normal=None, target_brdf_params=None):
+    def __call__(self, ray_o, ray_d, mask, roughness, brdf, viewpoint_camera, gaussians: GaussianModel, pipe_params: PipelineParams, bg_color: torch.Tensor, is_diffuse_pass, target = None, rays_from_camera=False, target_position=None, target_normal=None, target_brdf_params=None):
         """
         Render the scene. 
         
         Background tensor (bg_color) must be on GPU!
         """
 
-        colors = gaussians.get_diffuse
+        # *** time lost due to copies: 30s for 30000k iterations (~260k gaussians)
 
-        scaling = gaussians.get_scaling
-        rotation = gaussians.get_rotation
-        xyz = gaussians.get_xyz
-        opacity = gaussians.get_opacity
+        activation_in_cuda = self.raytracer_config.ACTIVATION_IN_CUDA
+
+        if activation_in_cuda:
+            colors = gaussians._diffuse
+            scaling = gaussians._scaling
+            rotation = gaussians._rotation
+            xyz = gaussians._xyz
+            opacity = gaussians._opacity
+        else:
+            colors = gaussians.get_diffuse
+            scaling = gaussians.get_scaling
+            rotation = gaussians.get_rotation
+            xyz = gaussians.get_xyz
+            opacity = gaussians.get_opacity
 
         with torch.no_grad():
             R = torch.from_numpy(viewpoint_camera.R).cuda().float()
@@ -219,20 +262,15 @@ class GaussianRaytracer:
             self.camera_w2c_rot_buffer.copy_(R_c2w_blender.mT.contiguous()) 
             self.camera_position_buffer.copy_(viewpoint_camera.camera_center.contiguous()) 
 
-            if False:
-                self.gaussian_opacity_buffer.data.clamp_(0.0 + 1e-4, 1.0 - 1e-4)  #!!
-                self.gaussian_rgb_buffer.data.clamp_(0.0 + 1e-4, 1.0 - 1e-4)
-                self.gaussian_scales_buffer.data.clamp_(1e-4, 1000.0) 
-                self.gaussian_rotations_buffer.copy_(torch.nn.functional.normalize(self.gaussian_rotations_buffer, dim=-1))
-
-            self.gaussian_scales_buffer.copy_(scaling) 
-            self.gaussian_rotations_buffer.copy_(rotation)
-            self.gaussian_xyz_buffer.copy_(xyz)
-            self.gaussian_position_buffer.copy_(gaussians.get_position)
-            self.gaussian_normal_buffer.copy_(gaussians.get_normal)
-            self.gaussian_brdf_params.copy_(gaussians.get_brdf_params)
-            self.gaussian_opacity_buffer.copy_(opacity)
-            self.gaussian_rgb_buffer.copy_(colors)
+            if not SHARED_BUFFERS:
+                self.gaussian_scales_buffer.copy_(scaling) 
+                self.gaussian_rotations_buffer.copy_(rotation)
+                self.gaussian_xyz_buffer.copy_(xyz)
+                self.gaussian_opacity_buffer.copy_(opacity)
+                self.gaussian_rgb_buffer.copy_(colors)
+                self.gaussian_position_buffer.copy_(gaussians.get_position)
+                self.gaussian_normal_buffer.copy_(gaussians.get_normal)
+                self.gaussian_brdf_params_buffer.copy_(gaussians.get_brdf_params)
             # self.gaussian_extra_features_buffer.copy_(...) # todo the attribution to scale space
             self.mask_buffer.copy_(mask.flatten())
             self.input_roughness_buffer.copy_(roughness.moveaxis(0, -1).flatten())
@@ -274,10 +312,11 @@ class GaussianRaytracer:
             if self.output_rgbt_buffer.isnan().any():
                 raise Exception("NaNs in output buffers!")
 
-        torch.cuda.synchronize()
-        self.cuda_raytracer.update_bvh() # todo only after step
+        # torch.cuda.synchronize()
+        if is_diffuse_pass:
+            self.cuda_raytracer.update_bvh()
         self.cuda_raytracer.raytrace()
-        torch.cuda.synchronize()
+        # torch.cuda.synchronize()
 
         if "CHECK_NAN" in os.environ:
             if self.gaussian_scales_buffer_grad.isnan().any():
@@ -293,18 +332,24 @@ class GaussianRaytracer:
 
         if torch.is_grad_enabled():
             with torch.no_grad():
-                gaussians._scaling.grad.add_(torch.autograd.grad(scaling, [gaussians._scaling], grad_outputs=self.gaussian_scales_buffer_grad)[0])
-                gaussians._rotation.grad.add_(torch.autograd.grad(rotation, [gaussians._rotation], grad_outputs=self.gaussian_rotations_buffer_grad)[0])
-                gaussians._xyz.grad.add_(torch.autograd.grad(xyz, [gaussians._xyz], grad_outputs=self.gaussian_xyz_buffer_grad)[0])
-                gaussians._opacity.grad.add_(torch.autograd.grad(opacity, [gaussians._opacity], grad_outputs=self.gaussian_opacity_buffer_grad)[0])
-                rgb_grad = torch.autograd.grad(colors, [gaussians._diffuse], grad_outputs=self.gaussian_rgb_buffer_grad)[0]
-                gaussians._diffuse.grad.add_(rgb_grad)
+                if activation_in_cuda:
+                    gaussians._scaling.grad.add_(self.gaussian_scales_buffer_grad)
+                    gaussians._rotation.grad.add_(self.gaussian_rotations_buffer_grad)
+                    gaussians._xyz.grad.add_(self.gaussian_xyz_buffer_grad)
+                    gaussians._opacity.grad.add_(self.gaussian_opacity_buffer_grad)
+                    gaussians._diffuse.grad.add_(self.gaussian_rgb_buffer_grad)
+                else:
+                    gaussians._scaling.grad.add_(torch.autograd.grad(scaling, [gaussians._scaling], grad_outputs=self.gaussian_scales_buffer_grad)[0])
+                    gaussians._rotation.grad.add_(torch.autograd.grad(rotation, [gaussians._rotation], grad_outputs=self.gaussian_rotations_buffer_grad)[0])
+                    gaussians._xyz.grad.add_(torch.autograd.grad(xyz, [gaussians._xyz], grad_outputs=self.gaussian_xyz_buffer_grad)[0])
+                    gaussians._opacity.grad.add_(torch.autograd.grad(opacity, [gaussians._opacity], grad_outputs=self.gaussian_opacity_buffer_grad)[0])
+                    gaussians._diffuse.grad.add_(torch.autograd.grad(colors, [gaussians._diffuse], grad_outputs=self.gaussian_rgb_buffer_grad)[0])
                 if rays_from_camera and target_position is not None:
                     gaussians._position.grad.add_(self.gaussian_position_buffer_grad)
                 if rays_from_camera and target_normal is not None:
                     gaussians._normal.grad.add_(self.gaussian_normal_buffer_grad)
                 if rays_from_camera and target_brdf_params is not None:
-                    gaussians._brdf_params.grad.add_(self.gaussian_brdf_params_grad)
+                    gaussians._brdf_params.grad.add_(self.gaussian_brdf_params_buffer_grad)
                 
                 if gaussians.model_params.brdf_mode != "disabled": 
                     brdf_grad = self.input_brdf_buffer_grad.moveaxis(0, 1).reshape(brdf.shape)
@@ -317,14 +362,12 @@ class GaussianRaytracer:
         self.gaussian_scales_buffer_grad.zero_()
         self.gaussian_position_buffer_grad.zero_()
         self.gaussian_normal_buffer_grad.zero_()
-        self.gaussian_brdf_params_grad.zero_()
+        self.gaussian_brdf_params_buffer_grad.zero_()
         self.gaussian_rotations_buffer_grad.zero_()
         self.gaussian_xyz_buffer_grad.zero_()
         self.gaussian_opacity_buffer_grad.zero_()
         self.gaussian_extra_features_buffer_grad.zero_()
 
-        # screenspace_points.grad = (viewpoint_camera.full_proj_transform.T[:3, :3] @ self.gaussian_xyz_buffer_grad.T).T
-        
         return {
             "render": self.output_rgbt_buffer[:, :, :3].clone(),
             "visibility_filter" : self.output_visibility_buffer.clone(),

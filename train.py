@@ -26,6 +26,8 @@ from torchvision.utils import save_image
 import copy 
 from utils.graphics_utils import BasicPointCloud
 from datetime import datetime
+import time
+from scene.gaussian_model import build_scaling_rotation
 
 try:
     from torch.utils.tensorboard import SummaryWriter
@@ -76,12 +78,12 @@ def training_report(tb_writer, iteration, elpased):
 
                     diffuse_image = torch.clamp(package.diffuse.render, 0.0, 1.0)
                     glossy_image = torch.clamp(package.glossy.render, 0.0, 1.0)
-                    diffuse_gt_image = torch.clamp(viewpoint.diffuse_image.to("cuda"), 0.0, 1.0)
-                    normal_gt_image = torch.clamp(viewpoint.normal_image.to("cuda") / 2 + 0.5, 0.0, 1.0)
-                    glossy_gt_image = torch.clamp(viewpoint.glossy_image.to("cuda"), 0.0, 1.0)
+                    diffuse_gt_image = torch.clamp(viewpoint.diffuse_image, 0.0, 1.0)
+                    glossy_gt_image = torch.clamp(viewpoint.glossy_image, 0.0, 1.0)
+                    normal_gt_image = torch.clamp(viewpoint.sample_normal_image() / 2 + 0.5, 0.0, 1.0)
                     pred_image = package.diffuse.render + package.glossy.render
 
-                    gt_image = torch.clamp(viewpoint.original_image.to("cuda"), 0.0, 1.0)
+                    gt_image = torch.clamp(viewpoint.original_image, 0.0, 1.0)
                     if tb_writer and (idx < 5): 
                         save_image(torch.stack([diffuse_image, diffuse_gt_image, glossy_image, glossy_gt_image, pred_image, gt_image]), tb_writer.log_dir + "/" + f"{config['name']}_view/iter_{iteration:09}_{idx}.png", nrow=2)
                     diffuse_l1_test += l1_loss(diffuse_image, diffuse_gt_image).mean().double()
@@ -95,12 +97,12 @@ def training_report(tb_writer, iteration, elpased):
                     if model_params.brdf_mode != "disabled":
                         brdf_image = torch.clamp(package.glossy.brdf, 0.0, 1.0)
 
-                    normal_gt_image = torch.clamp(viewpoint.normal_image.to("cuda") / 2 + 0.5, 0.0, 1.0)
-                    position_gt_image = torch.clamp(viewpoint.position_image.to("cuda"), 0.0, 1.0)
-                    F0_gt_image = torch.clamp(viewpoint.F0_image.to("cuda"), 0.0, 1.0)
-                    roughness_gt_image = torch.clamp(viewpoint.roughness_image.to("cuda"), 0.0, 1.0)
+                    normal_gt_image = torch.clamp(viewpoint.sample_normal_image() / 2 + 0.5, 0.0, 1.0)
+                    position_gt_image = torch.clamp(viewpoint.sample_position_image(), 0.0, 1.0)
+                    F0_gt_image = torch.clamp(viewpoint.sample_F0_image(), 0.0, 1.0)
+                    roughness_gt_image = torch.clamp(viewpoint.sample_roughness_image(), 0.0, 1.0)
                     if model_params.brdf_mode != "disabled":
-                        brdf_gt_image = torch.clamp(viewpoint.brdf_image.to("cuda"), 0.0, 1.0)
+                        brdf_gt_image = torch.clamp(viewpoint.sample_brdf_image(), 0.0, 1.0)
                         
                     if tb_writer and (idx < 5): 
                         save_image(torch.stack([roughness_image.cuda(), roughness_gt_image]), tb_writer.log_dir + "/" + f"{config['name']}_view/iter_{iteration:09}_{idx}_roughness.png", nrow=2, padding=0)
@@ -175,6 +177,7 @@ model_params = lp.extract(args)
 opt_params = op.extract(args)
 pipe_params = pp.extract(args)
 
+
 print("Optimizing " + args.model_path)
 
 # Initialize system state (RNG)
@@ -207,7 +210,9 @@ raytracer = GaussianRaytracer(gaussians, viewpoint_stack[0])
 ema_loss_for_log = 0.0
 first_iter += 1
 
-for iteration in tqdm(range(first_iter, opt_params.iterations + 1), desc="Training progress"):      
+start = time.time()
+
+for iteration in tqdm(range(first_iter, opt_params.iterations + 1), desc="Training progress"):     
     if network_gui.conn == None:
         network_gui.try_connect()
     while network_gui.conn != None:
@@ -224,7 +229,7 @@ for iteration in tqdm(range(first_iter, opt_params.iterations + 1), desc="Traini
             network_gui.conn = None
 
     iter_start.record()
-    gaussians.update_learning_rate(iteration)
+    xyz_lr = gaussians.update_learning_rate(iteration)
 
     if not viewpoint_stack:
         viewpoint_stack = scene.getTrainCameras().copy()
@@ -234,42 +239,55 @@ for iteration in tqdm(range(first_iter, opt_params.iterations + 1), desc="Traini
 
     # *** run fused forward + backprop
     render(viewpoint_cam, gaussians, pipe_params, bg, raytracer=raytracer, iteration=iteration) 
-    
-    # if model_params.num_warmup_iters > 0 and iteration == model_params.num_warmup_iters:
-    #     raytracer = GaussianRaytracer(gaussians, viewpoint_stack[0])
+
+    if model_params.mcmc_densify:
+        gaussians._opacity.grad += torch.autograd.grad(args.opacity_reg * torch.abs(gaussians.get_opacity).mean(), gaussians._opacity)[0]
+        gaussians._scaling.grad += torch.autograd.grad(args.scale_reg * torch.abs(gaussians.get_scaling).mean(), gaussians._scaling)[0]
 
     # todo clamp the min opacities so they don't go under ALPHA_THRESHOLD
-
     iter_end.record()
 
     with torch.no_grad():
         # Log and save
         training_report(tb_writer, iteration, 0.0) #! buggy iter_start.elapsed_time(iter_end), RuntimeError: CUDA error: device not ready
+        
         if iteration in args.save_iterations:
+            delta = time.time() - start
+            with open(os.path.join(args.model_path, "time.txt"), "a") as f:
+                minutes, seconds = divmod(int(delta), 60)
+                timestamp = f"{minutes:02}:{seconds:02}"
+                f.write(f"{iteration:5}: {timestamp}\n")
             print("\n[ITER {}] Saving Gaussians".format(iteration))
             scene.save(iteration)
+            print("Elapsed time: ", timestamp)
+            with open(os.path.join(args.model_path, "num_gaussians.txt"), "a") as f:
+                f.write(f"{iteration:5}: {gaussians.get_xyz.shape[0]}\n")
+                print("Number of gaussians: ", gaussians.get_xyz.shape[0])
 
-        # Densification
-        if False:
-            if iteration < opt_params.densify_until_iter:
-                # Keep track of max radii in image-space for pruning
-                gaussians.max_radii2D[visibility_filter] = torch.max(gaussians.max_radii2D[visibility_filter], radii[visibility_filter])
-                gaussians.add_densification_stats(viewspace_point_tensor, visibility_filter)
-                
-                if iteration > opt_params.densify_from_iter and iteration % opt_params.densification_interval == 0:
-                    size_threshold = 20 if iteration > opt_params.opacity_reset_interval else None
-                    gaussians.densify_and_prune(opt_params.densify_grad_threshold, 0.005, scene.cameras_extent, size_threshold)
-                    # glossy_gaussians.densify_and_prune_glossy(opt_params.densify_grad_threshold, 0.005, scene.cameras_extent)
-                    raytracer.rebuild_bvh()
-                
-                if iteration % opt_params.opacity_reset_interval == 0 or (model_params.white_background and iteration == opt_params.densify_from_iter):
-                    gaussians.reset_opacity() 
-
-        # Optimizer step
-        if iteration < opt_params.iterations:
+        if model_params.mcmc_densify and iteration < opt_params.densify_until_iter and iteration > opt_params.densify_from_iter and iteration % opt_params.densification_interval == 0:
+            print("Densification!")
+            dead_mask = (gaussians.get_opacity <= model_params.opacity_pruning_threshold).squeeze(-1)
+            print("Num dead gaussians: ", dead_mask.sum().item())
+            gaussians.relocate_gs(dead_mask=dead_mask)
+            gaussians.add_new_gs(cap_max=args.cap_max)
+            print("Number of gaussians: ", gaussians.get_xyz.shape[0])
+            
+            raytracer.rebuild_bvh()
+        elif iteration < opt_params.iterations:
             gaussians.optimizer.step()
             gaussians.optimizer.zero_grad(set_to_none=False) # todo not sure if this set_to_none=False is still required
             raytracer.zero_grad()
+
+            if model_params.mcmc_densify:
+                L = build_scaling_rotation(gaussians.get_scaling, gaussians.get_rotation)
+                actual_covariance = L @ L.transpose(1, 2)
+
+                def op_sigmoid(x, k=100, x0=0.995):
+                    return 1 / (1 + torch.exp(-k * (x - x0)))
+                
+                noise = torch.randn_like(gaussians._xyz) * (op_sigmoid(1- gaussians.get_opacity)) * opt_params.noise_lr * xyz_lr
+                noise = torch.bmm(actual_covariance, noise.unsqueeze(-1)).squeeze(-1)
+                gaussians._xyz.add_(noise)
 
         if iteration in args.checkpoint_iterations:
             print("\n[ITER {}] Saving Checkpoint".format(iteration))

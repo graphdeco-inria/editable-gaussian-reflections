@@ -89,18 +89,29 @@ class ModelParams(ParamGroup):
         self.max_images = 9999999
         self.num_init_points = 100_000 # 100_000
         self.opacity_modulation = False
+    
+        self.mcmc_densify = False
+        self.mcmc_densify_disable_custom_init = False
+
+        self.warmup = -1
 
         self.remap_position = False 
         # self.aux_randn_init = False
-        # 
+
         self.ray_offset = 0.0 
 
         self.num_bounces = 1
+        self.random_pool_props = False
+        self.downsampling_mode = "nearest" #area
 
         self.linear_space = True
         self.exposure = 5 # note: use 10 for one bounce image
 
+
         self.raytrace_primal = False
+
+        self.opacity_pruning_threshold = 0.005 # 0.051 # 
+        self.cap_max = -1 # for mcmc
 
         super().__init__(parser, "Loading Parameters", sentinel)
 
@@ -137,11 +148,15 @@ class OptimizationParams(ParamGroup):
         self.lambda_dist = 0.0
         self.lambda_normal = 0.05
         self.opacity_cull = 0.05
+        
+        self.noise_lr = 5e5
+        self.scale_reg = 0.01
+        self.opacity_reg = 0.01
 
         self.densification_interval = 100
         self.opacity_reset_interval = 3000
         self.densify_from_iter = 500
-        self.densify_until_iter = 15_000
+        self.densify_until_iter = 25_000 # was 15k, increased for mcmc
         self.densify_grad_threshold = 0.0002
 
         self.sh_slowdown_factor = 20.0

@@ -18,7 +18,7 @@ from gaussian_renderer import render
 import torchvision
 from utils.general_utils import safe_state
 from argparse import ArgumentParser
-from arguments import ModelParams, PipelineParams, get_combined_args
+from arguments import ModelParams, PipelineParams, get_combined_args, OptimizationParams
 from gaussian_renderer import GaussianModel, GaussianRaytracer, render
 import copy
 import imageio
@@ -142,13 +142,13 @@ def render_set(model_params, model_path, split, iteration, views, gaussians, pip
 
         package = render(view, gaussians, pipeline, background, raytracer=raytracer)
         
-        diffuse_gt_image = torch.clamp(view.diffuse_image.to("cuda"), 0.0, 1.0)
-        glossy_gt_image = torch.clamp(view.glossy_image.to("cuda"), 0.0, 1.0)
-        gt_image = torch.clamp(view.original_image.to("cuda"), 0.0, 1.0)
-        position_gt_image = view.position_image.to("cuda")
-        normal_gt_image = view.normal_image.to("cuda") 
-        roughness_gt_image = view.roughness_image.to("cuda")
-        F0_gt_image = view.F0_image.to("cuda")
+        diffuse_gt_image = torch.clamp(view.diffuse_image, 0.0, 1.0)
+        glossy_gt_image = torch.clamp(view.glossy_image, 0.0, 1.0)
+        gt_image = torch.clamp(view.original_image, 0.0, 1.0)
+        position_gt_image = view.sample_position_image()
+        normal_gt_image = view.sample_normal_image()
+        roughness_gt_image = view.sample_roughness_image()
+        F0_gt_image = view.sample_F0_image()
             
         torchvision.utils.save_image(gt_image, os.path.join(gts_path, '{0:05d}'.format(idx) + ".png"))
         torchvision.utils.save_image(package.diffuse.render, os.path.join(diffuse_render_path, '{0:05d}'.format(idx) + ".png"))
@@ -270,13 +270,29 @@ if __name__ == "__main__":
     # Set up command line argument parser
     parser = ArgumentParser(description="Testing script parameters")
     model = ModelParams(parser, sentinel=False) 
+    _ = OptimizationParams(parser)
     pipeline = PipelineParams(parser)
+    
+    # dummy repeat training args
+    parser.add_argument('--ip', type=str, default="127.0.0.1")
+    parser.add_argument('--port', type=int, default=6009)
+    parser.add_argument('--detect_anomaly', action='store_true', default=False)
+    parser.add_argument('--flip_camera', action='store_true', default=False)
+    parser.add_argument("--test_iterations", nargs="+", type=int, default=[1, 100, 500, 1_000, 2_500, 5_000, 10_000, 20_000, 30_000, 60_000, 90_000])
+    parser.add_argument("--save_iterations", nargs="+", type=int, default=[1, 1_000, 2_500, 7_000, 15_000, 30_000, 60_000, 90_000])
+    parser.add_argument("--viewer", action="store_true")
+    parser.add_argument("--checkpoint_iterations", nargs="+", type=int, default=[])
+    parser.add_argument("--start_checkpoint", type=str, default = None)
+
+    # rendering args
     parser.add_argument("--iteration", default=-1, type=int)
     parser.add_argument("--train_views", action="store_true")
     parser.add_argument("--quiet", action="store_true")
     parser.add_argument("--mode", type=str, choices=["normal", "env_rot_1", "env_rot_2", "env_move_1", "env_move_2"], default="normal")
     parser.add_argument("--skip_video", action="store_true")
     parser.add_argument("--red_region", action="store_true")
+
+
     args = get_combined_args(parser)
     print("Rendering " + args.model_path)
 
