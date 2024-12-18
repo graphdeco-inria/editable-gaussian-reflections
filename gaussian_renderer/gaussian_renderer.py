@@ -83,7 +83,7 @@ def render_pass(camera: Camera, gaussians: GaussianModel, raytracer: GaussianRay
             refl_ray_o = used_position + gaussians.model_params.ray_offset * refl_ray_d
     
     if is_diffuse_pass or gaussians.model_params.brdf_mode == "disabled":
-        input_brdf_map = torch.ones(1, camera.image_height, camera.image_width, device="cuda")
+        input_brdf_map = torch.ones(3, camera.image_height, camera.image_width, device="cuda")
     elif gaussians.model_params.brdf_mode == "gt":
         input_brdf_map = camera.sample_brdf_image()
     else:
