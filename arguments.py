@@ -57,7 +57,9 @@ class ModelParams(ParamGroup):
         self._source_path = ""
         self._model_path = ""
         self._images = "images"
-        self._resolution = 1024 // 2 ## Yohan: on quarter res this crashes at 600 iters and I don't know why => this is because this gives the width, not the height! so it results in non-pow2 sizes for the height
+        self._resolution = 768
+        
+        # // 2 ## Yohan: on quarter res this crashes at 600 iters and I don't know why => this is because this gives the width, not the height! so it results in non-pow2 sizes for the height
         self._white_background = False
         self.data_device = "cuda"
         self.eval = False
@@ -89,9 +91,11 @@ class ModelParams(ParamGroup):
         self.max_images = 9999999
         self.num_init_points = 100_000 # 100_000
         self.opacity_modulation = False
-    
+
         self.mcmc_densify = False
         self.mcmc_densify_disable_custom_init = False
+        self.mcmc_skip_relocate = False
+        self.force_mcmc_custom_init = False
 
         self.warmup = -1
 

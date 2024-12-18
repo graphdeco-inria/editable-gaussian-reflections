@@ -27,7 +27,7 @@ class GaussianRaytracer:
     def __init__(self, pc: GaussianModel, example_camera):
         global LOADED
         if not LOADED:
-            torch.classes.load_library(f"/home/ypoirier/optix/gausstracer/{pc.model_params.raytracer_version}/libgausstracer.so")
+            torch.classes.load_library(f"raytracer_builds/{pc.model_params.raytracer_version}/libgausstracer.so")
             LOADED = True
             
         self.image_sizes_buffer = torch.tensor([example_camera.image_width, example_camera.image_height], device="cuda")
@@ -94,6 +94,7 @@ class GaussianRaytracer:
         self.gaussian_brdf_params_buffer_grad = torch.zeros_like(self.gaussian_brdf_params_buffer)
 
         self.output_visibility_buffer = torch.zeros(example_camera.image_height * example_camera.image_width, dtype=torch.int32, device="cuda")
+        # self.output_max_radii2d_buffer = torch.zeros(gaussian_means.shape[0], dtype=torch.int32, device="cuda")
 
         self.loss_tensor = torch.tensor([0.0], device="cuda")
 
@@ -160,23 +161,17 @@ class GaussianRaytracer:
             self.loss_tensor,
             #
             self.output_visibility_buffer,
-            torch.tensor(0.0, device="cuda"),
-            torch.tensor(0.0, device="cuda"),
-            torch.tensor(0.0, device="cuda"),
+            torch.tensor(0.0, device="cuda"), # ref.output_max_radii2d,
+            #
+            torch.ones_like(self.output_rgbt_buffer[:, :, 3]),
+            torch.ones_like(self.output_rgbt_buffer[:, :, 3]),
             torch.tensor(0.0, device="cuda"),
             torch.tensor(0.0, device="cuda")
-            # ref.output_max_radii2d,
             # ref.background_rgb,
-            # ref.full_T,
+            # ref.full_T
             # ref.gaussian_mask,
             # ref.random_numbers
         )
-        
-        # Note: config is build on raytracer construction, so put this after the init...
-        import sys 
-        sys.path.append("/home/ypoirier/optix/gausstracer")
-        import config as raytracer_config
-        self.raytracer_config = raytracer_config
 
         self.pc = pc
 
@@ -238,7 +233,7 @@ class GaussianRaytracer:
 
         # *** time lost due to copies: 30s for 30000k iterations (~260k gaussians)
 
-        activation_in_cuda = self.raytracer_config.ACTIVATION_IN_CUDA
+        activation_in_cuda = "v1" not in self.pc.model_params.raytracer_version
 
         if activation_in_cuda:
             colors = gaussians._diffuse

@@ -15,7 +15,7 @@ from diff_gaussian_rasterization import GaussianRasterizationSettings, GaussianR
 # from diff_surfel_rasterization import GaussianRasterizationSettings, GaussianRasterizer #as SurfelRasterizer
 from scene.gaussian_model import GaussianModel
 from utils.sh_utils import eval_sh
-from bvh import RayTracer
+# from bvh import RayTracer
 import contextlib
 import io 
 from utils.point_utils import depth_to_normal
@@ -42,16 +42,20 @@ def render_pass(camera: Camera, gaussians: GaussianModel, raytracer: GaussianRay
     if gaussians.model_params.use_masks and not is_diffuse_pass:
         mask_map = camera.glossy_image.sum(0) > 0
     else:
-        mask_map = torch.ones_like(camera.glossy_image[0:1]) #!! should be bool no?
+        mask_map = torch.ones(1, camera.image_height, camera.image_width, device="cuda").bool()
+        # mask_map = torch.tensor(0.0, device="cuda")
 
-    roughness_map = camera.sample_roughness_image().cuda().mean(dim=0, keepdim=True)
+    # roughness_map = camera.sample_roughness_image().cuda().mean(dim=0, keepdim=True)
+    roughness_map = torch.ones(1, camera.image_height, camera.image_width, device="cuda").bool()
 
     # todo simplify this code which duplicates what's already happening in cuda (maybe move it all to cuda)
     # *** moved this here for a sanity check, dont need to recompute when we have gt
     if is_diffuse_pass:
-        refl_ray_o = camera.sample_position_image() #not used anyways
-        refl_ray_d = camera.sample_reflection_ray_image() #not used anyways
-        refl_ray_o = refl_ray_o + gaussians.model_params.ray_offset * refl_ray_d
+        # refl_ray_o = camera.sample_position_image() #not used anyways
+        # refl_ray_d = camera.sample_reflection_ray_image() #not used anyways
+        # refl_ray_o = refl_ray_o + gaussians.model_params.ray_offset * refl_ray_d
+        refl_ray_o = torch.tensor(0.0, device="cuda")
+        refl_ray_d = torch.tensor(0.0, device="cuda")
         # from torchvision.utils import save_image
         # save_image(torch.stack([refl_ray_o, refl_ray_d / 2 + 0.5], dim=0), "refl_ray.png")
     else:
@@ -92,7 +96,7 @@ def render_pass(camera: Camera, gaussians: GaussianModel, raytracer: GaussianRay
         lut_values = F.grid_sample(gaussians.get_brdf_lut[None], uv[None], align_corners=True)
         input_brdf_map = lut_values[:, 0] * used_F0 + lut_values[:, 1]
 
-    if is_diffuse_pass:
+    if is_diffuse_pass and torch.is_grad_enabled():
         target = camera.diffuse_image
         target_position = camera.sample_position_image()
         target_normal = camera.sample_normal_image()
@@ -122,10 +126,10 @@ def render_pass(camera: Camera, gaussians: GaussianModel, raytracer: GaussianRay
         "All of these results are reshaped to (C, H, W)"
         render = raytracing_pkg["render"].moveaxis(-1, 0)
         # todo don't sample again here
-        roughness = raytracer.output_brdf_params[..., 3:4].clone().detach().reshape(*camera.sample_position_image().shape[1:3], 1).moveaxis(-1, 0).repeat(3, 1, 1)
-        F0 = raytracer.output_brdf_params[..., :3].clone().detach().reshape(*camera.sample_position_image().shape[1:3], 3).moveaxis(-1, 0)
-        position = raytracer.output_position_buffer.clone().detach().reshape(*camera.sample_position_image().shape[1:3], 3).moveaxis(-1, 0)
-        normal = raytracer.output_normal_buffer.clone().detach().reshape(*camera.sample_normal_image().shape[1:3], 3).moveaxis(-1, 0)
+        roughness = raytracer.output_brdf_params[..., 3:4].clone().detach().reshape(*raytracing_pkg["render"].shape[:2], 1).moveaxis(-1, 0).repeat(3, 1, 1)
+        F0 = raytracer.output_brdf_params[..., :3].clone().detach().reshape(*raytracing_pkg["render"].shape[:2], 3).moveaxis(-1, 0)
+        position = raytracer.output_position_buffer.clone().detach().reshape(*raytracing_pkg["render"].shape[:2], 3).moveaxis(-1, 0)
+        normal = raytracer.output_normal_buffer.clone().detach().reshape(*raytracing_pkg["render"].shape[:2], 3).moveaxis(-1, 0)
         mask = mask_map
         brdf = input_brdf_map
 

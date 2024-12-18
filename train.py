@@ -112,7 +112,8 @@ def training_report(tb_writer, iteration, elpased):
                         save_image(torch.stack([glossy_image, glossy_gt_image]), tb_writer.log_dir + "/" + f"{config['name']}_view/iter_{iteration:09}_{idx}_glossy.png", nrow=2, padding=0)
                         save_image(torch.stack([position_image.cuda(), position_gt_image]), tb_writer.log_dir + "/" + f"{config['name']}_view/iter_{iteration:09}_{idx}_position.png", nrow=2, padding=0)
                         save_image(torch.stack([normal_image.cuda(), normal_gt_image]), tb_writer.log_dir + "/" + f"{config['name']}_view/iter_{iteration:09}_{idx}_normal.png", nrow=2, padding=0)
-                        save_image(torch.stack([mask_image]), tb_writer.log_dir + "/" + f"{config['name']}_view/iter_{iteration:09}_{idx}_mask.png", nrow=2, padding=0)
+                        if mask_image.ndim > 1:
+                            save_image(torch.stack([mask_image]), tb_writer.log_dir + "/" + f"{config['name']}_view/iter_{iteration:09}_{idx}_mask.png", nrow=2, padding=0)
                         if model_params.brdf_mode != "disabled":
                             save_image(torch.stack([brdf_image, brdf_gt_image.cuda()]), tb_writer.log_dir + "/" + f"{config['name']}_view/iter_{iteration:09}_{idx}_brdf.png", nrow=2, padding=0)
 
@@ -250,6 +251,9 @@ for iteration in tqdm(range(first_iter, opt_params.iterations + 1), desc="Traini
     with torch.no_grad():
         # Log and save
         training_report(tb_writer, iteration, 0.0) #! buggy iter_start.elapsed_time(iter_end), RuntimeError: CUDA error: device not ready
+
+        if model_params.mcmc_densify :
+            print("num nans in opacity grad:", gaussians.get_opacity.isnan().sum())
         
         if iteration in args.save_iterations:
             delta = time.time() - start
@@ -268,7 +272,8 @@ for iteration in tqdm(range(first_iter, opt_params.iterations + 1), desc="Traini
             print("Densification!")
             dead_mask = (gaussians.get_opacity <= model_params.opacity_pruning_threshold).squeeze(-1)
             print("Num dead gaussians: ", dead_mask.sum().item())
-            gaussians.relocate_gs(dead_mask=dead_mask)
+            if not model_params.mcmc_skip_relocate:
+                gaussians.relocate_gs(dead_mask=dead_mask)
             gaussians.add_new_gs(cap_max=args.cap_max)
             print("Number of gaussians: ", gaussians.get_xyz.shape[0])
             

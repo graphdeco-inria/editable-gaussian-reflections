@@ -178,18 +178,18 @@ class GaussianModel:
 
         print("Number of points at initialisation : ", fused_point_cloud.shape[0])
         
-        if self.model_params.mcmc_densify and not self.model_params.mcmc_densify_disable_custom_init:
-            dist2 = torch.clamp_min(distCUDA2(torch.from_numpy(np.asarray(pcd.points)).float().cuda()), 0.0000001)
-            scales = torch.log(torch.sqrt(dist2)*0.1)[...,None].repeat(1, 3)
-            rots = torch.zeros((fused_point_cloud.shape[0], 4), device="cuda")
-            rots[:, 0] = 1
-            opacities = inverse_sigmoid(0.5 * torch.ones((fused_point_cloud.shape[0], 1), dtype=torch.float, device="cuda"))
-        else:
-            dist2 = torch.clamp_min(distCUDA2(torch.from_numpy(np.asarray(pcd.points)).float().cuda()), 0.0000001)
-            scales = torch.log(torch.sqrt(dist2 / float(os.getenv("SCALEDOWN", 1.0))))[...,None].repeat(1, 3)
-            rots = torch.zeros((fused_point_cloud.shape[0], 4), device="cuda")
-            rots[:, 0] = 1
-            opacities = inverse_sigmoid(0.1 * torch.ones((fused_point_cloud.shape[0], 1), dtype=torch.float, device="cuda"))
+        # if self.model_params.force_mcmc_custom_init or (self.model_params.mcmc_densify and not self.model_params.mcmc_densify_disable_custom_init):
+        dist2 = torch.clamp_min(distCUDA2(torch.from_numpy(np.asarray(pcd.points)).float().cuda()), 0.0000001)
+        scales = torch.log(torch.sqrt(dist2)*0.1)[...,None].repeat(1, 3)
+        rots = torch.zeros((fused_point_cloud.shape[0], 4), device="cuda")
+        rots[:, 0] = 1
+        opacities = inverse_sigmoid(0.5 * torch.ones((fused_point_cloud.shape[0], 1), dtype=torch.float, device="cuda"))
+        # else:
+        # dist2 = torch.clamp_min(distCUDA2(torch.from_numpy(np.asarray(pcd.points)).float().cuda()), 0.0000001)
+        # scales = torch.log(torch.sqrt(dist2 / float(os.getenv("SCALEDOWN", 1.0))))[...,None].repeat(1, 3)
+        # rots = torch.zeros((fused_point_cloud.shape[0], 4), device="cuda")
+        # rots[:, 0] = 1
+        # opacities = inverse_sigmoid(0.1 * torch.ones((fused_point_cloud.shape[0], 1), dtype=torch.float, device="cuda"))
 
         print("Number of points at initialisation : ", fused_point_cloud.shape[0])
 
@@ -600,7 +600,11 @@ class GaussianModel:
 
 
     def _sample_alives(self, probs, num, alive_indices=None):
+        probs = probs.nan_to_num(0.0) #!!!!!!
         probs = probs / (probs.sum() + torch.finfo(torch.float32).eps)
+        if torch.isnan(probs).any():
+            breakpoint() # this fails because some opacity values are nan, so the entire sum is nan. My guess is, there are some nans from my cuda code when the opacity goes too low (no epsilon in the scaling factor computation)
+        print("_sample_alives probs sum:", probs.sum())
         sampled_idxs = torch.multinomial(probs, num, replacement=True)
         if alive_indices is not None:
             sampled_idxs = alive_indices[sampled_idxs]
@@ -609,6 +613,7 @@ class GaussianModel:
     
 
     def relocate_gs(self, dead_mask=None):
+        print("relocate will delete:", dead_mask.sum())
 
         if dead_mask.sum() == 0:
             return
@@ -616,6 +621,8 @@ class GaussianModel:
         alive_mask = ~dead_mask 
         dead_indices = dead_mask.nonzero(as_tuple=True)[0]
         alive_indices = alive_mask.nonzero(as_tuple=True)[0]
+
+        print("still alive:", alive_indices.shape[0])
 
         if alive_indices.shape[0] <= 0:
             return

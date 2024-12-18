@@ -13,3 +13,7 @@ submodules/diff-surfel-rasterization/
 renders
 *.ply
 *.std
+*.stderr
+*.stdout
+/raytracer_builds/
+/dump/
