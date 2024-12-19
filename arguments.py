@@ -115,6 +115,8 @@ class ModelParams(ParamGroup):
         self.opacity_pruning_threshold = 0.005 # 0.051 # 
         self.cap_max = -1 # for mcmc
 
+        self.use_opacity_resets = False
+
         super().__init__(parser, "Loading Parameters", sentinel)
 
     def extract(self, args):

@@ -165,8 +165,9 @@ parser.add_argument('--ip', type=str, default="127.0.0.1")
 parser.add_argument('--port', type=int, default=6009)
 parser.add_argument('--detect_anomaly', action='store_true', default=False)
 parser.add_argument('--flip_camera', action='store_true', default=False)
-parser.add_argument("--test_iterations", nargs="+", type=int, default=[1, 100, 500, 1_000, 2_500, 5_000, 10_000, 20_000, 30_000, 60_000, 90_000])
-parser.add_argument("--save_iterations", nargs="+", type=int, default=[1, 1_000, 2_500, 7_000, 15_000, 30_000, 60_000, 90_000])
+# parser.add_argument("--test_iterations", nargs="+", type=int, default=[1, 100, 500, 1_000, 2_500, 5_000, 10_000, 20_000, 30_000, 60_000, 90_000])
+parser.add_argument("--test_iterations", nargs="+", type=int, default=[1, 1_000, 10_000, 30_000, 60_000, 90_000])
+parser.add_argument("--save_iterations", nargs="+", type=int, default=[1, 7_000, 30_000, 60_000, 90_000])
 parser.add_argument("--quiet", action="store_true")
 parser.add_argument("--viewer", action="store_true")
 parser.add_argument("--checkpoint_iterations", nargs="+", type=int, default=[])
@@ -239,6 +240,8 @@ for iteration in tqdm(range(first_iter, opt_params.iterations + 1), desc="Traini
     bg = torch.rand((3), device="cuda") if opt_params.random_background else background
 
     # *** run fused forward + backprop
+    package = render(viewpoint_cam, gaussians, pipe_params, bg, raytracer=raytracer)
+
     if model_params.mcmc_densify:
         gaussians._opacity.grad += torch.autograd.grad(args.opacity_reg * torch.abs(gaussians.get_opacity).mean(), gaussians._opacity)[0]
         gaussians._scaling.grad += torch.autograd.grad(args.scale_reg * torch.abs(gaussians.get_scaling).mean(), gaussians._scaling)[0]
@@ -265,6 +268,10 @@ for iteration in tqdm(range(first_iter, opt_params.iterations + 1), desc="Traini
             with open(os.path.join(args.model_path, "num_gaussians.txt"), "a") as f:
                 f.write(f"{iteration:5}: {gaussians.get_xyz.shape[0]}\n")
                 print("Number of gaussians: ", gaussians.get_xyz.shape[0])
+
+        if model_params.use_opacity_resets and iteration < opt_params.densify_until_iter:
+            if iteration % opt_params.opacity_reset_interval == 0:
+                gaussians.reset_opacity()
 
         if model_params.mcmc_densify and iteration < opt_params.densify_until_iter and iteration > opt_params.densify_from_iter and iteration % opt_params.densification_interval == 0:
             print("Densification!")
