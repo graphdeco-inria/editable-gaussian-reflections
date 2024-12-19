@@ -290,7 +290,7 @@ class GaussianModel:
             torch.save(self._brdf_lut_residual, brdf_lut_path)
 
     def reset_opacity(self):
-        opacities_new = inverse_sigmoid(torch.min(self.get_opacity, torch.ones_like(self.get_opacity)*0.01))
+        opacities_new = inverse_sigmoid(torch.min(self.get_opacity, torch.ones_like(self.get_opacity)*0.1)) #! was 0.01
         optimizable_tensors = self.replace_tensor_to_optimizer(opacities_new, "opacity")
         self._opacity = optimizable_tensors["opacity"]
         self._opacity.grad = torch.zeros_like(self._opacity)
