@@ -17,7 +17,7 @@ from scene.gaussian_model import GaussianModel
 from utils.sh_utils import eval_sh
 from torchvision.utils import save_image
 from arguments import ModelParams, PipelineParams, OptimizationParams
-
+import numpy as np
 
 LOADED = False
 SHARED_BUFFERS = False
@@ -249,7 +249,7 @@ class GaussianRaytracer:
             opacity = gaussians.get_opacity
 
         with torch.no_grad():
-            R = torch.from_numpy(viewpoint_camera.R).cuda().float()
+            R = torch.from_numpy(viewpoint_camera.R).cuda().float() if isinstance(viewpoint_camera.R, np.ndarray) else viewpoint_camera.R.cuda()
             R_c2w_blender = -R 
             R_c2w_blender[:, 0] = -R_c2w_blender[:, 0] 
 

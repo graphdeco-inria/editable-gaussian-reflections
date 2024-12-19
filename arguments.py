@@ -110,8 +110,6 @@ class ModelParams(ParamGroup):
 
         self.linear_space = True
         self.exposure = 5 # note: use 10 for one bounce image
-
-
         self.raytrace_primal = False
 
         self.opacity_pruning_threshold = 0.005 # 0.051 # 

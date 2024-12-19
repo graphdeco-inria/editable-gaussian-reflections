@@ -66,7 +66,7 @@ def render_pass(camera: Camera, gaussians: GaussianModel, raytracer: GaussianRay
         aspect_ratio = float(dim_x) / float(dim_y)
         y = math.tan(vertical_fov_radians / 2) * (1.0 - 2.0 * ((idx_y + 1 / 2) / float(dim_y)))
         x = aspect_ratio * math.tan(vertical_fov_radians / 2) * (2.0 * ((idx_x + 1 / 2) / (float(dim_x))) - 1.0)
-        R_colmap_init = torch.from_numpy(camera.R).clone().cuda().float()
+        R_colmap_init = torch.from_numpy(camera.R).clone().cuda().float() if isinstance(camera.R, np.ndarray) else camera.R.clone().cuda().float()
         _R_blender = -R_colmap_init
         _R_blender[:, 0] = -_R_blender[:, 0]
         R_blender = _R_blender # R_blender is c2w
@@ -104,7 +104,10 @@ def render_pass(camera: Camera, gaussians: GaussianModel, raytracer: GaussianRay
         target_roughness = camera.sample_roughness_image().mean(dim=0, keepdim=True) # todo do this averaging during image load
         target_brdf_params = torch.cat([target_F0, target_roughness], dim=0)
     else:
-        target = camera.glossy_image
+        if torch.is_grad_enabled():
+            target = camera.glossy_image
+        else:
+            target = None
         target_position = None
         target_normal = None
         target_F0 = None

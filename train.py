@@ -221,7 +221,8 @@ for iteration in tqdm(range(first_iter, opt_params.iterations + 1), desc="Traini
             net_image_bytes = None
             custom_cam, do_training, pipe_params.convert_SHs_python, pipe_params.compute_cov3D_python, keep_alive, scaling_modifer = network_gui.receive()
             if custom_cam != None:
-                net_image = render(custom_cam, gaussians, pipe_params, background, scaling_modifer)["render"] 
+                package = render(viewpoint_cam, gaussians, pipe_params, bg, raytracer=raytracer)
+                render = package.diffuse.render + package.glossy.render
                 net_image_bytes = memoryview((torch.clamp(net_image, min=0, max=1.0) * 255).byte().permute(1, 2, 0).contiguous().cpu().numpy())
             network_gui.send(net_image_bytes, model_params.source_path)
             if do_training and ((iteration < int(opt_params.iterations)) or not keep_alive):
@@ -231,7 +232,6 @@ for iteration in tqdm(range(first_iter, opt_params.iterations + 1), desc="Traini
 
     iter_start.record()
     xyz_lr = gaussians.update_learning_rate(iteration)
-
     if not viewpoint_stack:
         viewpoint_stack = scene.getTrainCameras().copy()
     viewpoint_cam = viewpoint_stack.pop(randint(0, len(viewpoint_stack) - 1))
@@ -239,8 +239,6 @@ for iteration in tqdm(range(first_iter, opt_params.iterations + 1), desc="Traini
     bg = torch.rand((3), device="cuda") if opt_params.random_background else background
 
     # *** run fused forward + backprop
-    render(viewpoint_cam, gaussians, pipe_params, bg, raytracer=raytracer, iteration=iteration) 
-
     if model_params.mcmc_densify:
         gaussians._opacity.grad += torch.autograd.grad(args.opacity_reg * torch.abs(gaussians.get_opacity).mean(), gaussians._opacity)[0]
         gaussians._scaling.grad += torch.autograd.grad(args.scale_reg * torch.abs(gaussians.get_scaling).mean(), gaussians._scaling)[0]
