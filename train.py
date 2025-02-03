@@ -15,7 +15,7 @@ from random import randint
 from utils.loss_utils import l1_loss, ssim
 from gaussian_renderer import render, network_gui, GaussianRaytracer
 import sys
-from scene import Scene, GaussianModel, SurfelModel
+from scene import Scene, GaussianModel
 from utils.general_utils import safe_state
 import uuid
 from tqdm import tqdm
@@ -72,16 +72,16 @@ def training_report(tb_writer, iteration, elpased):
                 diffuse_psnr_test = 0.0
 
                 for idx, viewpoint in enumerate(config['cameras']):
-                    package = render(viewpoint, gaussians, pipe_params, bg, raytracer=raytracer)
-                    print(idx, package.glossy.render.amax())
+                    package = render(viewpoint, raytracer, pipe_params, bg)
+
                     os.makedirs(tb_writer.log_dir + "/" + f"{config['name']}_view", exist_ok=True)
 
-                    diffuse_image = torch.clamp(package.diffuse.render, 0.0, 1.0)
-                    glossy_image = torch.clamp(package.glossy.render, 0.0, 1.0)
+                    diffuse_image = torch.clamp(package.rgb[0], 0.0, 1.0)
+                    glossy_image = torch.clamp(package.rgb[1:].sum(dim=0), 0.0, 1.0)
                     diffuse_gt_image = torch.clamp(viewpoint.diffuse_image, 0.0, 1.0)
                     glossy_gt_image = torch.clamp(viewpoint.glossy_image, 0.0, 1.0)
                     normal_gt_image = torch.clamp(viewpoint.sample_normal_image() / 2 + 0.5, 0.0, 1.0)
-                    pred_image = package.diffuse.render + package.glossy.render
+                    pred_image = package.rgb.sum(dim=0)
 
                     gt_image = torch.clamp(viewpoint.original_image, 0.0, 1.0)
                     if tb_writer and (idx < 5): 
@@ -89,13 +89,12 @@ def training_report(tb_writer, iteration, elpased):
                     diffuse_l1_test += l1_loss(diffuse_image, diffuse_gt_image).mean().double()
                     diffuse_psnr_test += psnr(diffuse_image, diffuse_gt_image).mean().double()
 
-                    roughness_image = torch.clamp(package.diffuse.roughness, 0.0, 1.0)
-                    normal_image = torch.clamp(package.diffuse.normal / 2 + 0.5, 0.0, 1.0) 
-                    position_image = torch.clamp(package.diffuse.position, 0.0, 1.0)
-                    F0_image = torch.clamp(package.diffuse.F0, 0.0, 1.0)
-                    mask_image = torch.clamp(package.glossy.mask, 0.0, 1.0)
+                    roughness_image = torch.clamp(package.roughness[0], 0.0, 1.0)
+                    normal_image = torch.clamp(package.normal[0] / 2 + 0.5, 0.0, 1.0) 
+                    position_image = torch.clamp(package.position[0], 0.0, 1.0)
+                    F0_image = torch.clamp(package.F0[0], 0.0, 1.0)
                     if model_params.brdf_mode != "disabled":
-                        brdf_image = torch.clamp(package.glossy.brdf, 0.0, 1.0)
+                        brdf_image = torch.clamp(package.brdf[0], 0.0, 1.0)
 
                     normal_gt_image = torch.clamp(viewpoint.sample_normal_image() / 2 + 0.5, 0.0, 1.0)
                     position_gt_image = torch.clamp(viewpoint.sample_position_image(), 0.0, 1.0)
@@ -112,8 +111,6 @@ def training_report(tb_writer, iteration, elpased):
                         save_image(torch.stack([glossy_image, glossy_gt_image]), tb_writer.log_dir + "/" + f"{config['name']}_view/iter_{iteration:09}_{idx}_glossy.png", nrow=2, padding=0)
                         save_image(torch.stack([position_image.cuda(), position_gt_image]), tb_writer.log_dir + "/" + f"{config['name']}_view/iter_{iteration:09}_{idx}_position.png", nrow=2, padding=0)
                         save_image(torch.stack([normal_image.cuda(), normal_gt_image]), tb_writer.log_dir + "/" + f"{config['name']}_view/iter_{iteration:09}_{idx}_normal.png", nrow=2, padding=0)
-                        if mask_image.ndim > 1:
-                            save_image(torch.stack([mask_image]), tb_writer.log_dir + "/" + f"{config['name']}_view/iter_{iteration:09}_{idx}_mask.png", nrow=2, padding=0)
                         if model_params.brdf_mode != "disabled":
                             save_image(torch.stack([brdf_image, brdf_gt_image.cuda()]), tb_writer.log_dir + "/" + f"{config['name']}_view/iter_{iteration:09}_{idx}_brdf.png", nrow=2, padding=0)
 
@@ -166,7 +163,7 @@ parser.add_argument('--port', type=int, default=6009)
 parser.add_argument('--detect_anomaly', action='store_true', default=False)
 parser.add_argument('--flip_camera', action='store_true', default=False)
 # parser.add_argument("--test_iterations", nargs="+", type=int, default=[1, 100, 500, 1_000, 2_500, 5_000, 10_000, 20_000, 30_000, 60_000, 90_000])
-parser.add_argument("--test_iterations", nargs="+", type=int, default=[1, 1_000, 10_000, 30_000, 60_000, 90_000])
+parser.add_argument("--test_iterations", nargs="+", type=int, default=[1, 1_000, 3_000, 5_000, 10_000, 30_000, 60_000, 90_000])
 parser.add_argument("--save_iterations", nargs="+", type=int, default=[1, 7_000, 30_000, 60_000, 90_000])
 parser.add_argument("--quiet", action="store_true")
 parser.add_argument("--viewer", action="store_true")
@@ -222,8 +219,8 @@ for iteration in tqdm(range(first_iter, opt_params.iterations + 1), desc="Traini
             net_image_bytes = None
             custom_cam, do_training, pipe_params.convert_SHs_python, pipe_params.compute_cov3D_python, keep_alive, scaling_modifer = network_gui.receive()
             if custom_cam != None:
-                package = render(viewpoint_cam, gaussians, pipe_params, bg, raytracer=raytracer)
-                render = package.diffuse.render + package.glossy.render
+                package = render(viewpoint_cam, raytracer, pipe_params, bg)
+                render = package.rgb.sum(dim=0)
                 net_image_bytes = memoryview((torch.clamp(net_image, min=0, max=1.0) * 255).byte().permute(1, 2, 0).contiguous().cpu().numpy())
             network_gui.send(net_image_bytes, model_params.source_path)
             if do_training and ((iteration < int(opt_params.iterations)) or not keep_alive):
@@ -240,7 +237,7 @@ for iteration in tqdm(range(first_iter, opt_params.iterations + 1), desc="Traini
     bg = torch.rand((3), device="cuda") if opt_params.random_background else background
 
     # *** run fused forward + backprop
-    package = render(viewpoint_cam, gaussians, pipe_params, bg, raytracer=raytracer)
+    package = render(viewpoint_cam, raytracer, pipe_params, bg)
 
     if model_params.mcmc_densify:
         gaussians._opacity.grad += torch.autograd.grad(args.opacity_reg * torch.abs(gaussians.get_opacity).mean(), gaussians._opacity)[0]
@@ -285,6 +282,7 @@ for iteration in tqdm(range(first_iter, opt_params.iterations + 1), desc="Traini
             raytracer.rebuild_bvh()
         elif iteration < opt_params.iterations:
             gaussians.optimizer.step()
+            print(gaussians._normal.grad)
             gaussians.optimizer.zero_grad(set_to_none=False) # todo not sure if this set_to_none=False is still required
             raytracer.zero_grad()
 

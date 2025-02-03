@@ -74,10 +74,6 @@ class Camera(nn.Module):
 
         self.update()
 
-        incident = position_image.moveaxis(0, -1) - self.camera_center
-        incident = incident / incident.norm(dim=-1, keepdim=True)
-        self._reflection_ray_image = (incident - 2 * (incident * normal_image.moveaxis(0, -1)).sum(dim=-1).unsqueeze(-1) * normal_image.moveaxis(0, -1)).moveaxis(-1, 0)
-
         self.random_pool = random_pool
 
     def sample_position_image(self):
@@ -125,15 +121,6 @@ class Camera(nn.Module):
         else:
             return self._F0_image
 
-    def sample_reflection_ray_image(self):
-        if self.random_pool:
-            if torch.is_grad_enabled():
-                return _random_pool(self._reflection_ray_image)
-            else:
-                return torch.nn.functional.interpolate(self._reflection_ray_image[None], scale_factor=1/3, mode='nearest')[0]
-        else:
-            return self._reflection_ray_image
-        
     def update(self):
         self.world_view_transform = torch.tensor(getWorld2View2(self.R, self.T, self.trans, self.scale)).transpose(0, 1).cuda()
         self.projection_matrix = getProjectionMatrix(znear=self.znear, zfar=self.zfar, fovX=self.FoVx, fovY=self.FoVy).transpose(0,1).cuda()

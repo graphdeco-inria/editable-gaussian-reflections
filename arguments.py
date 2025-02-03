@@ -65,8 +65,8 @@ class ModelParams(ParamGroup):
         self.eval = False
         self.glossy_bbox_size_mult = 4.0
         self.num_feat_per_gaussian_channel = 16 
-        
-        self.brdf_mode: Literal["disabled", "gt", "static_lut", "finetuned_lut"] = "gt"
+         
+        self.brdf_mode: Literal["disabled", "gt", "static_lut"] = "gt"  # "finetuned_lut" is legacy, no longer works
         self.use_attached_brdf = False
         self.detach_normals = False 
         self.detach_position = False
@@ -141,7 +141,8 @@ class OptimizationParams(ParamGroup):
         self.position_lr_max_steps = 30_000
         self.normal_lr = 0.0025
         self.position_lr = 0.0025
-        self.brdf_params_lr = 0.0025
+        self.roughness_lr = 0.0025
+        self.f0_lr = 0.0025
         self.feature_lr = 0.0025
         self.opacity_lr = 0.05
         self.scaling_lr = 0.005
