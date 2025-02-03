@@ -25,6 +25,7 @@ from scene.gaussian_model import BasicPointCloud
 import cv2
 from tqdm import tqdm 
 import concurrent 
+import torch
 
 @dataclass
 class CameraInfo:
@@ -172,6 +173,16 @@ def readColmapCameras(model_params, cam_extrinsics, cam_intrinsics, images_folde
                               image_path=image_path, image_name=image_name, width=width, height=height, diffuse_image=diffuse_image, glossy_image=glossy_image, position_image=position_image, normal_image=normal_image, roughness_image=roughness_image, metalness_image=metalness_image, base_color_image=base_color_image, brdf_image=brdf_image, specular_image=specular_image)
 
         cam_infos.append(cam_info)
+
+    cache_path = os.path.join(model_params.source_path, "cam_infos.pth")
+    if "DBGCACHE" in os.environ and os.path.exists(cache_path):
+        print("Loading", cache_path)
+        
+        cam_infos = torch.load(cache_path)
+        if len(cam_infos) == model_params.max_images:
+            return cam_infos
+        else:
+            print("Cache invalid")
     
     futures = []
     with ThreadPoolExecutor() as executor: 
@@ -182,6 +193,8 @@ def readColmapCameras(model_params, cam_extrinsics, cam_intrinsics, images_folde
         future.result()
 
     cam_infos = sorted(cam_infos, key=lambda x: x.image_name)
+    if "DBGCACHE" in os.environ:
+        torch.save(cam_infos, cache_path)
     
     sys.stdout.write('\n')
     return cam_infos
@@ -271,6 +284,29 @@ def readCamerasFromTransforms(model_params, path, transformsfile, white_backgrou
 
         frames = sorted(contents["frames"], key=lambda frame: frame["file_path"])[:model_params.max_images]
 
+        cache = None
+        index_mapping = {
+            "Render": slice(0, 3),
+            "Diffuse": slice(3, 6),
+            "Glossy": slice(6, 9),
+            "Normal": slice(9, 12),
+            "Position": slice(12, 15),
+            "Roughness": slice(15, 18),
+            "Metalness": slice(18, 21),
+            "BaseColor": slice(21, 24),
+            "BRDF": slice(24, 27),
+            "Specular": slice(27, 30)
+        }
+        
+        def imread(image_path, image_name):
+            if cache is None:
+                image = cv2.imread(image_path, cv2.IMREAD_UNCHANGED)
+                image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+                assert image is not None, f"{image_name} image not found at {image_path}"
+                return image
+            else:
+                return cache[idx, index_mapping[image_name]]
+
         def readFrame(idx, frame):
             cam_name = os.path.join(path, frame["file_path"] + extension)
 
@@ -305,38 +341,45 @@ def readCamerasFromTransforms(model_params, path, transformsfile, white_backgrou
                 glossy_image = Image.open(glossy_image_path).convert("RGB")
             
             normal_image_path = image_path.replace("/render_", "/normal_").replace(".png", ".exr").replace("/colmap/", "/renders/").replace("/render/", "/normal/")
-            normal_image = cv2.imread(normal_image_path, cv2.IMREAD_UNCHANGED)
-            normal_image = cv2.cvtColor(normal_image, cv2.COLOR_BGR2RGB)
-            assert normal_image is not None, f"Normal image not found at {normal_image_path}"
+            normal_image = imread(normal_image_path, "Normal")
+            # normal_image = cv2.imread(normal_image_path, cv2.IMREAD_UNCHANGED)
+            # normal_image = cv2.cvtColor(normal_image, cv2.COLOR_BGR2RGB)
+            # assert normal_image is not None, f"Normal image not found at {normal_image_path}"
 
             position_image_path = image_path.replace("/render_", "/position_").replace(".png", ".exr").replace("/colmap/", "/renders/").replace("/render/", "/position/")
-            position_image = cv2.imread(position_image_path, cv2.IMREAD_UNCHANGED)
-            position_image = cv2.cvtColor(position_image, cv2.COLOR_BGR2RGB)
+            position_image = imread(position_image_path, "Position")
+            # position_image = cv2.imread(position_image_path, cv2.IMREAD_UNCHANGED)
+            # position_image = cv2.cvtColor(position_image, cv2.COLOR_BGR2RGB)
 
             roughness_image_path = image_path.replace("/render_", "/roughness_").replace(".png", ".exr").replace("/colmap/", "/renders/").replace("/render/", "/roughness/")
-            roughness_image = cv2.imread(roughness_image_path, cv2.IMREAD_UNCHANGED)
-            roughness_image = cv2.cvtColor(roughness_image, cv2.COLOR_BGR2RGB)
-            assert roughness_image is not None, f"Roughness image not found at {roughness_image_path}"
+            roughness_image = imread(roughness_image_path, "Roughness")
+            # roughness_image = cv2.imread(roughness_image_path, cv2.IMREAD_UNCHANGED)
+            # roughness_image = cv2.cvtColor(roughness_image, cv2.COLOR_BGR2RGB)
+            # assert roughness_image is not None, f"Roughness image not found at {roughness_image_path}"
 
             specular_image_path = image_path.replace("/render_", "/specular_").replace(".png", ".exr").replace("/colmap/", "/renders/").replace("/render/", "/specular/")
-            specular_image = cv2.imread(specular_image_path, cv2.IMREAD_UNCHANGED)
-            specular_image = cv2.cvtColor(specular_image, cv2.COLOR_BGR2RGB)
-            assert specular_image is not None, f"Specular image not found at {specular_image_path}"
+            specular_image = imread(specular_image_path, "Specular")
+            # specular_image = cv2.imread(specular_image_path, cv2.IMREAD_UNCHANGED)
+            # specular_image = cv2.cvtColor(specular_image, cv2.COLOR_BGR2RGB)
+            # assert specular_image is not None, f"Specular image not found at {specular_image_path}"
 
             metalness_path = image_path.replace("/render_", "/metalness_").replace(".png", ".exr").replace("/colmap/", "/renders/").replace("/render/", "/metalness/")
-            metalness_image = cv2.imread(metalness_path, cv2.IMREAD_UNCHANGED)
-            metalness_image = cv2.cvtColor(metalness_image, cv2.COLOR_BGR2RGB)
-            assert metalness_image is not None, f"Metalness image not found at {metalness_path}"
+            metalness_image = imread(metalness_path, "Metalness")
+            # metalness_image = cv2.imread(metalness_path, cv2.IMREAD_UNCHANGED)
+            # metalness_image = cv2.cvtColor(metalness_image, cv2.COLOR_BGR2RGB)
+            # assert metalness_image is not None, f"Metalness image not found at {metalness_path}"
 
             base_color_path = image_path.replace("/render_", "/base_color_").replace(".png", ".exr").replace("/colmap/", "/renders/").replace("/render/", "/base_color/")
-            base_color_image = cv2.imread(base_color_path, cv2.IMREAD_UNCHANGED)
-            base_color_image = cv2.cvtColor(base_color_image, cv2.COLOR_BGR2RGB)
-            assert base_color_image is not None, f"base_color image not found at {base_color_path}"
+            base_color_image = imread(base_color_path, "BaseColor")
+            # base_color_image = cv2.imread(base_color_path, cv2.IMREAD_UNCHANGED)
+            # base_color_image = cv2.cvtColor(base_color_image, cv2.COLOR_BGR2RGB)
+            # assert base_color_image is not None, f"base_color image not found at {base_color_path}"
 
             brdf_path = image_path.replace("/render_", "/glossy_brdf_").replace(".png", ".exr").replace("/colmap/", "/renders/").replace("/render/", "/glossy_brdf/")
-            brdf_image = cv2.imread(brdf_path, cv2.IMREAD_UNCHANGED)
-            brdf_image = cv2.cvtColor(brdf_image, cv2.COLOR_BGR2RGB)
-            assert brdf_image is not None, f"brdf image not found at {brdf_path}"
+            brdf_image = imread(brdf_path, "BRDF")
+            # brdf_image = cv2.imread(brdf_path, cv2.IMREAD_UNCHANGED)
+            # brdf_image = cv2.cvtColor(brdf_image, cv2.COLOR_BGR2RGB)
+            # assert brdf_image is not None, f"brdf image not found at {brdf_path}"
 
             # im_data = np.array(image.convert("RGBA"))
             # bg = np.array([1,1,1]) if white_background else np.array([0, 0, 0])
@@ -351,6 +394,18 @@ def readCamerasFromTransforms(model_params, path, transformsfile, white_backgrou
             cam_infos.append(CameraInfo(uid=idx, R=R, T=T, FovY=FovY, FovX=FovX, image=image,
                             image_path=image_path, image_name=image_name, width=image.size[0], height=image.size[1], diffuse_image=diffuse_image, glossy_image=glossy_image, position_image=position_image, normal_image=normal_image, roughness_image=roughness_image, metalness_image=metalness_image, base_color_image=base_color_image, brdf_image=brdf_image, specular_image=specular_image))
 
+
+        cache_path = os.path.join(model_params.source_path, "cam_infos_" + str(model_params.max_images) + "images_" + str(model_params.resolution) + "px_" + transformsfile.replace(".json", ".pt"))
+
+        if "DBGCACHE" in os.environ and os.path.exists(cache_path):
+            print("Loading", cache_path)
+            
+            cam_infos = torch.load(cache_path)
+            if len(cam_infos) == model_params.max_images: # todo just put the # of images and the resolution in the file name
+                return cam_infos
+            else:
+                print("Cache invalid")
+                
         with ThreadPoolExecutor() as executor: 
             futures = []
             for idx, frame in tqdm(enumerate(frames)):
@@ -360,6 +415,10 @@ def readCamerasFromTransforms(model_params, path, transformsfile, white_backgrou
                 future.result()
 
         assert len(cam_infos) > 0
+
+        cam_infos = sorted(cam_infos, key=lambda x: x.image_name)
+        if "DBGCACHE" in os.environ:
+            torch.save(cam_infos, cache_path)
 
         cam_infos = sorted(cam_infos, key=lambda x: x.image_name)
             
