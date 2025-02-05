@@ -66,6 +66,10 @@ class GaussianModel:
         self.spatial_lr_scale = 0
         self.setup_functions()
 
+        self.schedule = None
+
+        self.num_densification_steps = 0
+
         if "lut" in self.model_params.brdf_mode:
             brdf_lut_path = "data/ibl_brdf_lut.png"
             brdf_lut = cv2.imread(brdf_lut_path)
@@ -186,18 +190,18 @@ class GaussianModel:
 
         print("Number of points at initialisation : ", fused_point_cloud.shape[0])
         
-        # if self.model_params.force_mcmc_custom_init or (self.model_params.mcmc_densify and not self.model_params.mcmc_densify_disable_custom_init):
-        dist2 = torch.clamp_min(distCUDA2(torch.from_numpy(np.asarray(pcd.points)).float().cuda()), 0.0000001)
-        scales = torch.log(torch.sqrt(dist2)*0.1)[...,None].repeat(1, 3)
-        rots = torch.zeros((fused_point_cloud.shape[0], 4), device="cuda")
-        rots[:, 0] = 1
-        opacities = inverse_sigmoid(0.5 * torch.ones((fused_point_cloud.shape[0], 1), dtype=torch.float, device="cuda"))
-        # else:
-        # dist2 = torch.clamp_min(distCUDA2(torch.from_numpy(np.asarray(pcd.points)).float().cuda()), 0.0000001)
-        # scales = torch.log(torch.sqrt(dist2 / float(os.getenv("SCALEDOWN", 1.0))))[...,None].repeat(1, 3)
-        # rots = torch.zeros((fused_point_cloud.shape[0], 4), device="cuda")
-        # rots[:, 0] = 1
-        # opacities = inverse_sigmoid(0.1 * torch.ones((fused_point_cloud.shape[0], 1), dtype=torch.float, device="cuda"))
+        if self.model_params.force_mcmc_custom_init or (self.model_params.mcmc_densify and not self.model_params.mcmc_densify_disable_custom_init):
+            dist2 = torch.clamp_min(distCUDA2(torch.from_numpy(np.asarray(pcd.points)).float().cuda()), 0.0000001)
+            scales = torch.log(torch.sqrt(dist2)*0.1)[...,None].repeat(1, 3)
+            rots = torch.zeros((fused_point_cloud.shape[0], 4), device="cuda")
+            rots[:, 0] = 1
+            opacities = inverse_sigmoid(0.5 * torch.ones((fused_point_cloud.shape[0], 1), dtype=torch.float, device="cuda"))
+        else:
+            dist2 = torch.clamp_min(distCUDA2(torch.from_numpy(np.asarray(pcd.points)).float().cuda()), 0.0000001)
+            scales = torch.log(torch.sqrt(dist2)*self.model_params.init_scale_factor)[...,None].repeat(1, 3)
+            rots = torch.zeros((fused_point_cloud.shape[0], 4), device="cuda")
+            rots[:, 0] = 1
+            opacities = inverse_sigmoid(self.model_params.init_opacity * torch.ones((fused_point_cloud.shape[0], 1), dtype=torch.float, device="cuda"))
 
         print("Number of points at initialisation : ", fused_point_cloud.shape[0])
 
@@ -407,14 +411,31 @@ class GaussianModel:
         optimizable_tensors = self._prune_optimizer(valid_points_mask)
 
         self._xyz = optimizable_tensors["xyz"]
+        self._xyz.grad = torch.zeros_like(self._xyz)
+        #
         self._position = optimizable_tensors["position"]
+        self._position.grad = torch.zeros_like(self._position)
+        #
         self._normal = optimizable_tensors["normal"]
+        self._normal.grad = torch.zeros_like(self._normal)
+        #
         self._roughness = optimizable_tensors["roughness"]
+        self._roughness.grad = torch.zeros_like(self._roughness)
+        #
         self._f0 = optimizable_tensors["f0"]
+        self._f0.grad = torch.zeros_like(self._f0)
+        #
         self._diffuse = optimizable_tensors["f_dc"]
+        self._diffuse.grad = torch.zeros_like(self._diffuse)
+        #
         self._opacity = optimizable_tensors["opacity"]
+        self._opacity.grad = torch.zeros_like(self._opacity)
+        #
         self._scaling = optimizable_tensors["scaling"]
+        self._scaling.grad = torch.zeros_like(self._scaling)
+        #
         self._rotation = optimizable_tensors["rotation"]
+        self._rotation.grad = torch.zeros_like(self._rotation)
 
         self.xyz_gradient_accum = self.xyz_gradient_accum[valid_points_mask]
 
@@ -430,6 +451,7 @@ class GaussianModel:
             extension_tensor = tensors_dict[group["name"]]
             stored_state = self.optimizer.state.get(group['params'][0], None)
             if stored_state is not None:
+                assert stored_state["exp_avg"].shape[1:] == extension_tensor.shape[1:], breakpoint()
                 stored_state["exp_avg"] = torch.cat((stored_state["exp_avg"], torch.zeros_like(extension_tensor)), dim=0)
                 stored_state["exp_avg_sq"] = torch.cat((stored_state["exp_avg_sq"], torch.zeros_like(extension_tensor)), dim=0)
 
@@ -445,6 +467,7 @@ class GaussianModel:
         return optimizable_tensors
 
     def densification_postfix(self, new_xyz, new_position, new_normal, new_roughness_params, new_f0_params, new_diffuse, new_opacity, new_scaling, new_rotation, reset_params=True):
+
         d = {"xyz": new_xyz,
         "position": new_position,
         "normal": new_normal,
@@ -453,7 +476,8 @@ class GaussianModel:
         "f_dc": new_diffuse, # keep the same name for compat
         "opacity": new_opacity,
         "scaling" : new_scaling,
-        "rotation" : new_rotation}
+        "rotation" : new_rotation
+        }
 
         optimizable_tensors = self.cat_tensors_to_optimizer(d)
         optimizable_tensors["xyz"].grad = torch.zeros_like(optimizable_tensors["xyz"])
@@ -604,6 +628,110 @@ class GaussianModel:
             self.xyz_gradient_accum[update_filter] += torch.norm(viewspace_point_tensor.grad[update_filter,:2], dim=-1, keepdim=True)
         self.denom[update_filter] += 1
 
+# ---------------- below: our top kdensification
+
+    def densify_and_split_top_k(self, opt, indices_to_split, N=2):
+        n_init_points = self.get_xyz.shape[0]
+
+        selected_pts_mask = torch.zeros(n_init_points, device="cuda").bool()
+        selected_pts_mask[indices_to_split] = True
+
+        stds = self.get_scaling[selected_pts_mask].repeat(N,1)
+        means = torch.zeros((stds.size(0), 3),device="cuda")
+        samples = torch.normal(mean=means, std=stds)
+        rots = build_rotation(self._rotation[selected_pts_mask]).repeat(N,1,1)
+
+        new_xyz = torch.bmm(rots, samples.unsqueeze(-1)).squeeze(-1) + self.get_xyz[selected_pts_mask].repeat(N, 1)
+        new_position = self._position[selected_pts_mask].repeat(N,1)
+        new_normal = self._normal[selected_pts_mask].repeat(N,1)
+        new_roughness = self._roughness[selected_pts_mask].repeat(N,1)
+        new_f0 = self._f0[selected_pts_mask].repeat(N,1)
+        new_scaling = self.scaling_inverse_activation(self.get_scaling[selected_pts_mask].repeat(N,1) / (0.8*N))
+        new_rotation = self._rotation[selected_pts_mask].repeat(N,1)
+        new_diffuse = self._diffuse[selected_pts_mask].repeat(N,1)
+        new_opacity = self._opacity[selected_pts_mask].repeat(N,1)
+        
+        self.densification_postfix(new_xyz, new_position, new_normal, new_roughness, new_f0, new_diffuse,  new_opacity, new_scaling, new_rotation)
+
+        prune_filter = torch.cat((selected_pts_mask, torch.zeros(N * selected_pts_mask.sum(), device="cuda", dtype=bool)))
+        self.prune_points(prune_filter)
+
+    def densify_and_clone_top_k(self, opt, indicies_to_clone):
+        selected_pts_mask = torch.zeros(len(self.get_xyz), device=self.get_xyz.device).bool()
+        selected_pts_mask[indicies_to_clone] = True
+
+        new_xyz = self._xyz[selected_pts_mask]
+        new_position = self._position[selected_pts_mask]
+        new_normal = self._normal[selected_pts_mask]
+        new_roughness = self._roughness[selected_pts_mask]
+        new_f0 = self._f0[selected_pts_mask]
+        new_diffuse = self._diffuse[selected_pts_mask]
+        new_opacity = self._opacity[selected_pts_mask]
+        new_scaling = self._scaling[selected_pts_mask]
+        new_rotation = self._rotation[selected_pts_mask]
+
+        self.densification_postfix(new_xyz, new_position, new_normal, new_roughness, new_f0, new_diffuse,  new_opacity, new_scaling, new_rotation)
+
+    def densify_and_prune_top_k(self, opt, min_opacity, extent, max_screen_size):
+        self.num_densification_steps += 1
+        num_gaussians_before_pruning = self.get_xyz.shape[0]
+
+        # Prune
+        # prune_mask = (self.get_opacity < min_opacity).squeeze()
+        # if max_screen_size:
+        #     big_points_ws = self.get_scaling.max(dim=1).values > 0.1 * extent
+        #     prune_mask = torch.logical_or(prune_mask, big_points_ws)
+        # big_points_ws = self.get_scaling.max(dim=1).values > 0.1 * extent
+        # prune_mask = torch.logical_or(prune_mask, big_points_ws)
+        # self.prune_points(prune_mask)
+
+        # Densify
+        if self.schedule is None:
+            self.schedule = get_count_array(self._xyz.shape[0], opt)
+            num_gaussians_before_pruning = self._xyz.shape[0] # * start the schedule after the first prune, in case the first prune is very agressive depending on init opacity
+            
+        num_gaussians_before_densification = self.get_xyz.shape[0]
+        grads = self.xyz_gradient_accum / self.denom
+        grads[grads.isnan()] = 0.0
+        padded_grad = torch.zeros((num_gaussians_before_densification), device="cuda")
+        padded_grad[:grads.shape[0]] = grads.squeeze()
+        largest_axis_size = self.get_scaling.max(dim=1).values
+
+        grad_ranking = torch.argsort(torch.argsort(padded_grad)) / num_gaussians_before_densification
+        size_ranking = torch.argsort(torch.argsort(largest_axis_size)) / num_gaussians_before_densification
+        opacity_ranking = torch.argsort(torch.argsort(self.get_opacity.squeeze())) / num_gaussians_before_densification
+        score = grad_ranking + size_ranking*opt.densif_size_ranking_weight + size_ranking*opt.densif_opacity_ranking_weight
+        
+        target = self.schedule[self.num_densification_steps]
+        k = target - num_gaussians_before_densification # todo handle the case where this goes negative
+        
+        target = num_gaussians_before_densification + k
+
+        indices_to_densify = torch.topk(score, k).indices
+
+        if opt.densif_use_fixed_split_clone_ratio: 
+            scale_threshold = torch.quantile(largest_axis_size[indices_to_densify], q=1.0 - opt.densif_split_clone_ratio) 
+        else:
+            scale_threshold = self.percent_dense * extent
+
+        indices_to_clone = indices_to_densify[largest_axis_size[indices_to_densify] < scale_threshold]
+        indices_to_split = indices_to_densify[largest_axis_size[indices_to_densify] >= scale_threshold]
+
+        self.densify_and_clone_top_k(opt, indices_to_clone) 
+        self.densify_and_split_top_k(opt, indices_to_split)
+
+        trace = f"Step {self.num_densification_steps} :: Init: {num_gaussians_before_pruning}; After Pruning: {num_gaussians_before_densification}; After Densification: {self.get_xyz.shape[0]}; Target: {target}\n"
+        print(trace)
+
+        torch.cuda.empty_cache()  
+        
+        return trace
+
+    def add_densification_stats_3d(self):
+        update_filter = self._opacity[:, 0].grad != 0
+        self.xyz_gradient_accum[update_filter] += torch.norm(self._xyz.grad[update_filter], dim=-1, keepdim=True)
+        self.denom[update_filter] += 1
+
 
 # ---------------- below: mcmc densification
 
@@ -721,7 +849,7 @@ class GaussianModel:
         optimizable_tensors["normal"].grad = self._normal.grad
         self._normal = optimizable_tensors["normal"]
 
-        optimizable_tensors["position"].grad = self._position.grad #!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! ahah, was missing before!
+        optimizable_tensors["position"].grad = self._position.grad 
         self._position = optimizable_tensors["position"]
 
         optimizable_tensors["roughness"].grad = self._roughness.grad
@@ -774,3 +902,23 @@ for n in range(N_max):
 def compute_relocation_cuda(opacity_old, scale_old, N):
     N.clamp_(min=1, max=N_max-1)
     return torch.ops.gausstracer.compute_relocation(opacity_old, scale_old, N.to(torch.int), binoms, torch.tensor(N_max).to(torch.int)) # returns new_opacity, new_scale
+
+
+# ---------
+
+
+
+def get_count_array(start_count, opt):
+    # Eq. (2) of taming-3dgs
+    
+    num_steps = ((opt.densify_until_iter - opt.densify_from_iter) // opt.densification_interval)
+    slope_lower_bound = (opt.densif_final_num_gaussians - start_count) / (num_steps-1)
+
+    k = 2 * slope_lower_bound
+    a = (opt.densif_final_num_gaussians - start_count - k*(num_steps-1)) / ((num_steps-1)*(num_steps-1))
+    b = k
+    c = start_count
+
+    values = [int(1*a * (x**2) + (b * x) + c) for x in range(num_steps)]
+
+    return values

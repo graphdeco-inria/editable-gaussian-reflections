@@ -95,7 +95,7 @@ class ModelParams(ParamGroup):
         self.mcmc_densify = False
         self.mcmc_densify_disable_custom_init = False
         self.mcmc_skip_relocate = False
-        self.force_mcmc_custom_init = False
+        self.force_mcmc_custom_init = True
 
         self.warmup = -1
 
@@ -116,6 +116,12 @@ class ModelParams(ParamGroup):
         self.cap_max = -1 # for mcmc
 
         self.use_opacity_resets = False
+
+        
+        self.init_scale_factor = 1.0 # 1.0 for 3dgs, 0.1 for mcmc 
+        self.init_opacity = 0.1 # 0.1 for 3dgs, 0.5 for mcmc
+
+
 
         super().__init__(parser, "Loading Parameters", sentinel)
 
@@ -161,8 +167,17 @@ class OptimizationParams(ParamGroup):
         self.densification_interval = 100
         self.opacity_reset_interval = 3000
         self.densify_from_iter = 500
-        self.densify_until_iter = 25_000 # was 15k, increased for mcmc
+        self.densify_until_iter = 15_000 # was 25k in mcmc
         self.densify_grad_threshold = 0.0002
+
+        self.densif_use_top_k = True
+        self.densif_final_num_gaussians = 400_000
+        self.densif_size_ranking_weight = 0.0
+        self.densif_opacity_ranking_weight = 0.0
+        self.densif_no_pruning_large_radii = False
+        self.densif_use_fixed_split_clone_ratio = True
+        self.densif_split_clone_ratio = 0.2
+        self.densif_use_3d_gradients = False
 
         self.sh_slowdown_factor = 20.0
         self.random_background = False

@@ -35,7 +35,7 @@ try:
 except ImportError:
     TENSORBOARD_FOUND = False
 
-def prepare_output_and_logger(args: ModelParams):    
+def prepare_output_and_logger(args: ModelParams, opt_params):    
     if not args.model_path:
         args.model_path = os.path.join("./output/", datetime.isoformat(timespec="seconds"))
 
@@ -44,6 +44,10 @@ def prepare_output_and_logger(args: ModelParams):
     os.makedirs(args.model_path, exist_ok = True)
     with open(os.path.join(args.model_path, "cfg_args"), 'w') as cfg_log_f:
         cfg_log_f.write(str(Namespace(**vars(args))))
+
+    with open(os.path.join(args.model_path, "cfg_args"), 'w') as cfg_log_f:
+        cfg_log_f.write(str(Namespace(**vars(opt_params))))
+    
 
     # Create Tensorboard writer
     tb_writer = None
@@ -187,7 +191,7 @@ if args.viewer:
     network_gui.init(args.ip, args.port)
 
 first_iter = 0
-tb_writer = prepare_output_and_logger(model_params) 
+tb_writer = prepare_output_and_logger(model_params, opt_params) 
 
 gaussians = GaussianModel(model_params)
 scene = Scene(model_params, gaussians)
@@ -266,11 +270,15 @@ for iteration in tqdm(range(first_iter, opt_params.iterations + 1), desc="Traini
                 f.write(f"{iteration:5}: {gaussians.get_xyz.shape[0]}\n")
                 print("Number of gaussians: ", gaussians.get_xyz.shape[0])
 
-        if model_params.use_opacity_resets and iteration < opt_params.densify_until_iter:
+        # todo check these again & review position, in this codecase it used to be after the densification step, but i don't recall where it was originally in 3dgs
+        if model_params.use_opacity_resets and iteration < opt_params.densify_until_iter: 
             if iteration % opt_params.opacity_reset_interval == 0:
                 gaussians.reset_opacity()
 
-        if model_params.mcmc_densify and iteration < opt_params.densify_until_iter and iteration > opt_params.densify_from_iter and iteration % opt_params.densification_interval == 0:
+        if opt_params.densif_use_top_k and iteration <= opt_params.densify_until_iter:
+            gaussians.add_densification_stats_3d()
+
+        if model_params.mcmc_densify and iteration <= opt_params.densify_until_iter and iteration > opt_params.densify_from_iter and iteration % opt_params.densification_interval == 0:
             print("Densification!")
             dead_mask = (gaussians.get_opacity <= model_params.opacity_pruning_threshold).squeeze(-1)
             print("Num dead gaussians: ", dead_mask.sum().item())
@@ -278,11 +286,17 @@ for iteration in tqdm(range(first_iter, opt_params.iterations + 1), desc="Traini
                 gaussians.relocate_gs(dead_mask=dead_mask)
             gaussians.add_new_gs(cap_max=args.cap_max)
             print("Number of gaussians: ", gaussians.get_xyz.shape[0])
-            
+            raytracer.rebuild_bvh()
+        elif opt_params.densif_use_top_k and iteration < opt_params.densify_until_iter and iteration > opt_params.densify_from_iter and iteration % opt_params.densification_interval == 0:
+            #!!!!!!!! review why I'm starting with so many fewer gaussians than the # of sfm points.
+            max_screen_size = 20 if iteration > opt_params.opacity_reset_interval else None
+            trace = gaussians.densify_and_prune_top_k(opt_params, 0.005, scene.cameras_extent, max_screen_size)
+            trace = f"Iteration {iteration}; " + trace
+            with open(os.path.join(scene.model_path + "/densification_trace.txt"), "a") as f:
+                f.write(trace)
             raytracer.rebuild_bvh()
         elif iteration < opt_params.iterations:
             gaussians.optimizer.step()
-            print(gaussians._normal.grad)
             gaussians.optimizer.zero_grad(set_to_none=False) # todo not sure if this set_to_none=False is still required
             raytracer.zero_grad()
 

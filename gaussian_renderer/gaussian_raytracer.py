@@ -38,50 +38,25 @@ class GaussianRaytracer:
         self.pc = pc
 
         self._export_param_values()
+        torch.cuda.synchronize() #!!! remove
         self.cuda_raytracer.rebuild_bvh()
+        torch.cuda.synchronize() #!!! remove
 
     @torch.no_grad()
     def rebuild_bvh(self):
-        assert False 
-        # new_size = self.pc.get_scaling.shape[0]
+        new_size = self.pc._xyz.shape[0]
 
-        # if not SHARED_BUFFERS:
-        #     self.gaussian_scales_buffer.requires_grad_(False).requires_grad_(False).resize_(new_size, 3).requires_grad_()
-        # self.gaussian_scales_buffer_grad.resize_(new_size, 3)
-        # self.gaussian_rotations_buffer.requires_grad_(False).resize_(new_size, 4).requires_grad_()
-        # self.gaussian_rotations_buffer_grad.resize_(new_size, 4)
-        # self.gaussian_xyz_buffer.requires_grad_(False).resize_(new_size, 3).requires_grad_()
-        # self.gaussian_xyz_buffer_grad.resize_(new_size, 3)
-        # self.gaussian_position_buffer.requires_grad_(False).resize_(new_size, 3).requires_grad_()
-        # self.gaussian_position_buffer_grad.resize_(new_size, 3)
-        # self.gaussian_normal_buffer.requires_grad_(False).resize_(new_size, 3).requires_grad_()
-        # self.gaussian_normal_buffer_grad.resize_(new_size, 3)
-        # self.gaussian_brdf_params_buffer.requires_grad_(False).resize_(new_size, 4).requires_grad_()
-        # self.gaussian_brdf_params_buffer_grad.resize_(new_size, 4)
-        # self.gaussian_opacity_buffer.requires_grad_(False).resize_(new_size, 1).requires_grad_()
-        # self.gaussian_opacity_buffer_grad.resize_(new_size, 1)
-        # self.gaussian_rgb_buffer.requires_grad_(False).resize_(new_size, 3).requires_grad_()
-        # self.gaussian_rgb_buffer_grad.resize_(new_size, 3)
-        # self.gaussian_extra_features_buffer.requires_grad_(False).resize_(new_size, self.gaussian_extra_features_buffer.shape[-1]).requires_grad_()
-        # self.gaussian_extra_features_buffer_grad.resize_(new_size, self.gaussian_extra_features_buffer.shape[-1])
-
-        # self.gaussian_scales_buffer.copy_(self.pc.get_scaling) 
-        # self.gaussian_rotations_buffer.copy_(self.pc.get_rotation)
-        # self.gaussian_xyz_buffer.copy_(self.pc.get_xyz)
-        # self.gaussian_position_buffer.copy_(self.pc.get_position)
-        # self.gaussian_normal_buffer.copy_(self.pc.get_normal)
-        # self.gaussian_brdf_params_buffer.copy_(self.pc.get_brdf_params)
-        # self.gaussian_opacity_buffer.copy_(self.pc.get_opacity)
-        # self.gaussian_rgb_buffer.copy_(self.pc._diffuse)
-        
-        # self.output_visibility_buffer.resize_(new_size)
-        # self.output_visibility_buffer.zero_()
-
-        # self.cuda_raytracer.rebuild_bvh()   
+        torch.cuda.synchronize() #!!! remove
+        self.cuda_raytracer.resize(new_size)
+        torch.cuda.synchronize() #!!! remove
+        self._export_param_values()
+        torch.cuda.synchronize() #!!! remove
+        self.cuda_raytracer.rebuild_bvh()  
+        torch.cuda.synchronize() #!!! remove
 
     @torch.no_grad()
     def _export_param_values(self):
-        self.cuda_raytracer.gaussian_scales.copy_(self.pc._scaling) 
+        self.cuda_raytracer.gaussian_scales.copy_(self.pc._scaling)
         self.cuda_raytracer.gaussian_rotations.copy_(self.pc._rotation)
         self.cuda_raytracer.gaussian_means.copy_(self.pc._xyz)
         self.cuda_raytracer.gaussian_opacity.copy_(self.pc._opacity)
@@ -206,11 +181,9 @@ class GaussianRaytracer:
             if self.output_rgbt_buffer.isnan().any():
                 raise Exception("NaNs in output buffers!")
 
-        # torch.cuda.synchronize()
         if torch.is_grad_enabled():
             self.cuda_raytracer.update_bvh()
         self.cuda_raytracer.raytrace()
-        # torch.cuda.synchronize()
 
         if "CHECK_NAN" in os.environ:
             if self.gaussian_scales_buffer_grad.isnan().any():
