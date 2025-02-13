@@ -140,7 +140,7 @@ def render_set(model_params, model_path, split, iteration, views, gaussians, pip
             view.update()
             print(view.world_view_transform)
 
-        package = render(view, gaussians, pipeline, background, raytracer=raytracer)
+        package = render(view, raytracer, pipeline, background)
         
         diffuse_gt_image = torch.clamp(view.diffuse_image, 0.0, 1.0)
         glossy_gt_image = torch.clamp(view.glossy_image, 0.0, 1.0)
@@ -151,53 +151,52 @@ def render_set(model_params, model_path, split, iteration, views, gaussians, pip
         F0_gt_image = view.sample_F0_image()
             
         torchvision.utils.save_image(gt_image, os.path.join(gts_path, '{0:05d}'.format(idx) + ".png"))
-        torchvision.utils.save_image(package.diffuse.render, os.path.join(diffuse_render_path, '{0:05d}'.format(idx) + ".png"))
+        torchvision.utils.save_image(package.rgb[0:1], os.path.join(diffuse_render_path, '{0:05d}'.format(idx) + ".png"))
         torchvision.utils.save_image(diffuse_gt_image, os.path.join(diffuse_gts_path, '{0:05d}'.format(idx) + ".png"))
 
-        torchvision.utils.save_image(package.glossy.render, os.path.join(glossy_render_path, '{0:05d}'.format(idx) + ".png"))
+        torchvision.utils.save_image(package.rgb[1:].sum(dim=0, keepdim=True), os.path.join(glossy_render_path, '{0:05d}'.format(idx) + ".png"))
         torchvision.utils.save_image(glossy_gt_image, os.path.join(glossy_gts_path, '{0:05d}'.format(idx) + ".png"))
 
-        torchvision.utils.save_image(package.diffuse.position, os.path.join(position_path, '{0:05d}'.format(idx) + "_position.png"))
+        torchvision.utils.save_image(package.position, os.path.join(position_path, '{0:05d}'.format(idx) + "_position.png"))
         torchvision.utils.save_image(position_gt_image, os.path.join(position_gts_path, '{0:05d}'.format(idx) + "_position.png"))
         
-        torchvision.utils.save_image(package.diffuse.normal / 2 + 0.5, os.path.join(normal_path, '{0:05d}'.format(idx) + "_normal.png"))
+        torchvision.utils.save_image(package.normal / 2 + 0.5, os.path.join(normal_path, '{0:05d}'.format(idx) + "_normal.png"))
         torchvision.utils.save_image(normal_gt_image / 2 + 0.5, os.path.join(normal_gts_path, '{0:05d}'.format(idx) + "_normal.png"))
 
-        torchvision.utils.save_image(package.diffuse.roughness, os.path.join(roughness_path, '{0:05d}'.format(idx) + "_roughness.png"))
+        torchvision.utils.save_image(package.roughness, os.path.join(roughness_path, '{0:05d}'.format(idx) + "_roughness.png"))
         torchvision.utils.save_image(roughness_gt_image, os.path.join(roughness_gts_path, '{0:05d}'.format(idx) + "_roughness.png"))
 
-        torchvision.utils.save_image(package.diffuse.F0, os.path.join(F0_path, '{0:05d}'.format(idx) + "_F0.png"))
+        torchvision.utils.save_image(package.F0, os.path.join(F0_path, '{0:05d}'.format(idx) + "_F0.png"))
         torchvision.utils.save_image(F0_gt_image, os.path.join(F0_gts_path, '{0:05d}'.format(idx) + "_F0.png"))
 
         def format_image(image):
             image = F.interpolate(image[None], (image.shape[-2] // 2 * 2, image.shape[-1] // 2 * 2), mode="bilinear")[0]
             return (image.clamp(0, 1) * 255).to(torch.uint8).moveaxis(0, -1).cpu()
 
-        pred_image = torch.clamp(package.diffuse.render + package.glossy.render, 0.0, 1.0)
+        pred_image = torch.clamp(package.rgb.sum(dim=0), 0.0, 1.0)
         torchvision.utils.save_image(pred_image, os.path.join(render_path, '{0:05d}'.format(idx) + ".png"))
 
         all_renders.append(format_image(pred_image))
         all_gts.append(format_image(gt_image))
-    
-        all_diffuse_renders.append(format_image(package.diffuse.render))
+
+        all_diffuse_renders.append(format_image(package.rgb[0]))
         all_diffuse_gts.append(format_image(diffuse_gt_image))
 
-        all_glossy_renders.append(format_image(package.glossy.render))
+        all_glossy_renders.append(format_image(package.rgb[1:].sum(dim=0)))
         all_glossy_gts.append(format_image(glossy_gt_image))
 
-        all_position_renders.append(format_image(package.diffuse.position))
+        all_position_renders.append(format_image(package.position[0]))
         all_position_gts.append(format_image(position_gt_image))
 
-        all_normal_renders.append(format_image(package.diffuse.normal / 2 + 0.5))
+        all_normal_renders.append(format_image(package.normal[0] / 2 + 0.5))
         all_normal_gts.append(format_image(normal_gt_image / 2 + 0.5))
 
-        all_roughness_renders.append(format_image(package.diffuse.roughness))
+        all_roughness_renders.append(format_image(package.roughness[0]))
         all_roughness_gts.append(format_image(roughness_gt_image))
 
-        all_F0_renders.append(format_image(package.diffuse.F0))
+        all_F0_renders.append(format_image(package.F0[0]))
         all_F0_gts.append(format_image(F0_gt_image))
         
-
     os.makedirs(os.path.join(model_params.model_path, "videos/"), exist_ok=True)
 
     if not args.skip_video:
@@ -264,7 +263,7 @@ def render_sets(model_params: ModelParams, iteration: int, pipeline: PipelinePar
     if args.train_views:
         render_set(model_params, model_params.model_path, "train", scene.loaded_iter, scene.getTrainCameras(), gaussians, pipeline, background, raytracer)
     else:
-        render_set(model_params, model_params.model_path, "test", scene.loaded_iter, scene.getTestCameras(), gaussians, pipeline, background, raytracer) 
+        render_set(model_params, model_params.model_path, "test", scene.loaded_iter, scene.getTestCameras(), gaussians, pipeline, background, raytracer)
     
 if __name__ == "__main__":
     # Set up command line argument parser
@@ -273,7 +272,7 @@ if __name__ == "__main__":
     _ = OptimizationParams(parser)
     pipeline = PipelineParams(parser)
     
-    # dummy repeat training args
+    # Dummy repeat training args
     parser.add_argument('--ip', type=str, default="127.0.0.1")
     parser.add_argument('--port', type=int, default=6009)
     parser.add_argument('--detect_anomaly', action='store_true', default=False)
@@ -284,14 +283,13 @@ if __name__ == "__main__":
     parser.add_argument("--checkpoint_iterations", nargs="+", type=int, default=[])
     parser.add_argument("--start_checkpoint", type=str, default = None)
 
-    # rendering args
+    # Rendering args
     parser.add_argument("--iteration", default=-1, type=int)
     parser.add_argument("--train_views", action="store_true")
     parser.add_argument("--quiet", action="store_true")
     parser.add_argument("--mode", type=str, choices=["normal", "env_rot_1", "env_rot_2", "env_move_1", "env_move_2"], default="normal")
     parser.add_argument("--skip_video", action="store_true")
     parser.add_argument("--red_region", action="store_true")
-
 
     args = get_combined_args(parser)
     print("Rendering " + args.model_path)

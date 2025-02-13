@@ -703,7 +703,7 @@ class GaussianModel:
         score = grad_ranking + size_ranking*opt.densif_size_ranking_weight + size_ranking*opt.densif_opacity_ranking_weight
         
         target = self.schedule[self.num_densification_steps]
-        k = target - num_gaussians_before_densification # todo handle the case where this goes negative
+        k = target - num_gaussians_before_densification 
         
         target = num_gaussians_before_densification + k
 

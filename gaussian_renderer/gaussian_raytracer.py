@@ -42,6 +42,11 @@ class GaussianRaytracer:
         self.cuda_raytracer.rebuild_bvh()
         torch.cuda.synchronize() #!!! remove
 
+        import sys
+        sys.path.append(f"raytracer_builds/{pc.model_params.raytracer_version}")
+        import raytracer_config
+        self.config = raytracer_config
+
     @torch.no_grad()
     def rebuild_bvh(self):
         new_size = self.pc._xyz.shape[0]
@@ -105,8 +110,6 @@ class GaussianRaytracer:
             self.cuda_raytracer.gaussian_f0.grad.zero_()
         if self.cuda_raytracer.gaussian_specular is not None:
             self.cuda_raytracer.gaussian_specular.grad.zero_()
-        if self.cuda_raytracer.gaussian_albedo is not None:
-            self.cuda_raytracer.gaussian_albedo.grad.zero_()
         if self.cuda_raytracer.gaussian_metalness is not None:
             self.cuda_raytracer.gaussian_metalness.grad.zero_()
 

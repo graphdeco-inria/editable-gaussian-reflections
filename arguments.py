@@ -106,7 +106,7 @@ class ModelParams(ParamGroup):
 
         self.num_bounces = 1
         self.random_pool_props = False
-        self.downsampling_mode = "nearest" #area
+        self.downsampling_mode = "area"
 
         self.linear_space = True
         self.exposure = 5 # note: use 10 for one bounce image
@@ -117,11 +117,8 @@ class ModelParams(ParamGroup):
 
         self.use_opacity_resets = False
 
-        
         self.init_scale_factor = 1.0 # 1.0 for 3dgs, 0.1 for mcmc 
         self.init_opacity = 0.1 # 0.1 for 3dgs, 0.5 for mcmc
-
-
 
         super().__init__(parser, "Loading Parameters", sentinel)
 
@@ -145,11 +142,14 @@ class OptimizationParams(ParamGroup):
         self.position_lr_final = 0.0000016
         self.position_lr_delay_mult = 0.01
         self.position_lr_max_steps = 30_000
+        self.slowdown = 1
+        
         self.normal_lr = 0.0025
         self.position_lr = 0.0025
         self.roughness_lr = 0.0025
         self.f0_lr = 0.0025
         self.feature_lr = 0.0025
+
         self.opacity_lr = 0.05
         self.scaling_lr = 0.005
         self.rotation_lr = 0.001
@@ -171,7 +171,7 @@ class OptimizationParams(ParamGroup):
         self.densify_grad_threshold = 0.0002
 
         self.densif_use_top_k = True
-        self.densif_final_num_gaussians = 400_000
+        self.densif_final_num_gaussians = 900_000
         self.densif_size_ranking_weight = 0.0
         self.densif_opacity_ranking_weight = 0.0
         self.densif_no_pruning_large_radii = False

@@ -46,7 +46,7 @@ def render(camera: Camera, raytracer: GaussianRaytracer, pipe_params: PipelinePa
 
     class package:
         "All of these results are reshaped to (C, H, W)"
-        
+
         rgb = raytracer.cuda_raytracer.output_rgb.clone().detach().moveaxis(-1, 1)
 
         if raytracer.cuda_raytracer.output_position is not None:

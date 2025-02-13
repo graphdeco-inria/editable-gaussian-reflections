@@ -90,9 +90,7 @@ def training_report(tb_writer, iteration, elpased):
                     gt_image = torch.clamp(viewpoint.original_image, 0.0, 1.0)
                     if tb_writer and (idx < 5): 
                         save_image(torch.stack([diffuse_image, diffuse_gt_image, glossy_image, glossy_gt_image, pred_image, gt_image]), tb_writer.log_dir + "/" + f"{config['name']}_view/iter_{iteration:09}_{idx}.png", nrow=2)
-                    diffuse_l1_test += l1_loss(diffuse_image, diffuse_gt_image).mean().double()
-                    diffuse_psnr_test += psnr(diffuse_image, diffuse_gt_image).mean().double()
-
+                    
                     roughness_image = torch.clamp(package.roughness[0], 0.0, 1.0)
                     normal_image = torch.clamp(package.normal[0] / 2 + 0.5, 0.0, 1.0) 
                     position_image = torch.clamp(package.position[0], 0.0, 1.0)
@@ -108,6 +106,14 @@ def training_report(tb_writer, iteration, elpased):
                         brdf_gt_image = torch.clamp(viewpoint.sample_brdf_image(), 0.0, 1.0)
                         
                     if tb_writer and (idx < 5): 
+                        if package.rgb.shape[0] > 2:
+                            for k, (rgb_img, normal_img, pos_image,F0_image, brdf_image) in enumerate(zip(package.rgb, package.normal, package.position, package.F0, package.brdf)):
+                                save_image(rgb_img, tb_writer.log_dir + "/" + f"{config['name']}_view/iter_{iteration:09}_{idx}_rgb_bounce_{k}.png")
+                                save_image(torch.clamp(normal_img / 2 + 0.5, 0.0, 1.0), tb_writer.log_dir + "/" + f"{config['name']}_view/iter_{iteration:09}_{idx}_normal_bounce_{k}.png")
+                                save_image(torch.clamp(F0_image, 0.0, 1.0), tb_writer.log_dir + "/" + f"{config['name']}_view/iter_{iteration:09}_{idx}_F0_bounce_{k}.png")
+                                save_image(torch.clamp(pos_image, 0.0, 1.0), tb_writer.log_dir + "/" + f"{config['name']}_view/iter_{iteration:09}_{idx}_pos_bounce_{k}.png")
+                                save_image(torch.clamp(brdf_image, 0.0, 1.0), tb_writer.log_dir + "/" + f"{config['name']}_view/iter_{iteration:09}_{idx}_brdf_bounce_{k}.png")
+
                         save_image(torch.stack([roughness_image.cuda(), roughness_gt_image]), tb_writer.log_dir + "/" + f"{config['name']}_view/iter_{iteration:09}_{idx}_roughness.png", nrow=2, padding=0)
                         save_image(torch.stack([F0_image.cuda(), F0_gt_image]), tb_writer.log_dir + "/" + f"{config['name']}_view/iter_{iteration:09}_{idx}_F0.png", nrow=2, padding=0)
                         save_image(torch.stack([pred_image, gt_image]), tb_writer.log_dir + "/" + f"{config['name']}_view/iter_{iteration:09}_{idx}_final.png", nrow=2, padding=0)
@@ -117,7 +123,9 @@ def training_report(tb_writer, iteration, elpased):
                         save_image(torch.stack([normal_image.cuda(), normal_gt_image]), tb_writer.log_dir + "/" + f"{config['name']}_view/iter_{iteration:09}_{idx}_normal.png", nrow=2, padding=0)
                         if model_params.brdf_mode != "disabled":
                             save_image(torch.stack([brdf_image, brdf_gt_image.cuda()]), tb_writer.log_dir + "/" + f"{config['name']}_view/iter_{iteration:09}_{idx}_brdf.png", nrow=2, padding=0)
-
+                
+                    diffuse_l1_test += l1_loss(diffuse_image, diffuse_gt_image).mean().double()
+                    diffuse_psnr_test += psnr(diffuse_image, diffuse_gt_image).mean().double()
                     glossy_l1_test += l1_loss(glossy_image, glossy_gt_image).mean().double()
                     glossy_psnr_test += psnr(glossy_image, glossy_gt_image).mean().double()
                     l1_test += l1_loss(pred_image, gt_image).mean().double()
@@ -149,7 +157,7 @@ def training_report(tb_writer, iteration, elpased):
                     tb_writer.add_scalar(config['name'] + '/loss_viewpoint - diffuse_psnr', diffuse_psnr_test, iteration)
                 
                 with open(os.path.join(tb_writer.log_dir, f"losses_{config['name']}.csv"), "a") as f:
-                    f.write(f"{iteration}, {diffuse_psnr_test:02f}, {glossy_psnr_test:02f}, {psnr_test:02f}\n")
+                    f.write(f"{iteration:05d}, {diffuse_psnr_test:02.2f}, {glossy_psnr_test:02.2f}, {psnr_test:02.2f}\n")
 
         if tb_writer:
             tb_writer.add_histogram("scene/opacity_histogram", scene.gaussians.get_opacity, iteration)
@@ -167,7 +175,7 @@ parser.add_argument('--port', type=int, default=6009)
 parser.add_argument('--detect_anomaly', action='store_true', default=False)
 parser.add_argument('--flip_camera', action='store_true', default=False)
 # parser.add_argument("--test_iterations", nargs="+", type=int, default=[1, 100, 500, 1_000, 2_500, 5_000, 10_000, 20_000, 30_000, 60_000, 90_000])
-parser.add_argument("--test_iterations", nargs="+", type=int, default=[1, 1_000, 3_000, 5_000, 10_000, 30_000, 60_000, 90_000])
+parser.add_argument("--test_iterations", nargs="+", type=int, default=[1, 1_000, 5_000, 10_000, 20_000, 30_000, 60_000, 90_000])
 parser.add_argument("--save_iterations", nargs="+", type=int, default=[1, 7_000, 30_000, 60_000, 90_000])
 parser.add_argument("--quiet", action="store_true")
 parser.add_argument("--viewer", action="store_true")
@@ -180,6 +188,12 @@ model_params = lp.extract(args)
 opt_params = op.extract(args)
 pipe_params = pp.extract(args)
 
+if opt_params.slowdown != 1:
+    opt_params.iterations = int(opt_params.slowdown * opt_params.iterations)
+    opt_params.densification_interval = int(opt_params.slowdown * opt_params.densification_interval)
+    opt_params.position_lr_max_steps = int(opt_params.slowdown * opt_params.position_lr_max_steps)
+    opt_params.densify_from_iter = int(opt_params.slowdown * opt_params.densify_from_iter)
+    opt_params.densify_until_iter = int(opt_params.slowdown * opt_params.densify_until_iter)
 
 print("Optimizing " + args.model_path)
 
@@ -196,6 +210,7 @@ tb_writer = prepare_output_and_logger(model_params, opt_params)
 gaussians = GaussianModel(model_params)
 scene = Scene(model_params, gaussians)
 gaussians.training_setup(opt_params)
+
 
 if args.start_checkpoint:
     (model_params, first_iter) = torch.load(args.start_checkpoint)
