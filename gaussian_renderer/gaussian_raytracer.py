@@ -47,6 +47,9 @@ class GaussianRaytracer:
         import raytracer_config
         self.config = raytracer_config
 
+        self.cuda_raytracer.set_blur_kernel_bandwidth(pc.model_params.blur_kernel_bandwidth)
+        torch.cuda.synchronize()
+
     @torch.no_grad()
     def rebuild_bvh(self):
         new_size = self.pc._xyz.shape[0]
@@ -65,6 +68,8 @@ class GaussianRaytracer:
         self.cuda_raytracer.gaussian_rotations.copy_(self.pc._rotation)
         self.cuda_raytracer.gaussian_means.copy_(self.pc._xyz)
         self.cuda_raytracer.gaussian_opacity.copy_(self.pc._opacity)
+        if self.cuda_raytracer.gaussian_assigned_blur_level is not None:
+            self.cuda_raytracer.gaussian_assigned_blur_level.copy_(self.pc._assigned_blur_level)
         self.cuda_raytracer.gaussian_rgb.copy_(self.pc._diffuse)
         if self.cuda_raytracer.gaussian_position is not None:
             self.cuda_raytracer.gaussian_position.copy_(self.pc._position)
@@ -79,6 +84,8 @@ class GaussianRaytracer:
     def _import_param_gradients(self):
         self.pc._xyz.grad.add_(self.cuda_raytracer.gaussian_means.grad)
         self.pc._opacity.grad.add_(self.cuda_raytracer.gaussian_opacity.grad)
+        if self.cuda_raytracer.gaussian_assigned_blur_level is not None:
+            self.pc._assigned_blur_level.grad.add_(self.cuda_raytracer.gaussian_assigned_blur_level.grad)
         self.pc._scaling.grad.add_(self.cuda_raytracer.gaussian_scales.grad)
         self.pc._rotation.grad.add_(self.cuda_raytracer.gaussian_rotations.grad)
         self.pc._diffuse.grad.add_(self.cuda_raytracer.gaussian_rgb.grad)
@@ -98,8 +105,8 @@ class GaussianRaytracer:
         self.cuda_raytracer.gaussian_rotations.grad.zero_()
         self.cuda_raytracer.gaussian_means.grad.zero_()
         # 
-        if self.cuda_raytracer.gaussian_scalespace_level is not None:
-            self.cuda_raytracer.gaussian_scalespace_level.grad.zero_()
+        if self.cuda_raytracer.gaussian_assigned_blur_level is not None:
+            self.cuda_raytracer.gaussian_assigned_blur_level.grad.zero_()
         if self.cuda_raytracer.gaussian_position is not None:
             self.cuda_raytracer.gaussian_position.grad.zero_()
         if self.cuda_raytracer.gaussian_normal is not None:
