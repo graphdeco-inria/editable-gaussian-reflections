@@ -26,6 +26,7 @@ import shutil
 import math 
 import numpy as np 
 import torch.nn.functional as F
+from scene.tonemapping import * 
 
 @torch.no_grad()
 def render_set(model_params, model_path, split, iteration, views, gaussians, pipeline, background, raytracer):
@@ -173,7 +174,7 @@ def render_set(model_params, model_path, split, iteration, views, gaussians, pip
             image = F.interpolate(image[None], (image.shape[-2] // 2 * 2, image.shape[-1] // 2 * 2), mode="bilinear")[0]
             return (image.clamp(0, 1) * 255).to(torch.uint8).moveaxis(0, -1).cpu()
 
-        pred_image = torch.clamp(package.rgb.sum(dim=0), 0.0, 1.0)
+        pred_image = torch.clamp(tonemap(untonemap(package.rgb).sum(dim=0)), 0.0, 1.0)
         torchvision.utils.save_image(pred_image, os.path.join(render_path, '{0:05d}'.format(idx) + ".png"))
 
         all_renders.append(format_image(pred_image))

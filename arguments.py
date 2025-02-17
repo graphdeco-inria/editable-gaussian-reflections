@@ -92,13 +92,16 @@ class ModelParams(ParamGroup):
         self.num_init_points = 100_000 # 100_000
         self.opacity_modulation = False
 
+        self.min_gaussian_size = 0.0
+        self.znear_init_pruning = True
+
         self.mcmc_densify = False
         self.mcmc_densify_disable_custom_init = False
         self.mcmc_skip_relocate = False
         self.force_mcmc_custom_init = True
 
-        self.init_blur_level_prob_0 = 0.5 
-        self.init_blur_level_max_value = 3.0
+        self.init_blur_level_prob_0 = 0.7 # todo all points in the rest of the scene, set to random values 
+        self.init_blur_level_max_value = 3.0 
         self.blur_kernel_bandwidth = 0.2
 
         self.warmup = -1
@@ -113,7 +116,7 @@ class ModelParams(ParamGroup):
         self.downsampling_mode = "area"
 
         self.linear_space = True
-        self.exposure = 5 # note: use 10 for one bounce image
+        self.exposure = 1 # was 5 before tonemapping
         self.raytrace_primal = False
 
         self.opacity_pruning_threshold = 0.005 # 0.051 # 
@@ -123,6 +126,18 @@ class ModelParams(ParamGroup):
 
         self.init_scale_factor = 1.0 # 1.0 for 3dgs, 0.1 for mcmc 
         self.init_opacity = 0.1 # 0.1 for 3dgs, 0.5 for mcmc
+
+        self.diffuse_loss_weight = 1.0
+        self.glossy_loss_weight = 1.0
+        self.normal_loss_weight = 1.0
+        self.position_loss_weight = 1.0
+        self.f0_loss_weight = 1.0
+        self.roughness_loss_weight = 1.0
+        self.specular_loss_weight = 1.0
+        self.albedo_loss_weight = 1.0
+        self.metalness_loss_weight = 1.0
+
+        self.add_mcmc_noise = False
 
         super().__init__(parser, "Loading Parameters", sentinel)
 
@@ -154,10 +169,11 @@ class OptimizationParams(ParamGroup):
         self.f0_lr = 0.0025
         self.feature_lr = 0.0025
 
+        self.assigned_blur_level_lr = 0.0025
+
         self.opacity_lr = 0.05
         self.scaling_lr = 0.005
         self.rotation_lr = 0.001
-        self.assigned_blur_level_lr = 0.000 #!!!!!!!!
         self._brdf_lut_lr = 0.001
         self.percent_dense = 0.01
         self.lambda_dssim = 0.2
@@ -176,7 +192,7 @@ class OptimizationParams(ParamGroup):
         self.densify_grad_threshold = 0.0002
 
         self.densif_use_top_k = True
-        self.densif_final_num_gaussians = 900_000
+        self.densif_final_num_gaussians = 500_000
         self.densif_size_ranking_weight = 0.0
         self.densif_opacity_ranking_weight = 0.0
         self.densif_no_pruning_large_radii = False
@@ -184,8 +200,13 @@ class OptimizationParams(ParamGroup):
         self.densif_split_clone_ratio = 0.2
         self.densif_use_3d_gradients = False
 
+        self.densif_no_cloning = False
+        self.densif_no_splitting = False
+        self.densif_pruning_only = False
+
         self.sh_slowdown_factor = 20.0
         self.random_background = False
+
 
         super().__init__(parser, "Optimization Parameters")
 

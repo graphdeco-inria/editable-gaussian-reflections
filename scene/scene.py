@@ -82,10 +82,58 @@ class Scene:
 
         print(f"I have {len(self.train_cameras)} cameras")
 
+
+        ## Remove all init points that are too close to the camera
+        if gaussians.model_params.znear_init_pruning:
+            self.autoadjust_znear()
+
+            points_to_prune = torch.zeros(scene_info_synthetic.point_cloud.points.shape[0], dtype=torch.bool, device="cuda")
+
+            points = torch.from_numpy(scene_info_synthetic.point_cloud.points).cuda().float()
+
+            for camera in self.train_cameras[1.0]:
+                if isinstance(camera.R, torch.Tensor):
+                    R = camera.R.cuda().float()
+                else:
+                    R = torch.from_numpy(camera.R).cuda().float()
+                if isinstance(camera.camera_center, torch.Tensor):
+                    T = camera.camera_center
+                else:
+                    T = torch.from_numpy(camera.camera_center)
+
+                if False:
+                    points_world = gaussians.get_xyz
+                    R_c2w_blender = -R 
+                    R_c2w_blender[:, 0] = -R_c2w_blender[:, 0]
+                    points_local = (R_c2w_blender.T @ (points_world - T).T).T
+                    
+                    x_size = math.tan(camera.FoVx / 2)
+                    y_size = math.tan(camera.FoVy / 2)
+                    
+                    x = points_local[:, 0]
+                    y = points_local[:, 1]
+                    z = points_local[:, 2]
+                    in_frustrum_cone = (x / z > -x_size) & (x / z < x_size) & (y / z > -y_size) & (y / z < y_size)
+                    points_to_prune = ~in_frustrum_cone | (in_frustrum_cone & (-z > camera.znear))
+                else:
+                    points_dist_to_camera = (points - T).norm(dim=1)
+                    too_close = points_dist_to_camera < camera.znear
+
+                    points_to_prune |= too_close
+            
+            print(f"Pruned {points_to_prune.float().mean() * 100:.2f}% of the extra init points since they are too close to the cameras.")
+            extra_points = scene_info_synthetic.point_cloud.points[(~points_to_prune).cpu().numpy()]
+            extra_colors = scene_info_synthetic.point_cloud.colors[(~points_to_prune).cpu().numpy()]
+            extra_normals = scene_info_synthetic.point_cloud.normals[(~points_to_prune).cpu().numpy()]
+        else:
+            extra_points = scene_info_synthetic.point_cloud.points
+            extra_colors = scene_info_synthetic.point_cloud.colors
+            extra_normals = scene_info_synthetic.point_cloud.normals
+
         scene_info.point_cloud = BasicPointCloud(
-            np.concatenate([scene_info.point_cloud.points, scene_info_synthetic.point_cloud.points]),
-            np.concatenate([scene_info.point_cloud.colors, scene_info_synthetic.point_cloud.colors]),
-            np.concatenate([scene_info.point_cloud.normals, scene_info_synthetic.point_cloud.normals]),
+            np.concatenate([scene_info.point_cloud.points, extra_points]),
+            np.concatenate([scene_info.point_cloud.colors, extra_colors]),
+            np.concatenate([scene_info.point_cloud.normals, extra_normals])
         )
 
         if self.loaded_iter:
@@ -95,6 +143,34 @@ class Scene:
                                                            "point_cloud.ply"))
         else:
             self.gaussians.create_from_pcd(scene_info.point_cloud, self.cameras_extent)
+
+    @torch.no_grad()
+    def autoadjust_znear(self):
+        for camera in self.train_cameras[1.0]:
+            R = torch.from_numpy(camera.R).cuda().float()
+            T = camera.camera_center
+            
+
+            if False:
+                points_world = torch.from_numpy(self.scene_info.point_cloud.points).cuda().float()
+                R_c2w_blender = -R 
+                R_c2w_blender[:, 0] = -R_c2w_blender[:, 0]
+                
+                points_local = (R_c2w_blender.T @ (points_world - T).T).T
+                
+                x_size = math.tan(camera.FoVx / 2)
+                y_size = math.tan(camera.FoVy / 2)
+                
+                x = points_local[:, 0]
+                y = points_local[:, 1]
+                z = points_local[:, 2]
+                frustrum_mask = (-z > 0) & (x / z > -x_size) & (x / z < x_size) & (y / z > -y_size) & (y / z < y_size)
+                points_in_frustrum = points_local[frustrum_mask]
+                camera.znear = (-points_in_frustrum[:, 2]).quantile(self.modelParams.znear_quantile) * self.modelParams.znear_scale
+                camera.update()
+            else:
+                camera.znear = (camera._position_image - camera.camera_center[:, None, None]).norm(dim=0).amin() * 0.5 # * set to half of the nearest point
+                camera.update()
 
     def save(self, iteration):
         point_cloud_path = os.path.join(self.model_path, "point_cloud/iteration_{}".format(iteration))

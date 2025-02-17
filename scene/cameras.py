@@ -15,6 +15,8 @@ import numpy as np
 from utils.graphics_utils import getWorld2View2, getProjectionMatrix
 import os 
 
+from scene.tonemapping import *
+
 class Camera(nn.Module):
     def __init__(self, colmap_id, R, T, FoVx, FoVy, image, gt_alpha_mask,
                  image_name, uid,
@@ -39,8 +41,29 @@ class Camera(nn.Module):
         self.FoVy = FoVy
         self.image_name = image_name
 
-        self.diffuse_image = diffuse_image
-        self.glossy_image = glossy_image
+        self.original_image = tonemap(diffuse_image + glossy_image)
+        self.image_width = self.original_image.shape[2]
+        self.image_height = self.original_image.shape[1]
+
+        #*** optimized as tonemapped values, will need to be inverse the tonemapping before adding both passes
+        self.diffuse_image = tonemap(diffuse_image) 
+        self.glossy_image = tonemap(glossy_image) 
+
+        if "CLAMP01" in os.environ:
+            self.diffuse_image = self.diffuse_image.clamp(0.0, 1) 
+            self.glossy_image = self.glossy_image.clamp(0.0, 1) 
+
+        if "CLAMP21" in os.environ:
+            self.diffuse_image = self.diffuse_image.clamp(0.2, 1) 
+            self.glossy_image = self.glossy_image.clamp(0.2, 1) 
+
+        if "CLAMP28" in os.environ:
+            self.diffuse_image = self.diffuse_image.clamp(0.2, 0.8) 
+            self.glossy_image = self.glossy_image.clamp(0.2, 0.8) 
+
+        if "CLAMP51" in os.environ:
+            self.diffuse_image = self.diffuse_image.clamp(0.5, 1) 
+            self.glossy_image = self.glossy_image.clamp(0.5, 1) 
 
         self._normal_image = normal_image
         self._position_image = position_image
@@ -52,6 +75,7 @@ class Camera(nn.Module):
         # self.metalness_image = metalness_image 
         # self.specular_image = specular_image
 
+
         try:
             self.data_device = torch.device(data_device)
         except Exception as e:
@@ -59,9 +83,8 @@ class Camera(nn.Module):
             print(f"[Warning] Custom device {data_device} failed, fallback to default cuda device" )
             self.data_device = torch.device("cuda")
 
-        self.original_image = self.diffuse_image + self.glossy_image
-        self.image_width = self.original_image.shape[2]
-        self.image_height = self.original_image.shape[1]
+        
+        
 
         self.zfar = 100.0
         self.znear = 0.01
@@ -130,6 +153,12 @@ class Camera(nn.Module):
         self.focal_x = self.image_width / (2 * np.tan(self.FoVx * 0.5))
         self.focal_y = self.image_height / (2 * np.tan(self.FoVy * 0.5))
 
+    def update(self):
+        self.world_view_transform = torch.tensor(getWorld2View2(self.R, self.T, self.trans, self.scale)).transpose(0, 1).cuda()
+        self.projection_matrix = getProjectionMatrix(znear=self.znear, zfar=self.zfar, fovX=self.FoVx, fovY=self.FoVy).transpose(0,1).cuda()
+        self.full_proj_transform = (self.world_view_transform.unsqueeze(0).bmm(self.projection_matrix.unsqueeze(0))).squeeze(0)
+        self.camera_center = self.world_view_transform.cpu().inverse().cuda()[3, :3]
+        
 
 def _random_pool(x):
     patches = torch.nn.functional.unfold(x.unsqueeze(1), kernel_size=(3, 3), stride=(3, 3), padding=0) 

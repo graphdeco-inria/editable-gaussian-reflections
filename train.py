@@ -28,7 +28,8 @@ from utils.graphics_utils import BasicPointCloud
 from datetime import datetime
 import time
 from scene.gaussian_model import build_scaling_rotation
-
+import math 
+from scene.tonemapping import *
 try:
     from torch.utils.tensorboard import SummaryWriter
     TENSORBOARD_FOUND = True
@@ -85,7 +86,7 @@ def training_report(tb_writer, iteration, elpased):
                     diffuse_gt_image = torch.clamp(viewpoint.diffuse_image, 0.0, 1.0)
                     glossy_gt_image = torch.clamp(viewpoint.glossy_image, 0.0, 1.0)
                     normal_gt_image = torch.clamp(viewpoint.sample_normal_image() / 2 + 0.5, 0.0, 1.0)
-                    pred_image = package.rgb.sum(dim=0)
+                    pred_image = tonemap(untonemap(package.rgb).sum(dim=0))
 
                     gt_image = torch.clamp(viewpoint.original_image, 0.0, 1.0)
                     if tb_writer and (idx < 5): 
@@ -114,6 +115,11 @@ def training_report(tb_writer, iteration, elpased):
                                 save_image(torch.clamp(pos_image, 0.0, 1.0), tb_writer.log_dir + "/" + f"{config['name']}_view/iter_{iteration:09}_{idx}_pos_bounce_{k}.png")
                                 save_image(torch.clamp(brdf_image, 0.0, 1.0), tb_writer.log_dir + "/" + f"{config['name']}_view/iter_{iteration:09}_{idx}_brdf_bounce_{k}.png")
 
+                        if raytracer.config.SAVE_BLUR_LEVEL_IMAGES:
+                            for k, (assigned_blur_level, used_blur_level) in enumerate(zip(raytracer.cuda_raytracer.output_assigned_blur_level, raytracer.cuda_raytracer.output_used_blur_level)):
+                                save_image(assigned_blur_level.moveaxis(-1, 0), tb_writer.log_dir + "/" + f"{config['name']}_view/iter_{iteration:09}_{idx}_assigned_blur_level_{k}.png")
+                                save_image(used_blur_level.moveaxis(-1, 0), tb_writer.log_dir + "/" + f"{config['name']}_view/iter_{iteration:09}_{idx}_used_blur_level_{k}.png")
+
                         save_image(torch.stack([roughness_image.cuda(), roughness_gt_image]), tb_writer.log_dir + "/" + f"{config['name']}_view/iter_{iteration:09}_{idx}_roughness.png", nrow=2, padding=0)
                         save_image(torch.stack([F0_image.cuda(), F0_gt_image]), tb_writer.log_dir + "/" + f"{config['name']}_view/iter_{iteration:09}_{idx}_F0.png", nrow=2, padding=0)
                         save_image(torch.stack([pred_image, gt_image]), tb_writer.log_dir + "/" + f"{config['name']}_view/iter_{iteration:09}_{idx}_final.png", nrow=2, padding=0)
@@ -121,9 +127,11 @@ def training_report(tb_writer, iteration, elpased):
                         save_image(torch.stack([glossy_image, glossy_gt_image]), tb_writer.log_dir + "/" + f"{config['name']}_view/iter_{iteration:09}_{idx}_glossy.png", nrow=2, padding=0)
                         save_image(torch.stack([position_image.cuda(), position_gt_image]), tb_writer.log_dir + "/" + f"{config['name']}_view/iter_{iteration:09}_{idx}_position.png", nrow=2, padding=0)
                         save_image(torch.stack([normal_image.cuda(), normal_gt_image]), tb_writer.log_dir + "/" + f"{config['name']}_view/iter_{iteration:09}_{idx}_normal.png", nrow=2, padding=0)
+                        save_image(torch.stack([normal_image.cuda(), normal_gt_image]), tb_writer.log_dir + "/" + f"{config['name']}_view/iter_{iteration:09}_{idx}_normal.png", nrow=2, padding=0)
                         if model_params.brdf_mode != "disabled":
                             save_image(torch.stack([brdf_image, brdf_gt_image.cuda()]), tb_writer.log_dir + "/" + f"{config['name']}_view/iter_{iteration:09}_{idx}_brdf.png", nrow=2, padding=0)
-                
+
+
                     diffuse_l1_test += l1_loss(diffuse_image, diffuse_gt_image).mean().double()
                     diffuse_psnr_test += psnr(diffuse_image, diffuse_gt_image).mean().double()
                     glossy_l1_test += l1_loss(glossy_image, glossy_gt_image).mean().double()
@@ -209,6 +217,9 @@ tb_writer = prepare_output_and_logger(model_params, opt_params)
 
 gaussians = GaussianModel(model_params)
 scene = Scene(model_params, gaussians)
+
+if model_params.znear_init_pruning:
+    scene.autoadjust_znear()
 gaussians.training_setup(opt_params)
 
 
@@ -267,7 +278,8 @@ for iteration in tqdm(range(first_iter, opt_params.iterations + 1), desc="Traini
 
     with torch.no_grad():
         # Log and save
-        training_report(tb_writer, iteration, 0.0) #! buggy iter_start.elapsed_time(iter_end), RuntimeError: CUDA error: device not ready
+        #! buggy iter_start.elapsed_time(iter_end), RuntimeError: CUDA error: device not ready
+        training_report(tb_writer, iteration, 0.0) 
 
         if model_params.mcmc_densify :
             print("num nans in opacity grad:", gaussians.get_opacity.isnan().sum())
@@ -315,7 +327,11 @@ for iteration in tqdm(range(first_iter, opt_params.iterations + 1), desc="Traini
             gaussians.optimizer.zero_grad(set_to_none=False) # todo not sure if this set_to_none=False is still required
             raytracer.zero_grad()
 
-            if model_params.mcmc_densify:
+            if model_params.min_gaussian_size > 0:
+                with torch.no_grad():
+                    gaussians._scaling.data.clamp_(min=math.log(model_params.min_gaussian_size))
+
+            if model_params.mcmc_densify or model_params.add_mcmc_noise:
                 L = build_scaling_rotation(gaussians.get_scaling, gaussians.get_rotation)
                 actual_covariance = L @ L.transpose(1, 2)
 
@@ -326,12 +342,13 @@ for iteration in tqdm(range(first_iter, opt_params.iterations + 1), desc="Traini
                 noise = torch.bmm(actual_covariance, noise.unsqueeze(-1)).squeeze(-1)
                 gaussians._xyz.add_(noise)
 
-        if iteration in args.checkpoint_iterations:
-            print("\n[ITER {}] Saving Checkpoint".format(iteration))
-            torch.save((gaussians.capture(), iteration), scene.model_path + "/chkpnt" + str(iteration) + ".pth")
+        if False:
+            if iteration in args.checkpoint_iterations:
+                print("\n[ITER {}] Saving Checkpoint".format(iteration))
+                torch.save((gaussians.capture(), iteration), scene.model_path + "/chkpnt" + str(iteration) + ".pth")
 
 
 # All done
 print("\nTraining complete.")
 
-os.system(f"python render.py --start_checkpoint {scene.model_path}/chkpnt{iteration}.pth " + " ".join(sys.argv[1:]))
+# os.system(f"python render.py --start_checkpoint {scene.model_path}/chkpnt{iteration}.pth " + " ".join(sys.argv[1:]))

@@ -723,31 +723,41 @@ class GaussianModel:
         padded_grad[:grads.shape[0]] = grads.squeeze()
         largest_axis_size = self.get_scaling.max(dim=1).values
 
-        grad_ranking = torch.argsort(torch.argsort(padded_grad)) / num_gaussians_before_densification
-        size_ranking = torch.argsort(torch.argsort(largest_axis_size)) / num_gaussians_before_densification
-        opacity_ranking = torch.argsort(torch.argsort(self.get_opacity.squeeze())) / num_gaussians_before_densification
-        score = grad_ranking + size_ranking*opt.densif_size_ranking_weight + size_ranking*opt.densif_opacity_ranking_weight
-        
-        target = self.schedule[self.num_densification_steps]
-        k = target - num_gaussians_before_densification 
-        
-        target = num_gaussians_before_densification + k
-
-        indices_to_densify = torch.topk(score, k).indices
-
-        if opt.densif_use_fixed_split_clone_ratio: 
-            scale_threshold = torch.quantile(largest_axis_size[indices_to_densify], q=1.0 - opt.densif_split_clone_ratio) 
+        if opt.densif_pruning_only:
+            trace = ""
         else:
-            scale_threshold = self.percent_dense * extent
+            grad_ranking = torch.argsort(torch.argsort(padded_grad)) / num_gaussians_before_densification
+            size_ranking = torch.argsort(torch.argsort(largest_axis_size)) / num_gaussians_before_densification
+            opacity_ranking = torch.argsort(torch.argsort(self.get_opacity.squeeze())) / num_gaussians_before_densification
+            score = grad_ranking + size_ranking*opt.densif_size_ranking_weight + size_ranking*opt.densif_opacity_ranking_weight
+            
+            target = self.schedule[self.num_densification_steps]
+            k = target - num_gaussians_before_densification 
+            
+            target = num_gaussians_before_densification + k
 
-        indices_to_clone = indices_to_densify[largest_axis_size[indices_to_densify] < scale_threshold]
-        indices_to_split = indices_to_densify[largest_axis_size[indices_to_densify] >= scale_threshold]
+            indices_to_densify = torch.topk(score, k).indices
 
-        self.densify_and_clone_top_k(opt, indices_to_clone) 
-        self.densify_and_split_top_k(opt, indices_to_split)
+            if opt.densif_use_fixed_split_clone_ratio: 
+                scale_threshold = torch.quantile(largest_axis_size[indices_to_densify], q=1.0 - opt.densif_split_clone_ratio) 
+            else:
+                scale_threshold = self.percent_dense * extent
 
-        trace = f"Step {self.num_densification_steps} :: Init: {num_gaussians_before_pruning}; After Pruning: {num_gaussians_before_densification}; After Densification: {self.get_xyz.shape[0]}; Target: {target}\n"
-        print(trace)
+            assert not (opt.densif_no_cloning and opt.densif_no_splitting)
+
+            if opt.densif_no_splitting:
+                self.densify_and_clone_top_k(opt, indices_to_densify)
+            elif opt.densif_no_cloning:
+                self.densify_and_split_top_k(opt, indices_to_densify)
+            else:
+                indices_to_clone = indices_to_densify[largest_axis_size[indices_to_densify] < scale_threshold]
+                indices_to_split = indices_to_densify[largest_axis_size[indices_to_densify] >= scale_threshold]
+
+                self.densify_and_clone_top_k(opt, indices_to_clone) 
+                self.densify_and_split_top_k(opt, indices_to_split)
+
+            trace = f"Step {self.num_densification_steps} :: Init: {num_gaussians_before_pruning}; After Pruning: {num_gaussians_before_densification}; After Densification: {self.get_xyz.shape[0]}; Target: {target}\n"
+            print(trace)
 
         torch.cuda.empty_cache()  
         

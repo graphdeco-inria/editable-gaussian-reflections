@@ -35,6 +35,18 @@ class GaussianRaytracer:
             pc.get_scaling.shape[0]
         )
 
+        os.environ["DIFFUSE_LOSS_WEIGHT"] = str(pc.model_params.diffuse_loss_weight)
+        os.environ["GLOSSY_LOSS_WEIGHT"] = str(pc.model_params.glossy_loss_weight)
+        os.environ["NORMAL_LOSS_WEIGHT"] = str(pc.model_params.normal_loss_weight)
+        os.environ["POSITION_LOSS_WEIGHT"] = str(pc.model_params.position_loss_weight)
+        os.environ["F0_LOSS_WEIGHT"] = str(pc.model_params.f0_loss_weight)
+        os.environ["ROUGHNESS_LOSS_WEIGHT"] = str(pc.model_params.roughness_loss_weight)
+        os.environ["SPECULAR_LOSS_WEIGHT"] = str(pc.model_params.specular_loss_weight)
+        os.environ["ALBEDO_LOSS_WEIGHT"] = str(pc.model_params.albedo_loss_weight)
+        os.environ["METALNESS_LOSS_WEIGHT"] = str(pc.model_params.metalness_loss_weight)
+
+        self.cuda_raytracer.set_losses(True)
+
         self.pc = pc
 
         self._export_param_values()
