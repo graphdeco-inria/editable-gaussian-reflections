@@ -99,7 +99,7 @@ class Camera(nn.Module):
 
         self.random_pool = random_pool
 
-    def sample_position_image(self):
+    def get_position_image(self):
         if self.random_pool:
             if torch.is_grad_enabled():
                 return _random_pool(self._position_image)
@@ -108,7 +108,7 @@ class Camera(nn.Module):
         else:
             return self._position_image
 
-    def sample_normal_image(self):
+    def get_normal_image(self):
         if self.random_pool:
             if torch.is_grad_enabled():
                 return _random_pool(self._normal_image)
@@ -117,7 +117,7 @@ class Camera(nn.Module):
         else:
             return self._normal_image
         
-    def sample_roughness_image(self):
+    def get_roughness_image(self):
         if self.random_pool:
             if torch.is_grad_enabled():
                 return _random_pool(self._roughness_image)
@@ -126,7 +126,7 @@ class Camera(nn.Module):
         else:
             return self._roughness_image
         
-    def sample_brdf_image(self):
+    def get_brdf_image(self):
         if self.random_pool:
             if torch.is_grad_enabled():
                 return _random_pool(self._brdf_image)
@@ -135,7 +135,7 @@ class Camera(nn.Module):
         else:
             return self._brdf_image
         
-    def sample_F0_image(self):
+    def get_F0_image(self):
         if self.random_pool:
             if torch.is_grad_enabled():
                 return _random_pool(self._F0_image)

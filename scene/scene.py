@@ -84,42 +84,12 @@ class Scene:
 
 
         ## Remove all init points that are too close to the camera
-        if gaussians.model_params.znear_init_pruning:
+        if gaussians.model_params.znear_init_pruning or gaussians.model_params.znear_densif_pruning:
             self.autoadjust_znear()
-
-            points_to_prune = torch.zeros(scene_info_synthetic.point_cloud.points.shape[0], dtype=torch.bool, device="cuda")
-
+        
+        if gaussians.model_params.znear_init_pruning:
             points = torch.from_numpy(scene_info_synthetic.point_cloud.points).cuda().float()
-
-            for camera in self.train_cameras[1.0]:
-                if isinstance(camera.R, torch.Tensor):
-                    R = camera.R.cuda().float()
-                else:
-                    R = torch.from_numpy(camera.R).cuda().float()
-                if isinstance(camera.camera_center, torch.Tensor):
-                    T = camera.camera_center
-                else:
-                    T = torch.from_numpy(camera.camera_center)
-
-                if False:
-                    points_world = gaussians.get_xyz
-                    R_c2w_blender = -R 
-                    R_c2w_blender[:, 0] = -R_c2w_blender[:, 0]
-                    points_local = (R_c2w_blender.T @ (points_world - T).T).T
-                    
-                    x_size = math.tan(camera.FoVx / 2)
-                    y_size = math.tan(camera.FoVy / 2)
-                    
-                    x = points_local[:, 0]
-                    y = points_local[:, 1]
-                    z = points_local[:, 2]
-                    in_frustrum_cone = (x / z > -x_size) & (x / z < x_size) & (y / z > -y_size) & (y / z < y_size)
-                    points_to_prune = ~in_frustrum_cone | (in_frustrum_cone & (-z > camera.znear))
-                else:
-                    points_dist_to_camera = (points - T).norm(dim=1)
-                    too_close = points_dist_to_camera < camera.znear
-
-                    points_to_prune |= too_close
+            points_to_prune = self.select_points_to_prune_near_cameras(points)
             
             print(f"Pruned {points_to_prune.float().mean() * 100:.2f}% of the extra init points since they are too close to the cameras.")
             extra_points = scene_info_synthetic.point_cloud.points[(~points_to_prune).cpu().numpy()]
@@ -144,12 +114,52 @@ class Scene:
         else:
             self.gaussians.create_from_pcd(scene_info.point_cloud, self.cameras_extent)
 
+
+        self.gaussians.scene = self
+
+    def select_points_to_prune_near_cameras(self, points):
+        points_to_prune = torch.zeros(points.shape[0], dtype=torch.bool, device="cuda")
+
+        if "SKIPZNEAR" in os.environ:
+            return points_to_prune
+
+        for camera in self.train_cameras[1.0]:
+            if isinstance(camera.R, torch.Tensor):
+                R = camera.R.cuda().float()
+            else:
+                R = torch.from_numpy(camera.R).cuda().float()
+            if isinstance(camera.camera_center, torch.Tensor):
+                T = camera.camera_center
+            else:
+                T = torch.from_numpy(camera.camera_center)
+
+            if False:
+                points_world = gaussians.get_xyz
+                R_c2w_blender = -R 
+                R_c2w_blender[:, 0] = -R_c2w_blender[:, 0]
+                points_local = (R_c2w_blender.T @ (points_world - T).T).T
+                
+                x_size = math.tan(camera.FoVx / 2)
+                y_size = math.tan(camera.FoVy / 2)
+                
+                x = points_local[:, 0]
+                y = points_local[:, 1]
+                z = points_local[:, 2]
+                in_frustrum_cone = (x / z > -x_size) & (x / z < x_size) & (y / z > -y_size) & (y / z < y_size)
+                points_to_prune = ~in_frustrum_cone | (in_frustrum_cone & (-z > camera.znear))
+            else:
+                points_dist_to_camera = (points - T).norm(dim=1)
+                too_close = points_dist_to_camera < camera.znear
+
+                points_to_prune |= too_close
+
+        return points_to_prune
+
     @torch.no_grad()
     def autoadjust_znear(self):
         for camera in self.train_cameras[1.0]:
             R = torch.from_numpy(camera.R).cuda().float()
             T = camera.camera_center
-            
 
             if False:
                 points_world = torch.from_numpy(self.scene_info.point_cloud.points).cuda().float()
@@ -169,7 +179,7 @@ class Scene:
                 camera.znear = (-points_in_frustrum[:, 2]).quantile(self.modelParams.znear_quantile) * self.modelParams.znear_scale
                 camera.update()
             else:
-                camera.znear = (camera._position_image - camera.camera_center[:, None, None]).norm(dim=0).amin() * 0.5 # * set to half of the nearest point
+                camera.znear = (camera._position_image - camera.camera_center[:, None, None]).norm(dim=0).amin() * self.model_params.znear_pruning_scale # * set to half of the nearest point
                 camera.update()
 
     def save(self, iteration):

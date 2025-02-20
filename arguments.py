@@ -63,7 +63,8 @@ class ModelParams(ParamGroup):
         self._white_background = False
         self.data_device = "cuda"
         self.eval = False
-        self.glossy_bbox_size_mult = 4.0
+        self.glossy_bbox_size_mult = 8.0
+        self.scene_extent_multiplier = 5.0
         self.num_feat_per_gaussian_channel = 16 
          
         self.brdf_mode: Literal["disabled", "gt", "static_lut"] = "gt"  # "finetuned_lut" is legacy, no longer works
@@ -92,17 +93,22 @@ class ModelParams(ParamGroup):
         self.num_init_points = 100_000 # 100_000
         self.opacity_modulation = False
 
-        self.min_gaussian_size = 0.0
+        self.min_gaussian_size = 0.0 
+        self.min_opacity = 0.005
+
+        #!!!!!!!!!!!!!! disabled for now
         self.znear_init_pruning = True
+        self.znear_pruning_scale = 0.8
+        self.znear_densif_pruning = True # todo not yet implemented, might not be necessary
 
         self.mcmc_densify = False
         self.mcmc_densify_disable_custom_init = False
         self.mcmc_skip_relocate = False
-        self.force_mcmc_custom_init = True
+        self.force_mcmc_custom_init = False #! was true
 
-        self.init_blur_level_prob_0 = 0.7 # todo all points in the rest of the scene, set to random values 
-        self.init_blur_level_max_value = 3.0 
-        self.blur_kernel_bandwidth = 0.2
+        self.init_lod_prob_0 = 0.7 # todo all points in the rest of the scene, set to random values 
+        self.init_lod_mean_max_value = 3.0 
+        self.init_lod_scale = 1.0
 
         self.warmup = -1
 
@@ -116,7 +122,7 @@ class ModelParams(ParamGroup):
         self.downsampling_mode = "area"
 
         self.linear_space = True
-        self.exposure = 1 # was 5 before tonemapping
+        self.exposure = 5 if "NO_TONEMAPPING" in os.environ else 1.0
         self.raytrace_primal = False
 
         self.opacity_pruning_threshold = 0.005 # 0.051 # 
@@ -136,6 +142,8 @@ class ModelParams(ParamGroup):
         self.specular_loss_weight = 1.0
         self.albedo_loss_weight = 1.0
         self.metalness_loss_weight = 1.0
+
+        self.max_opacity = 1.0
 
         self.add_mcmc_noise = False
 
@@ -169,7 +177,8 @@ class OptimizationParams(ParamGroup):
         self.f0_lr = 0.0025
         self.feature_lr = 0.0025
 
-        self.assigned_blur_level_lr = 0.0025
+        self.lod_mean_lr = 0.005
+        self.lod_scale_lr = 0.005
 
         self.opacity_lr = 0.05
         self.scaling_lr = 0.005
@@ -184,6 +193,9 @@ class OptimizationParams(ParamGroup):
         self.noise_lr = 5e5
         self.scale_reg = 0.01
         self.opacity_reg = 0.01
+
+        self.densif_scaledown_clones = False
+        self.densif_jitter_clones = False
 
         self.densification_interval = 100
         self.opacity_reset_interval = 3000
@@ -200,9 +212,12 @@ class OptimizationParams(ParamGroup):
         self.densif_split_clone_ratio = 0.2
         self.densif_use_3d_gradients = False
 
+        self.densif_no_pruning = False
         self.densif_no_cloning = False
         self.densif_no_splitting = False
         self.densif_pruning_only = False
+
+        self.densif_skip_big_points_ws = False
 
         self.sh_slowdown_factor = 20.0
         self.random_background = False
@@ -216,7 +231,7 @@ def get_combined_args(parser : ArgumentParser):
     args_cmdline = parser.parse_args(cmdlne_string)
 
     try:
-        cfgfilepath = os.path.join(args_cmdline.model_path, "cfg_args")
+        cfgfilepath = os.path.join(args_cmdline.model_path, "model_params")
         print("Looking for config file in", cfgfilepath)
         with open(cfgfilepath) as cfg_file:
             print("Config file found: {}".format(cfgfilepath))

@@ -146,29 +146,30 @@ def render_set(model_params, model_path, split, iteration, views, gaussians, pip
         diffuse_gt_image = torch.clamp(view.diffuse_image, 0.0, 1.0)
         glossy_gt_image = torch.clamp(view.glossy_image, 0.0, 1.0)
         gt_image = torch.clamp(view.original_image, 0.0, 1.0)
-        position_gt_image = view.sample_position_image()
-        normal_gt_image = view.sample_normal_image()
-        roughness_gt_image = view.sample_roughness_image()
-        F0_gt_image = view.sample_F0_image()
-            
-        torchvision.utils.save_image(gt_image, os.path.join(gts_path, '{0:05d}'.format(idx) + ".png"))
-        torchvision.utils.save_image(package.rgb[0:1], os.path.join(diffuse_render_path, '{0:05d}'.format(idx) + ".png"))
-        torchvision.utils.save_image(diffuse_gt_image, os.path.join(diffuse_gts_path, '{0:05d}'.format(idx) + ".png"))
-
-        torchvision.utils.save_image(package.rgb[1:].sum(dim=0, keepdim=True), os.path.join(glossy_render_path, '{0:05d}'.format(idx) + ".png"))
-        torchvision.utils.save_image(glossy_gt_image, os.path.join(glossy_gts_path, '{0:05d}'.format(idx) + ".png"))
-
-        torchvision.utils.save_image(package.position, os.path.join(position_path, '{0:05d}'.format(idx) + "_position.png"))
-        torchvision.utils.save_image(position_gt_image, os.path.join(position_gts_path, '{0:05d}'.format(idx) + "_position.png"))
+        position_gt_image = view.get_position_image()
+        normal_gt_image = view.get_normal_image()
+        roughness_gt_image = view.get_roughness_image()
+        F0_gt_image = view.get_F0_image()
         
-        torchvision.utils.save_image(package.normal / 2 + 0.5, os.path.join(normal_path, '{0:05d}'.format(idx) + "_normal.png"))
-        torchvision.utils.save_image(normal_gt_image / 2 + 0.5, os.path.join(normal_gts_path, '{0:05d}'.format(idx) + "_normal.png"))
+        if args.save_frames:
+            torchvision.utils.save_image(gt_image, os.path.join(gts_path, '{0:05d}'.format(idx) + ".png"))
+            torchvision.utils.save_image(package.rgb[0:1], os.path.join(diffuse_render_path, '{0:05d}'.format(idx) + ".png"))
+            torchvision.utils.save_image(diffuse_gt_image, os.path.join(diffuse_gts_path, '{0:05d}'.format(idx) + ".png"))
 
-        torchvision.utils.save_image(package.roughness, os.path.join(roughness_path, '{0:05d}'.format(idx) + "_roughness.png"))
-        torchvision.utils.save_image(roughness_gt_image, os.path.join(roughness_gts_path, '{0:05d}'.format(idx) + "_roughness.png"))
+            torchvision.utils.save_image(package.rgb[1:].sum(dim=0, keepdim=True), os.path.join(glossy_render_path, '{0:05d}'.format(idx) + ".png"))
+            torchvision.utils.save_image(glossy_gt_image, os.path.join(glossy_gts_path, '{0:05d}'.format(idx) + ".png"))
 
-        torchvision.utils.save_image(package.F0, os.path.join(F0_path, '{0:05d}'.format(idx) + "_F0.png"))
-        torchvision.utils.save_image(F0_gt_image, os.path.join(F0_gts_path, '{0:05d}'.format(idx) + "_F0.png"))
+            torchvision.utils.save_image(package.position, os.path.join(position_path, '{0:05d}'.format(idx) + "_position.png"))
+            torchvision.utils.save_image(position_gt_image, os.path.join(position_gts_path, '{0:05d}'.format(idx) + "_position.png"))
+            
+            torchvision.utils.save_image(package.normal / 2 + 0.5, os.path.join(normal_path, '{0:05d}'.format(idx) + "_normal.png"))
+            torchvision.utils.save_image(normal_gt_image / 2 + 0.5, os.path.join(normal_gts_path, '{0:05d}'.format(idx) + "_normal.png"))
+
+            torchvision.utils.save_image(package.roughness, os.path.join(roughness_path, '{0:05d}'.format(idx) + "_roughness.png"))
+            torchvision.utils.save_image(roughness_gt_image, os.path.join(roughness_gts_path, '{0:05d}'.format(idx) + "_roughness.png"))
+
+            torchvision.utils.save_image(package.F0, os.path.join(F0_path, '{0:05d}'.format(idx) + "_F0.png"))
+            torchvision.utils.save_image(F0_gt_image, os.path.join(F0_gts_path, '{0:05d}'.format(idx) + "_F0.png"))
 
         def format_image(image):
             image = F.interpolate(image[None], (image.shape[-2] // 2 * 2, image.shape[-1] // 2 * 2), mode="bilinear")[0]
@@ -198,7 +199,8 @@ def render_set(model_params, model_path, split, iteration, views, gaussians, pip
         all_F0_renders.append(format_image(package.F0[0]))
         all_F0_gts.append(format_image(F0_gt_image))
         
-    os.makedirs(os.path.join(model_params.model_path, "videos/"), exist_ok=True)
+    video_dir = f"videos_{args.mode}/".replace("_normal", "")
+    os.makedirs(os.path.join(model_params.model_path, video_dir), exist_ok=True)
 
     if not args.skip_video:
         print("Writing videos...")
@@ -207,41 +209,41 @@ def render_set(model_params, model_path, split, iteration, views, gaussians, pip
         for label, quality in [("hq", "18"), ("lq", "30")]:
             kwargs = dict(fps=30, options={"crf": quality})
 
-            torchvision.io.write_video(path.format(name=f"renders_{label}", dir="videos/"), torch.stack(all_renders), **kwargs)
-            torchvision.io.write_video(path.format(name=f"gts_{label}", dir="videos/"), torch.stack(all_gts), **kwargs)
-            torchvision.io.write_video(path.format(name=f"comparison_{label}", dir="videos/"), torch.cat([torch.stack(all_renders), torch.stack(all_gts)], dim=2), **kwargs)
+            torchvision.io.write_video(path.format(name=f"renders_{label}", dir=video_dir), torch.stack(all_renders), **kwargs)
+            torchvision.io.write_video(path.format(name=f"gts_{label}", dir=video_dir), torch.stack(all_gts), **kwargs)
+            torchvision.io.write_video(path.format(name=f"comparison_{label}", dir=video_dir), torch.cat([torch.stack(all_renders), torch.stack(all_gts)], dim=2), **kwargs)
             
-            torchvision.io.write_video(path.format(name=f"diffuse_renders_{label}", dir="videos/"), torch.stack(all_diffuse_renders), **kwargs)
-            torchvision.io.write_video(path.format(name=f"diffuse_gts_{label}", dir="videos/"), torch.stack(all_diffuse_gts), **kwargs)
-            torchvision.io.write_video(path.format(name=f"diffuse_comparison_{label}", dir="videos/"), torch.cat([torch.stack(all_diffuse_renders), torch.stack(all_diffuse_gts)], dim=2), **kwargs)
+            torchvision.io.write_video(path.format(name=f"diffuse_renders_{label}", dir=video_dir), torch.stack(all_diffuse_renders), **kwargs)
+            torchvision.io.write_video(path.format(name=f"diffuse_gts_{label}", dir=video_dir), torch.stack(all_diffuse_gts), **kwargs)
+            torchvision.io.write_video(path.format(name=f"diffuse_comparison_{label}", dir=video_dir), torch.cat([torch.stack(all_diffuse_renders), torch.stack(all_diffuse_gts)], dim=2), **kwargs)
             
-            torchvision.io.write_video(path.format(name=f"glossy_renders_{label}", dir="videos/"), torch.stack(all_glossy_renders), **kwargs)
-            torchvision.io.write_video(path.format(name=f"glossy_gts_{label}", dir="videos/"), torch.stack(all_glossy_gts), **kwargs)
-            torchvision.io.write_video(path.format(name=f"glossy_comparison_{label}", dir="videos/"), torch.cat([torch.stack(all_glossy_renders), torch.stack(all_glossy_gts)], dim=2), **kwargs)
+            torchvision.io.write_video(path.format(name=f"glossy_renders_{label}", dir=video_dir), torch.stack(all_glossy_renders), **kwargs)
+            torchvision.io.write_video(path.format(name=f"glossy_gts_{label}", dir=video_dir), torch.stack(all_glossy_gts), **kwargs)
+            torchvision.io.write_video(path.format(name=f"glossy_comparison_{label}", dir=video_dir), torch.cat([torch.stack(all_glossy_renders), torch.stack(all_glossy_gts)], dim=2), **kwargs)
 
-            torchvision.io.write_video(path.format(name=f"position_renders_{label}", dir="videos/"), torch.stack(all_position_renders), **kwargs)
-            torchvision.io.write_video(path.format(name=f"position_gts_{label}", dir="videos/"), torch.stack(all_position_gts), **kwargs)
-            torchvision.io.write_video(path.format(name=f"position_comparison_{label}", dir="videos/"), torch.cat([torch.stack(all_position_renders), torch.stack(all_position_gts)], dim=2), **kwargs)
+            torchvision.io.write_video(path.format(name=f"position_renders_{label}", dir=video_dir), torch.stack(all_position_renders), **kwargs)
+            torchvision.io.write_video(path.format(name=f"position_gts_{label}", dir=video_dir), torch.stack(all_position_gts), **kwargs)
+            torchvision.io.write_video(path.format(name=f"position_comparison_{label}", dir=video_dir), torch.cat([torch.stack(all_position_renders), torch.stack(all_position_gts)], dim=2), **kwargs)
 
-            torchvision.io.write_video(path.format(name=f"normal_renders_{label}", dir="videos/"), torch.stack(all_normal_renders), **kwargs)
-            torchvision.io.write_video(path.format(name=f"normal_gts_{label}", dir="videos/"), torch.stack(all_normal_gts), **kwargs)
-            torchvision.io.write_video(path.format(name=f"normal_comparison_{label}", dir="videos/"), torch.cat([torch.stack(all_normal_renders), torch.stack(all_normal_gts)], dim=2), **kwargs)
+            torchvision.io.write_video(path.format(name=f"normal_renders_{label}", dir=video_dir), torch.stack(all_normal_renders), **kwargs)
+            torchvision.io.write_video(path.format(name=f"normal_gts_{label}", dir=video_dir), torch.stack(all_normal_gts), **kwargs)
+            torchvision.io.write_video(path.format(name=f"normal_comparison_{label}", dir=video_dir), torch.cat([torch.stack(all_normal_renders), torch.stack(all_normal_gts)], dim=2), **kwargs)
 
-            torchvision.io.write_video(path.format(name=f"roughness_renders_{label}", dir="videos/"), torch.stack(all_roughness_renders), **kwargs)
-            torchvision.io.write_video(path.format(name=f"roughness_gts_{label}", dir="videos/"), torch.stack(all_roughness_gts), **kwargs)
-            torchvision.io.write_video(path.format(name=f"roughness_comparison_{label}", dir="videos/"), torch.cat([torch.stack(all_roughness_renders), torch.stack(all_roughness_gts)], dim=2), **kwargs)
+            torchvision.io.write_video(path.format(name=f"roughness_renders_{label}", dir=video_dir), torch.stack(all_roughness_renders), **kwargs)
+            torchvision.io.write_video(path.format(name=f"roughness_gts_{label}", dir=video_dir), torch.stack(all_roughness_gts), **kwargs)
+            torchvision.io.write_video(path.format(name=f"roughness_comparison_{label}", dir=video_dir), torch.cat([torch.stack(all_roughness_renders), torch.stack(all_roughness_gts)], dim=2), **kwargs)
 
-            torchvision.io.write_video(path.format(name=f"F0_renders_{label}", dir="videos/"), torch.stack(all_F0_renders), **kwargs)
-            torchvision.io.write_video(path.format(name=f"F0_gts_{label}", dir="videos/"), torch.stack(all_F0_gts), **kwargs)
-            torchvision.io.write_video(path.format(name=f"F0_comparison_{label}", dir="videos/"), torch.cat([torch.stack(all_F0_renders), torch.stack(all_F0_gts)], dim=2), **kwargs)
+            torchvision.io.write_video(path.format(name=f"F0_renders_{label}", dir=video_dir), torch.stack(all_F0_renders), **kwargs)
+            torchvision.io.write_video(path.format(name=f"F0_gts_{label}", dir=video_dir), torch.stack(all_F0_gts), **kwargs)
+            torchvision.io.write_video(path.format(name=f"F0_comparison_{label}", dir=video_dir), torch.cat([torch.stack(all_F0_renders), torch.stack(all_F0_gts)], dim=2), **kwargs)
             
-        if split == "test":
+        if split == "test" and args.mode == "normal":
             shutil.copy(
-                path.format(name=f"comparison_lq", dir="videos/"), 
+                path.format(name=f"comparison_lq", dir=video_dir), 
                 path.format(name="comparison_lq", dir="")
             )
             shutil.copy(
-                path.format(name=f"comparison_hq", dir="videos/"), 
+                path.format(name=f"comparison_hq", dir=video_dir), 
                 path.format(name="comparison_hq", dir="")
             )
 
@@ -258,6 +260,10 @@ def render_sets(model_params: ModelParams, iteration: int, pipeline: PipelinePar
         gaussians._features_dc[mask] = torch.tensor([1.0, 0.0, 0.0], device="cuda")
 
     background = torch.tensor([0, 0, 0], dtype=torch.float32, device="cuda")
+
+    if "KLUDGE" in os.environ:
+        with torch.no_grad(): 
+            gaussians._scaling.copy_(torch.log(gaussians.get_scaling.clamp(1e-3)))
 
     raytracer = GaussianRaytracer(gaussians, scene.getTrainCameras()[0])
 
@@ -291,6 +297,7 @@ if __name__ == "__main__":
     parser.add_argument("--mode", type=str, choices=["normal", "env_rot_1", "env_rot_2", "env_move_1", "env_move_2"], default="normal")
     parser.add_argument("--skip_video", action="store_true")
     parser.add_argument("--red_region", action="store_true")
+    parser.add_argument("--save_frames", action="store_true")
 
     args = get_combined_args(parser)
     print("Rendering " + args.model_path)

@@ -58,8 +58,6 @@ class GaussianRaytracer:
         sys.path.append(f"raytracer_builds/{pc.model_params.raytracer_version}")
         import raytracer_config
         self.config = raytracer_config
-
-        self.cuda_raytracer.set_blur_kernel_bandwidth(pc.model_params.blur_kernel_bandwidth)
         torch.cuda.synchronize()
 
     @torch.no_grad()
@@ -80,8 +78,10 @@ class GaussianRaytracer:
         self.cuda_raytracer.gaussian_rotations.copy_(self.pc._rotation)
         self.cuda_raytracer.gaussian_means.copy_(self.pc._xyz)
         self.cuda_raytracer.gaussian_opacity.copy_(self.pc._opacity)
-        if self.cuda_raytracer.gaussian_assigned_blur_level is not None:
-            self.cuda_raytracer.gaussian_assigned_blur_level.copy_(self.pc._assigned_blur_level)
+        if self.cuda_raytracer.gaussian_lod_mean is not None:
+            self.cuda_raytracer.gaussian_lod_mean.copy_(self.pc._lod_mean)
+        if self.cuda_raytracer.gaussian_lod_scale is not None:
+            self.cuda_raytracer.gaussian_lod_scale.copy_(self.pc._lod_mean)
         self.cuda_raytracer.gaussian_rgb.copy_(self.pc._diffuse)
         if self.cuda_raytracer.gaussian_position is not None:
             self.cuda_raytracer.gaussian_position.copy_(self.pc._position)
@@ -96,8 +96,10 @@ class GaussianRaytracer:
     def _import_param_gradients(self):
         self.pc._xyz.grad.add_(self.cuda_raytracer.gaussian_means.grad)
         self.pc._opacity.grad.add_(self.cuda_raytracer.gaussian_opacity.grad)
-        if self.cuda_raytracer.gaussian_assigned_blur_level is not None:
-            self.pc._assigned_blur_level.grad.add_(self.cuda_raytracer.gaussian_assigned_blur_level.grad)
+        if self.cuda_raytracer.gaussian_lod_mean is not None:
+            self.pc._lod_mean.grad.add_(self.cuda_raytracer.gaussian_lod_mean.grad)
+        if self.cuda_raytracer.gaussian_lod_scale is not None:
+            self.pc._lod_scale.grad.add_(self.cuda_raytracer.gaussian_lod_scale.grad)
         self.pc._scaling.grad.add_(self.cuda_raytracer.gaussian_scales.grad)
         self.pc._rotation.grad.add_(self.cuda_raytracer.gaussian_rotations.grad)
         self.pc._diffuse.grad.add_(self.cuda_raytracer.gaussian_rgb.grad)
@@ -117,8 +119,10 @@ class GaussianRaytracer:
         self.cuda_raytracer.gaussian_rotations.grad.zero_()
         self.cuda_raytracer.gaussian_means.grad.zero_()
         # 
-        if self.cuda_raytracer.gaussian_assigned_blur_level is not None:
-            self.cuda_raytracer.gaussian_assigned_blur_level.grad.zero_()
+        if self.cuda_raytracer.gaussian_lod_mean is not None:
+            self.cuda_raytracer.gaussian_lod_mean.grad.zero_()
+        if self.cuda_raytracer.gaussian_lod_scale is not None:
+            self.cuda_raytracer.gaussian_lod_scale.grad.zero_()
         if self.cuda_raytracer.gaussian_position is not None:
             self.cuda_raytracer.gaussian_position.grad.zero_()
         if self.cuda_raytracer.gaussian_normal is not None:
@@ -131,6 +135,8 @@ class GaussianRaytracer:
             self.cuda_raytracer.gaussian_specular.grad.zero_()
         if self.cuda_raytracer.gaussian_metalness is not None:
             self.cuda_raytracer.gaussian_metalness.grad.zero_()
+        if hasattr(self.cuda_raytracer, "densification_gradient_score"):
+            self.cuda_raytracer.densification_gradient_score.zero_()
 
     def __call__(self, viewpoint_camera,  pipe_params: PipelineParams, bg_color: torch.Tensor, target = None, target_diffuse = None, target_glossy = None, target_position=None, target_normal=None, target_roughness=None, target_f0=None, target_brdf=None):
         """

@@ -43,10 +43,10 @@ def prepare_output_and_logger(args: ModelParams, opt_params):
     # Set up output folder
     print("Output folder: {}".format(args.model_path))
     os.makedirs(args.model_path, exist_ok = True)
-    with open(os.path.join(args.model_path, "cfg_args"), 'w') as cfg_log_f:
+    with open(os.path.join(args.model_path, "model_params"), 'w') as cfg_log_f:
         cfg_log_f.write(str(Namespace(**vars(args))))
 
-    with open(os.path.join(args.model_path, "cfg_args"), 'w') as cfg_log_f:
+    with open(os.path.join(args.model_path, "opt_params"), 'w') as cfg_log_f:
         cfg_log_f.write(str(Namespace(**vars(opt_params))))
     
 
@@ -85,7 +85,7 @@ def training_report(tb_writer, iteration, elpased):
                     glossy_image = torch.clamp(package.rgb[1:].sum(dim=0), 0.0, 1.0)
                     diffuse_gt_image = torch.clamp(viewpoint.diffuse_image, 0.0, 1.0)
                     glossy_gt_image = torch.clamp(viewpoint.glossy_image, 0.0, 1.0)
-                    normal_gt_image = torch.clamp(viewpoint.sample_normal_image() / 2 + 0.5, 0.0, 1.0)
+                    normal_gt_image = torch.clamp(viewpoint.get_normal_image() / 2 + 0.5, 0.0, 1.0)
                     pred_image = tonemap(untonemap(package.rgb).sum(dim=0))
 
                     gt_image = torch.clamp(viewpoint.original_image, 0.0, 1.0)
@@ -99,12 +99,12 @@ def training_report(tb_writer, iteration, elpased):
                     if model_params.brdf_mode != "disabled":
                         brdf_image = torch.clamp(package.brdf[0], 0.0, 1.0)
 
-                    normal_gt_image = torch.clamp(viewpoint.sample_normal_image() / 2 + 0.5, 0.0, 1.0)
-                    position_gt_image = torch.clamp(viewpoint.sample_position_image(), 0.0, 1.0)
-                    F0_gt_image = torch.clamp(viewpoint.sample_F0_image(), 0.0, 1.0)
-                    roughness_gt_image = torch.clamp(viewpoint.sample_roughness_image(), 0.0, 1.0)
+                    normal_gt_image = torch.clamp(viewpoint.get_normal_image() / 2 + 0.5, 0.0, 1.0)
+                    position_gt_image = torch.clamp(viewpoint.get_position_image(), 0.0, 1.0)
+                    F0_gt_image = torch.clamp(viewpoint.get_F0_image(), 0.0, 1.0)
+                    roughness_gt_image = torch.clamp(viewpoint.get_roughness_image(), 0.0, 1.0)
                     if model_params.brdf_mode != "disabled":
-                        brdf_gt_image = torch.clamp(viewpoint.sample_brdf_image(), 0.0, 1.0)
+                        brdf_gt_image = torch.clamp(viewpoint.get_brdf_image(), 0.0, 1.0)
                         
                     if tb_writer and (idx < 5): 
                         if package.rgb.shape[0] > 2:
@@ -115,10 +115,11 @@ def training_report(tb_writer, iteration, elpased):
                                 save_image(torch.clamp(pos_image, 0.0, 1.0), tb_writer.log_dir + "/" + f"{config['name']}_view/iter_{iteration:09}_{idx}_pos_bounce_{k}.png")
                                 save_image(torch.clamp(brdf_image, 0.0, 1.0), tb_writer.log_dir + "/" + f"{config['name']}_view/iter_{iteration:09}_{idx}_brdf_bounce_{k}.png")
 
-                        if raytracer.config.SAVE_BLUR_LEVEL_IMAGES:
-                            for k, (assigned_blur_level, used_blur_level) in enumerate(zip(raytracer.cuda_raytracer.output_assigned_blur_level, raytracer.cuda_raytracer.output_used_blur_level)):
-                                save_image(assigned_blur_level.moveaxis(-1, 0), tb_writer.log_dir + "/" + f"{config['name']}_view/iter_{iteration:09}_{idx}_assigned_blur_level_{k}.png")
-                                save_image(used_blur_level.moveaxis(-1, 0), tb_writer.log_dir + "/" + f"{config['name']}_view/iter_{iteration:09}_{idx}_used_blur_level_{k}.png")
+                        if raytracer.config.SAVE_LOD_IMAGES:
+                            for k, (lod_mean, lod_scale, ray_lod) in enumerate(zip(raytracer.cuda_raytracer.output_lod_mean, raytracer.cuda_raytracer.output_lod_scale, raytracer.cuda_raytracer.output_ray_lod)):
+                                save_image(lod_mean.moveaxis(-1, 0), tb_writer.log_dir + "/" + f"{config['name']}_view/iter_{iteration:09}_{idx}_lod_mean_{k}.png")
+                                save_image(lod_mean.moveaxis(-1, 0), tb_writer.log_dir + "/" + f"{config['name']}_view/iter_{iteration:09}_{idx}_lod_scale_{k}.png")
+                                save_image(lod_mean.moveaxis(-1, 0), tb_writer.log_dir + "/" + f"{config['name']}_view/iter_{iteration:09}_{idx}_ray_lod_{k}.png")
 
                         save_image(torch.stack([roughness_image.cuda(), roughness_gt_image]), tb_writer.log_dir + "/" + f"{config['name']}_view/iter_{iteration:09}_{idx}_roughness.png", nrow=2, padding=0)
                         save_image(torch.stack([F0_image.cuda(), F0_gt_image]), tb_writer.log_dir + "/" + f"{config['name']}_view/iter_{iteration:09}_{idx}_F0.png", nrow=2, padding=0)
@@ -281,7 +282,8 @@ for iteration in tqdm(range(first_iter, opt_params.iterations + 1), desc="Traini
         #! buggy iter_start.elapsed_time(iter_end), RuntimeError: CUDA error: device not ready
         training_report(tb_writer, iteration, 0.0) 
 
-        if model_params.mcmc_densify :
+        if model_params.mcmc_densify:
+            assert False
             print("num nans in opacity grad:", gaussians.get_opacity.isnan().sum())
         
         if iteration in args.save_iterations:
@@ -303,44 +305,44 @@ for iteration in tqdm(range(first_iter, opt_params.iterations + 1), desc="Traini
                 gaussians.reset_opacity()
 
         if opt_params.densif_use_top_k and iteration <= opt_params.densify_until_iter:
-            gaussians.add_densification_stats_3d()
+            gaussians.add_densification_stats_3d(raytracer.cuda_raytracer.densification_gradient_score)
 
-        if model_params.mcmc_densify and iteration <= opt_params.densify_until_iter and iteration > opt_params.densify_from_iter and iteration % opt_params.densification_interval == 0:
-            print("Densification!")
-            dead_mask = (gaussians.get_opacity <= model_params.opacity_pruning_threshold).squeeze(-1)
-            print("Num dead gaussians: ", dead_mask.sum().item())
-            if not model_params.mcmc_skip_relocate:
-                gaussians.relocate_gs(dead_mask=dead_mask)
-            gaussians.add_new_gs(cap_max=args.cap_max)
-            print("Number of gaussians: ", gaussians.get_xyz.shape[0])
+        if opt_params.densif_use_top_k and iteration > opt_params.densify_from_iter and iteration % opt_params.densification_interval == 0:
+            if iteration < opt_params.densify_until_iter:
+                #!!!!!!!! review why I'm starting with so many fewer gaussians than the # of sfm points.
+                max_screen_size = 20 if iteration > opt_params.opacity_reset_interval else None
+                trace = gaussians.densify_and_prune_top_k(scene, opt_params, model_params.min_opacity, scene.cameras_extent * model_params.glossy_bbox_size_mult * model_params.scene_extent_multiplier)
+                trace = f"Iteration {iteration}; " + trace
+                with open(os.path.join(scene.model_path + "/densification_trace.txt"), "a") as f:
+                    f.write(trace)
+            else:
+                gaussians.prune_znear_only(scene)
             raytracer.rebuild_bvh()
-        elif opt_params.densif_use_top_k and iteration < opt_params.densify_until_iter and iteration > opt_params.densify_from_iter and iteration % opt_params.densification_interval == 0:
-            #!!!!!!!! review why I'm starting with so many fewer gaussians than the # of sfm points.
-            max_screen_size = 20 if iteration > opt_params.opacity_reset_interval else None
-            trace = gaussians.densify_and_prune_top_k(opt_params, 0.005, scene.cameras_extent, max_screen_size)
-            trace = f"Iteration {iteration}; " + trace
-            with open(os.path.join(scene.model_path + "/densification_trace.txt"), "a") as f:
-                f.write(trace)
-            raytracer.rebuild_bvh()
-        elif iteration < opt_params.iterations:
-            gaussians.optimizer.step()
-            gaussians.optimizer.zero_grad(set_to_none=False) # todo not sure if this set_to_none=False is still required
-            raytracer.zero_grad()
 
-            if model_params.min_gaussian_size > 0:
-                with torch.no_grad():
-                    gaussians._scaling.data.clamp_(min=math.log(model_params.min_gaussian_size))
+        gaussians.optimizer.step()
+        gaussians.optimizer.zero_grad(set_to_none=False) # todo not sure if this set_to_none=False is still required
+        raytracer.zero_grad()
 
-            if model_params.mcmc_densify or model_params.add_mcmc_noise:
-                L = build_scaling_rotation(gaussians.get_scaling, gaussians.get_rotation)
-                actual_covariance = L @ L.transpose(1, 2)
+        if model_params.min_gaussian_size > 0:
+            with torch.no_grad():
+                gaussians._scaling.data.clamp_(min=math.log(model_params.min_gaussian_size))
 
-                def op_sigmoid(x, k=100, x0=0.995):
-                    return 1 / (1 + torch.exp(-k * (x - x0)))
-                
-                noise = torch.randn_like(gaussians._xyz) * (op_sigmoid(1- gaussians.get_opacity)) * opt_params.noise_lr * xyz_lr
-                noise = torch.bmm(actual_covariance, noise.unsqueeze(-1)).squeeze(-1)
-                gaussians._xyz.add_(noise)
+        gaussians._lod_mean.data.clamp_(min=0)
+
+        if model_params.max_opacity < 1.0:
+            with torch.no_grad():
+                gaussians._opacity.data.clamp_(max=gaussians.inverse_opacity_activation(torch.tensor(model_params.max_opacity, device="cuda")))
+
+        if model_params.add_mcmc_noise:
+            L = build_scaling_rotation(gaussians.get_scaling, gaussians.get_rotation)
+            actual_covariance = L @ L.transpose(1, 2)
+
+            def op_sigmoid(x, k=100, x0=0.995):
+                return 1 / (1 + torch.exp(-k * (x - x0)))
+            
+            noise = torch.randn_like(gaussians._xyz) * (op_sigmoid(1- gaussians.get_opacity)) * opt_params.noise_lr * xyz_lr
+            noise = torch.bmm(actual_covariance, noise.unsqueeze(-1)).squeeze(-1)
+            gaussians._xyz.add_(noise)
 
         if False:
             if iteration in args.checkpoint_iterations:

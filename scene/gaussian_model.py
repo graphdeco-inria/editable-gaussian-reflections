@@ -58,7 +58,8 @@ class GaussianModel:
         self._scaling = torch.empty(0)
         self._rotation = torch.empty(0)
         self._opacity = torch.empty(0)
-        self._assigned_blur_level = torch.empty(0)
+        self._lod_mean = torch.empty(0)
+        self._lod_scale = torch.empty(0)
         self.max_radii2D = torch.empty(0)
         self.xyz_gradient_accum = torch.empty(0)
         self.denom = torch.empty(0)
@@ -93,7 +94,8 @@ class GaussianModel:
             self._scaling,
             self._rotation,
             self._opacity,
-            self._assigned_blur_level,
+            self._lod_mean,
+            self._lod_scale,
             self.max_radii2D,
             self.xyz_gradient_accum,
             self.denom,
@@ -111,7 +113,8 @@ class GaussianModel:
         self._scaling, 
         self._rotation, 
         self._opacity,
-        self._assigned_blur_level,
+        self._lod_mean,
+        self._lod_scale,
         self.max_radii2D, 
         xyz_gradient_accum, 
         denom,
@@ -128,7 +131,8 @@ class GaussianModel:
         self._roughness.grad = torch.zeros_like(self._roughness)
         self._f0.grad = torch.zeros_like(self._f0)
         self._opacity.grad = torch.zeros_like(self._opacity)
-        self._assigned_blur_level.grad = torch.zeros_like(self._assigned_blur_level)
+        self._lod_mean.grad = torch.zeros_like(self._lod_mean)
+        self._lod_scale.grad = torch.zeros_like(self._lod_scale)
         self._diffuse.grad = torch.zeros_like(self._diffuse)
         self._scaling.grad = torch.zeros_like(self._scaling)
         self._rotation.grad = torch.zeros_like(self._rotation)
@@ -183,8 +187,12 @@ class GaussianModel:
         return self.opacity_activation(self._opacity)
 
     @property
-    def get_assigned_blur_level(self):
-        return self._assigned_blur_level
+    def get_lod_mean(self):
+        return self._lod_mean
+    
+    @property
+    def get_lod_scale(self):
+        return self._lod_scale
     
     def get_covariance(self, scaling_modifier = 1):
         return self.covariance_activation(self.get_scaling, scaling_modifier, self._rotation)
@@ -222,9 +230,10 @@ class GaussianModel:
         self._scaling = nn.Parameter(scales.requires_grad_(True))
         self._rotation = nn.Parameter(rots.requires_grad_(True))
         self._opacity = nn.Parameter(opacities.requires_grad_(True))
-        self._assigned_blur_level = nn.Parameter(torch.rand((fused_point_cloud.shape[0], 1), device="cuda") * self.model_params.init_blur_level_max_value)
+        self._lod_mean = nn.Parameter(torch.rand((fused_point_cloud.shape[0], 1), device="cuda") * self.model_params.init_lod_mean_max_value)
         with torch.no_grad():
-            self._assigned_blur_level.data[torch.rand_like(self._assigned_blur_level) < self.model_params.init_blur_level_prob_0] = 0.0
+            self._lod_mean.data[torch.rand_like(self._lod_mean) < self.model_params.init_lod_prob_0] = 0.0
+        self._lod_scale = nn.Parameter(torch.ones((fused_point_cloud.shape[0], 1), device="cuda") * self.model_params.init_lod_scale)
 
         self.max_radii2D = torch.zeros((self.get_xyz.shape[0]), device="cuda")
 
@@ -234,7 +243,8 @@ class GaussianModel:
         self._roughness.grad = torch.zeros_like(self._roughness)
         self._f0.grad = torch.zeros_like(self._f0)
         self._opacity.grad = torch.zeros_like(self._opacity)
-        self._assigned_blur_level.grad = torch.zeros_like(self._assigned_blur_level)
+        self._lod_mean.grad = torch.zeros_like(self._lod_mean)
+        self._lod_scale.grad = torch.zeros_like(self._lod_scale)
         self._diffuse.grad = torch.zeros_like(self._diffuse)
         self._scaling.grad = torch.zeros_like(self._scaling)
         self._rotation.grad = torch.zeros_like(self._rotation)
@@ -250,7 +260,8 @@ class GaussianModel:
         self._roughness.grad = torch.zeros_like(self._roughness)
         self._f0.grad = torch.zeros_like(self._f0)
         self._opacity.grad = torch.zeros_like(self._opacity)
-        self._assigned_blur_level.grad = torch.zeros_like(self._assigned_blur_level)
+        self._lod_mean.grad = torch.zeros_like(self._lod_mean)
+        self._lod_scale.grad = torch.zeros_like(self._lod_scale)
         self._diffuse.grad = torch.zeros_like(self._diffuse)
         self._scaling.grad = torch.zeros_like(self._scaling)
         self._rotation.grad = torch.zeros_like(self._rotation)
@@ -265,7 +276,8 @@ class GaussianModel:
             {'params': [self._diffuse], 'lr': training_args.feature_lr, "name": "f_dc"},
             {'params': [self._scaling], 'lr': training_args.scaling_lr, "name": "scaling"},
             {'params': [self._rotation], 'lr': training_args.rotation_lr, "name": "rotation"},
-            {'params': [self._assigned_blur_level], 'lr': training_args.assigned_blur_level_lr, "name": "assigned_blur_level"},
+            {'params': [self._lod_mean], 'lr': training_args.lod_mean_lr, "name": "lod_mean"},
+            {'params': [self._lod_scale], 'lr': training_args.lod_scale_lr, "name": "lod_scale"},
         ]
 
         if self.model_params.brdf_mode == "finetuned_lut":
@@ -291,7 +303,8 @@ class GaussianModel:
         xyz = self._xyz.detach().cpu().numpy()
         f_dc = self._diffuse.detach().cpu().numpy()
         opacities = self._opacity.detach().cpu().numpy()
-        assigned_blur_level = self._assigned_blur_level.detach().cpu().numpy()
+        lod_mean = self._lod_mean.detach().cpu().numpy()
+        lod_scale = self._lod_scale.detach().cpu().numpy()
         scale = self._scaling.detach().cpu().numpy()
         rotation = self._rotation.detach().cpu().numpy()
         position = self._position.detach().cpu().numpy()
@@ -376,7 +389,8 @@ class GaussianModel:
         self._xyz = nn.Parameter(torch.tensor(xyz, dtype=torch.float, device="cuda"))
         self._diffuse = nn.Parameter(torch.tensor(diffuse, dtype=torch.float, device="cuda"))
         self._opacity = nn.Parameter(torch.tensor(opacities, dtype=torch.float, device="cuda"))
-        self._assigned_blur_level = nn.Parameter(torch.zeros((xyz.shape[0], 1), device="cuda"))
+        self._lod_mean = nn.Parameter(torch.zeros((xyz.shape[0], 1), device="cuda"))
+        self._lod_scale = nn.Parameter(torch.zeros((xyz.shape[0], 1), device="cuda"))
         self._scaling = nn.Parameter(torch.tensor(scales, dtype=torch.float, device="cuda"))
         self._rotation = nn.Parameter(torch.tensor(rots, dtype=torch.float, device="cuda"))
         self._position = nn.Parameter(torch.tensor(positions, dtype=torch.float, device="cuda"))
@@ -447,8 +461,11 @@ class GaussianModel:
         self._opacity = optimizable_tensors["opacity"]
         self._opacity.grad = torch.zeros_like(self._opacity)
         #
-        self._assigned_blur_level = optimizable_tensors["assigned_blur_level"]
-        self._assigned_blur_level.grad = torch.zeros_like(self._assigned_blur_level)
+        self._lod_mean = optimizable_tensors["lod_mean"]
+        self._lod_mean.grad = torch.zeros_like(self._lod_mean)
+        #
+        self._lod_scale = optimizable_tensors["lod_scale"]
+        self._lod_scale.grad = torch.zeros_like(self._lod_scale)
         #
         self._scaling = optimizable_tensors["scaling"]
         self._scaling.grad = torch.zeros_like(self._scaling)
@@ -485,7 +502,7 @@ class GaussianModel:
 
         return optimizable_tensors
 
-    def densification_postfix(self, new_xyz, new_position, new_normal, new_roughness_params, new_f0_params, new_diffuse, new_opacity, new_assigned_blur_level, new_scaling, new_rotation, reset_params=True):
+    def densification_postfix(self, new_xyz, new_position, new_normal, new_roughness_params, new_f0_params, new_diffuse, new_opacity, new_lod_mean, new_lod_scale, new_scaling, new_rotation, reset_params=True):
 
         d = {"xyz": new_xyz,
         "position": new_position,
@@ -496,28 +513,42 @@ class GaussianModel:
         "opacity": new_opacity,
         "scaling" : new_scaling,
         "rotation" : new_rotation,
-        "assigned_blur_level": new_assigned_blur_level,
+        "lod_mean": new_lod_mean,
+        "lod_scale": new_lod_scale,
         }
 
         optimizable_tensors = self.cat_tensors_to_optimizer(d)
+
         optimizable_tensors["xyz"].grad = torch.zeros_like(optimizable_tensors["xyz"])
         self._xyz = optimizable_tensors["xyz"]
+        
         optimizable_tensors["position"].grad = torch.zeros_like(optimizable_tensors["position"])
         self._position = optimizable_tensors["position"]
+        
         optimizable_tensors["normal"].grad = torch.zeros_like(optimizable_tensors["normal"])
         self._normal = optimizable_tensors["normal"]
+        
         optimizable_tensors["roughness"].grad = torch.zeros_like(optimizable_tensors["roughness"])
         self._roughness = optimizable_tensors["roughness"]
+        
         optimizable_tensors["f0"].grad = torch.zeros_like(optimizable_tensors["f0"])
         self._f0 = optimizable_tensors["f0"]
+        
         optimizable_tensors["f_dc"].grad = torch.zeros_like(optimizable_tensors["f_dc"])
         self._diffuse = optimizable_tensors["f_dc"] # keep the same name for compat
+        
         optimizable_tensors["opacity"].grad = torch.zeros_like(optimizable_tensors["opacity"])
         self._opacity = optimizable_tensors["opacity"]
-        optimizable_tensors["assigned_blur_level"].grad = torch.zeros_like(optimizable_tensors["assigned_blur_level"])
-        self._assigned_blur_level = optimizable_tensors["assigned_blur_level"]
+        
+        optimizable_tensors["lod_mean"].grad = torch.zeros_like(optimizable_tensors["lod_mean"])
+        self._lod_mean = optimizable_tensors["lod_mean"]
+
+        optimizable_tensors["lod_scale"].grad = torch.zeros_like(optimizable_tensors["lod_scale"])
+        self._lod_scale = optimizable_tensors["lod_scale"]
+        
         optimizable_tensors["scaling"].grad = torch.zeros_like(optimizable_tensors["scaling"])
         self._scaling = optimizable_tensors["scaling"]
+        
         optimizable_tensors["rotation"].grad = torch.zeros_like(optimizable_tensors["rotation"])
         self._rotation = optimizable_tensors["rotation"]
 
@@ -525,132 +556,6 @@ class GaussianModel:
             self.xyz_gradient_accum = torch.zeros((self.get_xyz.shape[0], 1), device="cuda")
             self.denom = torch.zeros((self.get_xyz.shape[0], 1), device="cuda")
             self.max_radii2D = torch.zeros((self.get_xyz.shape[0]), device="cuda")
-
-    def densify_and_split(self, grads, grad_threshold, scene_extent, N=2):
-        n_init_points = self.get_xyz.shape[0]
-        # Extract points that satisfy the gradient condition
-        padded_grad = torch.zeros((n_init_points), device="cuda")
-        padded_grad[:grads.shape[0]] = grads.squeeze()
-        selected_pts_mask = torch.where(padded_grad >= grad_threshold, True, False)
-        selected_pts_mask = torch.logical_and(selected_pts_mask,
-                                              torch.max(self.get_scaling, dim=1).values > self.percent_dense*scene_extent)
-
-        stds = self.get_scaling[selected_pts_mask].repeat(N,1)
-        means =torch.zeros((stds.size(0), 3),device="cuda")
-        samples = torch.normal(mean=means, std=stds)
-        rots = build_rotation(self._rotation[selected_pts_mask]).repeat(N,1,1)
-        new_xyz = torch.bmm(rots, samples.unsqueeze(-1)).squeeze(-1) + self.get_xyz[selected_pts_mask].repeat(N, 1)
-        new_position = self._position[selected_pts_mask].repeat(N,1)
-        new_normal = self._normal[selected_pts_mask].repeat(N,1)
-        new_roughness = self._roughness[selected_pts_mask].repeat(N,1)
-        new_f0 = self._f0[selected_pts_mask].repeat(N,1)
-        new_scaling = self.scaling_inverse_activation(self.get_scaling[selected_pts_mask].repeat(N,1) / (0.8*N))
-        new_rotation = self._rotation[selected_pts_mask].repeat(N,1)
-        new_diffuse = self._diffuse[selected_pts_mask].repeat(N,1,1)
-        new_opacity = self._opacity[selected_pts_mask].repeat(N,1)
-        new_assigned_blur_level = self._assigned_blur_level[selected_pts_mask].repeat(N,1)
-
-        self.densification_postfix(new_xyz, new_position, new_normal, new_roughness, new_f0, new_diffuse,  new_opacity, new_assigned_blur_level, new_scaling, new_rotation)
-
-        prune_filter = torch.cat((selected_pts_mask, torch.zeros(N * selected_pts_mask.sum(), device="cuda", dtype=bool)))
-        self.prune_points(prune_filter)
-
-    def densify_and_clone(self, grads, grad_threshold, scene_extent):
-        # Extract points that satisfy the gradient condition
-        selected_pts_mask = torch.where(torch.norm(grads, dim=-1) >= grad_threshold, True, False)
-        selected_pts_mask = torch.logical_and(selected_pts_mask,
-                                              torch.max(self.get_scaling, dim=1).values <= self.percent_dense*scene_extent)
-        
-        new_xyz = self._xyz[selected_pts_mask]
-        new_position = self._position[selected_pts_mask]
-        new_normal = self._normal[selected_pts_mask]
-        new_roughness = self._roughness[selected_pts_mask]
-        new_f0 = self._f0[selected_pts_mask]
-        new_diffuse = self._diffuse[selected_pts_mask]
-        new_opacities = self._opacity[selected_pts_mask]
-        new_assigned_blur_level = self._assigned_blur_level[selected_pts_mask]
-        new_scaling = self._scaling[selected_pts_mask]
-        new_rotation = self._rotation[selected_pts_mask]
-
-        self.densification_postfix(new_xyz, new_position, new_normal, new_roughness, new_f0, new_diffuse, new_opacities, new_assigned_blur_level, new_scaling, new_rotation)
-
-    def densify_and_prune(self, max_grad, min_opacity, extent, max_screen_size):
-        grads = self.xyz_gradient_accum / self.denom
-        grads[grads.isnan()] = 0.0
-
-        self.densify_and_clone(grads, max_grad, extent)
-        self.densify_and_split(grads, max_grad, extent)
-
-        prune_mask = (self.get_opacity < min_opacity).squeeze()
-        if max_screen_size:
-            big_points_vs = self.max_radii2D > max_screen_size
-            big_points_ws = self.get_scaling.max(dim=1).values > 0.1 * extent
-            prune_mask = torch.logical_or(torch.logical_or(prune_mask, big_points_vs), big_points_ws)
-        self.prune_points(prune_mask)
-
-        torch.cuda.empty_cache()
-
-        self._xyz.grad = torch.zeros_like(self._xyz)
-        self._position.grad = torch.zeros_like(self._position)
-        self._normal.grad = torch.zeros_like(self._normal)
-        self._roughness.grad = torch.zeros_like(self._roughness)
-        self._f0.grad = torch.zeros_like(self._f0)
-        self._opacity.grad = torch.zeros_like(self._opacity)
-        self._diffuse.grad = torch.zeros_like(self._diffuse)
-        self._scaling.grad = torch.zeros_like(self._scaling)
-        self._rotation.grad = torch.zeros_like(self._rotation)
-
-    def densify_and_prune_glossy(self, max_grad, min_opacity, extent):
-        grads = self.xyz_gradient_accum / self.denom
-        grads[grads.isnan()] = 0.0
-
-        self.densify_and_clone(grads, max_grad, extent)
-        self.densify_and_split(grads, max_grad, extent)
-        
-        # # if max_screen_size:
-        #     # big_points_vs = self.max_radii2D > max_screen_size
-        # big_points_ws = self.get_scaling.max(dim=1).values > 0.1 * extent
-        # prune_mask = torch.logical_or(prune_mask, big_points_ws)
-        prune_mask = (self.get_opacity < min_opacity).squeeze()
-        self.prune_points(prune_mask)
-
-        torch.cuda.empty_cache()
-
-        self._xyz.grad = torch.zeros_like(self._xyz)
-        self._position.grad = torch.zeros_like(self._position)
-        self._normal.grad = torch.zeros_like(self._normal)
-        self._roughness.grad = torch.zeros_like(self._roughness)
-        self._f0.grad = torch.zeros_like(self._f0)
-        self._opacity.grad = torch.zeros_like(self._opacity)
-        self._diffuse.grad = torch.zeros_like(self._diffuse)
-        self._scaling.grad = torch.zeros_like(self._scaling)
-        self._rotation.grad = torch.zeros_like(self._rotation)
-
-    def densify_with_basic_pruning(self, max_grad, min_opacity, extent):
-        grads = self.xyz_gradient_accum / self.denom
-        grads[grads.isnan()] = 0.0
-
-        self.densify_and_clone(grads, max_grad, extent)
-        self.densify_and_split(grads, max_grad, extent)
-
-        prune_mask = (self.get_opacity < min_opacity).squeeze()
-        # if max_screen_size:
-            # big_points_vs = self.max_radii2D > max_screen_size
-        big_points_ws = self.get_scaling.max(dim=1).values > 0.1 * extent
-        prune_mask = torch.logical_or(prune_mask, big_points_ws)
-        self.prune_points(prune_mask)
-
-        torch.cuda.empty_cache()
-
-    def add_densification_stats_glossy(self, xyz, update_filter):
-        if xyz.grad is not None:
-            self.xyz_gradient_accum[update_filter] += torch.norm(xyz.grad, dim=-1, keepdim=True)
-        self.denom[update_filter] += 1
-    
-    def add_densification_stats(self, viewspace_point_tensor, update_filter):
-        if viewspace_point_tensor.grad is not None:
-            self.xyz_gradient_accum[update_filter] += torch.norm(viewspace_point_tensor.grad[update_filter,:2], dim=-1, keepdim=True)
-        self.denom[update_filter] += 1
 
 # ---------------- below: our top kdensification
 
@@ -670,13 +575,14 @@ class GaussianModel:
         new_normal = self._normal[selected_pts_mask].repeat(N,1)
         new_roughness = self._roughness[selected_pts_mask].repeat(N,1)
         new_f0 = self._f0[selected_pts_mask].repeat(N,1)
-        new_scaling = self.scaling_inverse_activation(self.get_scaling[selected_pts_mask].repeat(N,1) / (0.8*N))
-        new_rotation = self._rotation[selected_pts_mask].repeat(N,1)
         new_diffuse = self._diffuse[selected_pts_mask].repeat(N,1)
         new_opacity = self._opacity[selected_pts_mask].repeat(N,1)
-        new_assigned_blur_level = self._assigned_blur_level[selected_pts_mask].repeat(N,1)
+        new_scaling = self.scaling_inverse_activation(self.get_scaling[selected_pts_mask].repeat(N,1) / (0.8*N))
+        new_rotation = self._rotation[selected_pts_mask].repeat(N,1)
+        new_lod_mean = self._lod_mean[selected_pts_mask].repeat(N,1)
+        new_lod_scale = self._lod_mean[selected_pts_mask].repeat(N,1)
         
-        self.densification_postfix(new_xyz, new_position, new_normal, new_roughness, new_f0, new_diffuse,  new_opacity, new_assigned_blur_level, new_scaling, new_rotation)
+        self.densification_postfix(new_xyz, new_position, new_normal, new_roughness, new_f0, new_diffuse,  new_opacity, new_lod_mean, new_lod_scale, new_scaling, new_rotation)
 
         prune_filter = torch.cat((selected_pts_mask, torch.zeros(N * selected_pts_mask.sum(), device="cuda", dtype=bool)))
         self.prune_points(prune_filter)
@@ -685,31 +591,52 @@ class GaussianModel:
         selected_pts_mask = torch.zeros(len(self.get_xyz), device=self.get_xyz.device).bool()
         selected_pts_mask[indicies_to_clone] = True
 
-        new_xyz = self._xyz[selected_pts_mask]
+        if opt.densif_jitter_clones:
+            stds = self.get_scaling[selected_pts_mask]
+            means = torch.zeros((stds.size(0), 3),device="cuda")
+            samples = torch.normal(mean=means, std=stds)
+            rots = build_rotation(self._rotation[selected_pts_mask])
+            new_xyz = torch.bmm(rots, samples.unsqueeze(-1)).squeeze(-1) + self.get_xyz[selected_pts_mask]
+        else:
+            new_xyz = self._xyz[selected_pts_mask]
         new_position = self._position[selected_pts_mask]
         new_normal = self._normal[selected_pts_mask]
         new_roughness = self._roughness[selected_pts_mask]
         new_f0 = self._f0[selected_pts_mask]
         new_diffuse = self._diffuse[selected_pts_mask]
         new_opacity = self._opacity[selected_pts_mask]
-        new_scaling = self._scaling[selected_pts_mask]
+        if opt.densif_scaledown_clones: 
+            new_scaling = self.scaling_inverse_activation(self.get_scaling[selected_pts_mask] / 0.8)
+        else:
+            new_scaling = self._scaling[selected_pts_mask]
         new_rotation = self._rotation[selected_pts_mask]
-        new_assigned_blur_level = self._assigned_blur_level[selected_pts_mask]
+        new_lod_mean = self._lod_mean[selected_pts_mask]
+        new_lod_scale = self._lod_mean[selected_pts_mask]
 
-        self.densification_postfix(new_xyz, new_position, new_normal, new_roughness, new_f0, new_diffuse,  new_opacity, new_assigned_blur_level, new_scaling, new_rotation)
+        self.densification_postfix(new_xyz, new_position, new_normal, new_roughness, new_f0, new_diffuse,  new_opacity, new_lod_mean, new_lod_scale, new_scaling, new_rotation)
 
-    def densify_and_prune_top_k(self, opt, min_opacity, extent, max_screen_size):
+    def prune_znear_only(self, scene):
+        prune_mask = scene.select_points_to_prune_near_cameras(self._xyz.data)
+        self.prune_points(prune_mask)
+    
+    def densify_and_prune_top_k(self, scene, opt, min_opacity, extent):
         self.num_densification_steps += 1
         num_gaussians_before_pruning = self.get_xyz.shape[0]
 
         # Prune
-        # prune_mask = (self.get_opacity < min_opacity).squeeze()
-        # if max_screen_size:
-        #     big_points_ws = self.get_scaling.max(dim=1).values > 0.1 * extent
-        #     prune_mask = torch.logical_or(prune_mask, big_points_ws)
-        # big_points_ws = self.get_scaling.max(dim=1).values > 0.1 * extent
-        # prune_mask = torch.logical_or(prune_mask, big_points_ws)
-        # self.prune_points(prune_mask)
+        prune_mask = (self.get_opacity < min_opacity).squeeze()
+        if not opt.densif_skip_big_points_ws:
+            big_points_ws = self.get_scaling.max(dim=1).values > 0.1 * extent
+            prune_mask = torch.logical_or(prune_mask, big_points_ws)
+
+        if opt.densif_no_pruning:
+            prune_mask = torch.zeros_like(prune_mask)
+
+        if self.model_params.znear_densif_pruning:
+            prune_mask |= scene.select_points_to_prune_near_cameras(self._xyz.data)
+            print("PRUNING CAM!" + str(prune_mask.sum().item()))
+        
+        self.prune_points(prune_mask)
 
         # Densify
         if self.schedule is None:
@@ -763,9 +690,10 @@ class GaussianModel:
         
         return trace
 
-    def add_densification_stats_3d(self):
+    def add_densification_stats_3d(self, score):
         update_filter = self._opacity[:, 0].grad != 0
-        self.xyz_gradient_accum[update_filter] += torch.norm(self._xyz.grad[update_filter], dim=-1, keepdim=True)
+        self.xyz_gradient_accum[update_filter] += (score[:, 0:1] + score[:, 1:2] / self.model_params.glossy_loss_weight)[update_filter] # weigh diffuse and glossy evenly after normalizaing by the loss weird
+        # torch.norm(self._xyz.grad[update_filter], dim=-1, keepdim=True)
         self.denom[update_filter] += 1
 
 

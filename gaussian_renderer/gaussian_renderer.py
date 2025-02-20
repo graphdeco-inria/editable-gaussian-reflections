@@ -30,12 +30,12 @@ def render(camera: Camera, raytracer: GaussianRaytracer, pipe_params: PipelinePa
     target = camera.original_image
     target_diffuse = camera.diffuse_image
     target_glossy = camera.glossy_image
-    target_position = camera.sample_position_image()
-    target_normal = camera.sample_normal_image()
-    target_f0 = camera.sample_F0_image()
-    target_roughness = camera.sample_roughness_image().mean(dim=0, keepdim=True) # todo do this averaging during image load
+    target_position = camera.get_position_image()
+    target_normal = camera.get_normal_image()
+    target_f0 = camera.get_F0_image()
+    target_roughness = camera.get_roughness_image().mean(dim=0, keepdim=True) # todo do this averaging during image load
 
-    target_brdf = camera.sample_brdf_image()
+    target_brdf = camera.get_brdf_image()
 
     if iteration is not None:
         do_backprop = torch.is_grad_enabled() and iteration > raytracer.pc.model_params.warmup
@@ -43,7 +43,7 @@ def render(camera: Camera, raytracer: GaussianRaytracer, pipe_params: PipelinePa
         do_backprop = torch.is_grad_enabled()
 
     with torch.set_grad_enabled(do_backprop):
-        raytracing_pkg = raytracer(camera, pipe_params, bg_color, target=target, target_diffuse=target_diffuse, target_glossy=target_glossy, target_position=target_position, target_normal=target_normal, target_roughness=target_roughness, target_f0=target_f0, target_brdf=target_brdf)
+        raytracer(camera, pipe_params, bg_color, target=target, target_diffuse=target_diffuse, target_glossy=target_glossy, target_position=target_position, target_normal=target_normal, target_roughness=target_roughness, target_f0=target_f0, target_brdf=target_brdf)
 
     class package:
         "All of these results are reshaped to (C, H, W)"
