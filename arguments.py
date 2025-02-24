@@ -90,7 +90,7 @@ class ModelParams(ParamGroup):
         self.gaussian_subsets = False
         self.keep_every_kth_view = 1
         self.max_images = 9999999
-        self.num_init_points = 100_000 # 100_000
+        self.num_init_points = 10_000 # 100_000
         self.opacity_modulation = False
 
         self.min_gaussian_size = 0.0 
@@ -134,7 +134,7 @@ class ModelParams(ParamGroup):
         self.init_opacity = 0.1 # 0.1 for 3dgs, 0.5 for mcmc
 
         self.diffuse_loss_weight = 1.0
-        self.glossy_loss_weight = 1.0
+        self.glossy_loss_weight = 0.001
         self.normal_loss_weight = 1.0
         self.position_loss_weight = 1.0
         self.f0_loss_weight = 1.0
@@ -143,6 +143,9 @@ class ModelParams(ParamGroup):
         self.albedo_loss_weight = 1.0
         self.metalness_loss_weight = 1.0
 
+        self.prob_blur_targets = 0.0
+        self.target_blur_max = 16
+        
         self.max_opacity = 1.0
 
         self.add_mcmc_noise = False
@@ -191,8 +194,13 @@ class OptimizationParams(ParamGroup):
         self.opacity_cull = 0.05
         
         self.noise_lr = 5e5
-        self.scale_reg = 0.01
-        self.opacity_reg = 0.01
+        self.scale_reg = 0.0 # 0.01 in mcmc
+        self.opacity_reg = 0.0 # 0.01 in mcmc
+
+        self.scale_decay = 1.0 
+        self.opacity_decay = 1.0 
+        self.lod_mean_decay = 1.0
+        self.lod_scale_decay = 1.0
 
         self.densif_scaledown_clones = False
         self.densif_jitter_clones = False

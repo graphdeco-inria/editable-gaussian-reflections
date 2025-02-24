@@ -24,3 +24,5 @@ else:
         denominator = y - 1
         x = numerator / denominator
         return x / exposure
+
+

@@ -192,13 +192,21 @@ class GaussianModel:
     
     @property
     def get_lod_scale(self):
-        return self._lod_scale
+        return torch.exp(self._lod_scale)
     
     def get_covariance(self, scaling_modifier = 1):
         return self.covariance_activation(self.get_scaling, scaling_modifier, self._rotation)
 
     def create_from_pcd(self, pcd : BasicPointCloud, spatial_lr_scale : float):
         self.spatial_lr_scale = spatial_lr_scale
+
+        if "DUPLICATE_INIT_PCD" in os.environ:
+            pcd = BasicPointCloud(
+                np.concatenate([pcd.points] * 2),
+                np.concatenate([pcd.colors] * 2),
+                np.concatenate([pcd.normals] * 2)
+            )
+
         fused_point_cloud = torch.tensor(np.asarray(pcd.points)).float().cuda()
         fused_color = RGB2SH(torch.tensor(np.asarray(pcd.colors)).float().cuda())
         fused_normal = torch.tensor(np.asarray(pcd.normals)).float().cuda()
@@ -231,9 +239,13 @@ class GaussianModel:
         self._rotation = nn.Parameter(rots.requires_grad_(True))
         self._opacity = nn.Parameter(opacities.requires_grad_(True))
         self._lod_mean = nn.Parameter(torch.rand((fused_point_cloud.shape[0], 1), device="cuda") * self.model_params.init_lod_mean_max_value)
+        self._lod_scale = nn.Parameter(torch.log(torch.ones((fused_point_cloud.shape[0], 1), device="cuda") * self.model_params.init_lod_scale))
         with torch.no_grad():
             self._lod_mean.data[torch.rand_like(self._lod_mean) < self.model_params.init_lod_prob_0] = 0.0
-        self._lod_scale = nn.Parameter(torch.ones((fused_point_cloud.shape[0], 1), device="cuda") * self.model_params.init_lod_scale)
+        if "DUPLICATE_INIT_PCD" in os.environ:
+            with torch.no_grad(): 
+                self._lod_mean.copy_(torch.rand_like(self._lod_mean))
+                self._lod_mean[:self._lod_mean.shape[0]//2] = 0.0
 
         self.max_radii2D = torch.zeros((self.get_xyz.shape[0]), device="cuda")
 
@@ -311,6 +323,8 @@ class GaussianModel:
         normal = self._normal.detach().cpu().numpy()
         roughness = self._roughness.detach().cpu().numpy()
         f0 = self._f0.detach().cpu().numpy()
+        lod_mean = self._lod_mean.detach().cpu().numpy()
+        lod_scale = self._lod_scale.detach().cpu().numpy()
 
         all_attributes = [
             'x', 'y', 'z', 
@@ -322,11 +336,12 @@ class GaussianModel:
             'normal_0', 'normal_1', 'normal_2',
             'roughness',
             'f0_0', 'f0_1', 'f0_2',
+            'lod_mean', 'lod_scale'
         ]
         dtype_full = [(attribute, 'f4') for attribute in all_attributes]
 
         elements = np.empty(xyz.shape[0], dtype=dtype_full)
-        attributes = np.concatenate((xyz, f_dc, opacities, scale, rotation, position, normal, roughness, f0), axis=1)
+        attributes = np.concatenate((xyz, f_dc, opacities, scale, rotation, position, normal, roughness, f0, lod_mean, lod_scale), axis=1)
         elements[:] = list(map(tuple, attributes))
         el = PlyElement.describe(elements, 'vertex')
         PlyData([el]).write(path)
@@ -336,7 +351,7 @@ class GaussianModel:
             torch.save(self._brdf_lut_residual, brdf_lut_path)
 
     def reset_opacity(self):
-        opacities_new = inverse_sigmoid(torch.min(self.get_opacity, torch.ones_like(self.get_opacity)*0.1)) #! was 0.01
+        opacities_new = inverse_sigmoid(torch.min(self.get_opacity, torch.ones_like(self.get_opacity) * 0.1)) #! was 0.01
         optimizable_tensors = self.replace_tensor_to_optimizer(opacities_new, "opacity")
         self._opacity = optimizable_tensors["opacity"]
         self._opacity.grad = torch.zeros_like(self._opacity)
@@ -386,6 +401,9 @@ class GaussianModel:
         for idx, attr_name in enumerate(f0_names):
             f0[:, idx] = np.asarray(plydata.elements[0][attr_name])
 
+        lod_mean = np.asarray(plydata.elements[0]["lod_mean"])[..., np.newaxis]
+        lod_scale = np.asarray(plydata.elements[0]["lod_scale"])[..., np.newaxis]
+
         self._xyz = nn.Parameter(torch.tensor(xyz, dtype=torch.float, device="cuda"))
         self._diffuse = nn.Parameter(torch.tensor(diffuse, dtype=torch.float, device="cuda"))
         self._opacity = nn.Parameter(torch.tensor(opacities, dtype=torch.float, device="cuda"))
@@ -397,6 +415,8 @@ class GaussianModel:
         self._normal = nn.Parameter(torch.tensor(normals, dtype=torch.float, device="cuda"))
         self._roughness = nn.Parameter(torch.tensor(roughness, dtype=torch.float, device="cuda"))
         self._f0 = nn.Parameter(torch.tensor(f0, dtype=torch.float, device="cuda"))
+        self._lod_mean = nn.Parameter(torch.tensor(lod_mean, dtype=torch.float, device="cuda"))
+        self._lod_scale = nn.Parameter(torch.tensor(lod_scale, dtype=torch.float, device="cuda"))
 
         if self.model_params.brdf_mode == "finetuned_lut":
             self._brdf_lut_residual = nn.Parameter(torch.load(path.replace("point_cloud.ply", "brdf_lut_residuals.pt")).to("cuda"))
@@ -692,11 +712,16 @@ class GaussianModel:
 
     def add_densification_stats_3d(self, score):
         update_filter = self._opacity[:, 0].grad != 0
-        self.xyz_gradient_accum[update_filter] += (score[:, 0:1] + score[:, 1:2] / self.model_params.glossy_loss_weight)[update_filter] # weigh diffuse and glossy evenly after normalizaing by the loss weird
-        # torch.norm(self._xyz.grad[update_filter], dim=-1, keepdim=True)
+        if "GLOSS_DENS_ONLY" in os.environ:
+            import inspect
+            frame = inspect.currentframe().f_back
+            iteration = frame.f_locals["iteration"]
+            self.xyz_gradient_accum[update_filter] += (score[:, 1:2] )[update_filter] 
+        elif "NO_DENS_SCORE" in os.environ:
+            pass
+        else:
+            self.xyz_gradient_accum[update_filter] += (score[:, 0:1] )[update_filter] 
         self.denom[update_filter] += 1
-
-
 
 
 def get_count_array(start_count, opt):

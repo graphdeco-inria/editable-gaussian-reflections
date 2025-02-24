@@ -30,6 +30,9 @@ import time
 from scene.gaussian_model import build_scaling_rotation
 import math 
 from scene.tonemapping import *
+from utils.general_utils import inverse_sigmoid, get_expon_lr_func, build_rotation
+
+
 try:
     from torch.utils.tensorboard import SummaryWriter
     TENSORBOARD_FOUND = True
@@ -116,10 +119,17 @@ def training_report(tb_writer, iteration, elpased):
                                 save_image(torch.clamp(brdf_image, 0.0, 1.0), tb_writer.log_dir + "/" + f"{config['name']}_view/iter_{iteration:09}_{idx}_brdf_bounce_{k}.png")
 
                         if raytracer.config.SAVE_LOD_IMAGES:
-                            for k, (lod_mean, lod_scale, ray_lod) in enumerate(zip(raytracer.cuda_raytracer.output_lod_mean, raytracer.cuda_raytracer.output_lod_scale, raytracer.cuda_raytracer.output_ray_lod)):
+                            for k, (lod_mean, lod_scale, ray_lod) in enumerate(zip(raytracer.cuda_module.output_lod_mean, raytracer.cuda_module.output_lod_scale, raytracer.cuda_module.output_ray_lod)):
                                 save_image(lod_mean.moveaxis(-1, 0), tb_writer.log_dir + "/" + f"{config['name']}_view/iter_{iteration:09}_{idx}_lod_mean_{k}.png")
-                                save_image(lod_mean.moveaxis(-1, 0), tb_writer.log_dir + "/" + f"{config['name']}_view/iter_{iteration:09}_{idx}_lod_scale_{k}.png")
+                                save_image(lod_scale.moveaxis(-1, 0), tb_writer.log_dir + "/" + f"{config['name']}_view/iter_{iteration:09}_{idx}_lod_scale_{k}.png")
                                 save_image(lod_mean.moveaxis(-1, 0), tb_writer.log_dir + "/" + f"{config['name']}_view/iter_{iteration:09}_{idx}_ray_lod_{k}.png")
+
+                        if raytracer.config.SAVE_HIT_STATS:
+                            torch.save(raytracer.cuda_module.num_hits_per_pixel, tb_writer.log_dir + "/" + f"{config['name']}_view/iter_{iteration:09}_{idx}_num_hits_per_pixel.pt")
+                            torch.save(raytracer.cuda_module.num_traversed_per_pixel, tb_writer.log_dir + "/" + f"{config['name']}_view/iter_{iteration:09}_{idx}_num_traversed_per_pixel.pt")
+                            # also save them as normalized png 
+                            save_image((raytracer.cuda_module.num_hits_per_pixel.float() / raytracer.cuda_module.num_hits_per_pixel.max()), tb_writer.log_dir + "/" + f"{config['name']}_view/iter_{iteration:09}_{idx}_num_hits_per_pixel.png")
+                            save_image((raytracer.cuda_module.num_traversed_per_pixel.float() / raytracer.cuda_module.num_traversed_per_pixel.max()), tb_writer.log_dir + "/" + f"{config['name']}_view/iter_{iteration:09}_{idx}_num_traversed_per_pixel.png")
 
                         save_image(torch.stack([roughness_image.cuda(), roughness_gt_image]), tb_writer.log_dir + "/" + f"{config['name']}_view/iter_{iteration:09}_{idx}_roughness.png", nrow=2, padding=0)
                         save_image(torch.stack([F0_image.cuda(), F0_gt_image]), tb_writer.log_dir + "/" + f"{config['name']}_view/iter_{iteration:09}_{idx}_F0.png", nrow=2, padding=0)
@@ -131,6 +141,21 @@ def training_report(tb_writer, iteration, elpased):
                         save_image(torch.stack([normal_image.cuda(), normal_gt_image]), tb_writer.log_dir + "/" + f"{config['name']}_view/iter_{iteration:09}_{idx}_normal.png", nrow=2, padding=0)
                         if model_params.brdf_mode != "disabled":
                             save_image(torch.stack([brdf_image, brdf_gt_image.cuda()]), tb_writer.log_dir + "/" + f"{config['name']}_view/iter_{iteration:09}_{idx}_brdf.png", nrow=2, padding=0)
+
+                        if model_params.prob_blur_targets > 0.0:
+                            for k, alpha in enumerate(torch.linspace(0.0, 1.0, 4)):
+                                print(k, alpha * model_params.target_blur_max)
+                                package = render(viewpoint, raytracer, pipe_params, bg, blur_sigma=alpha * model_params.target_blur_max)
+
+                                diffuse_gt_image = package.target_diffuse
+                                glossy_gt_image = package.target_glossy
+                                gt_image = package.target
+                            
+                                diffuse_pred = tonemap(untonemap(package.rgb[0]))
+                                glossy_pred = tonemap(untonemap(package.rgb[1:].sum(dim=0)))
+                                pred = tonemap(untonemap(package.rgb).sum(dim=0))
+
+                                save_image(torch.stack([diffuse_pred, diffuse_gt_image, glossy_pred, glossy_gt_image, pred, gt_image]), tb_writer.log_dir + "/" + f"{config['name']}_view/iter_{iteration:09}_{idx}_blurred_{k}÷3.png", nrow=2)        
 
 
                     diffuse_l1_test += l1_loss(diffuse_image, diffuse_gt_image).mean().double()
@@ -185,7 +210,7 @@ parser.add_argument('--detect_anomaly', action='store_true', default=False)
 parser.add_argument('--flip_camera', action='store_true', default=False)
 # parser.add_argument("--test_iterations", nargs="+", type=int, default=[1, 100, 500, 1_000, 2_500, 5_000, 10_000, 20_000, 30_000, 60_000, 90_000])
 parser.add_argument("--test_iterations", nargs="+", type=int, default=[1, 1_000, 5_000, 10_000, 20_000, 30_000, 60_000, 90_000])
-parser.add_argument("--save_iterations", nargs="+", type=int, default=[1, 7_000, 30_000, 60_000, 90_000])
+parser.add_argument("--save_iterations", nargs="+", type=int, default=[1, 7_000, 15_000, 30_000, 60_000, 90_000])
 parser.add_argument("--quiet", action="store_true")
 parser.add_argument("--viewer", action="store_true")
 parser.add_argument("--checkpoint_iterations", nargs="+", type=int, default=[])
@@ -270,9 +295,20 @@ for iteration in tqdm(range(first_iter, opt_params.iterations + 1), desc="Traini
     # *** run fused forward + backprop
     package = render(viewpoint_cam, raytracer, pipe_params, bg)
 
-    if model_params.mcmc_densify:
+    if opt_params.opacity_reg > 0:
         gaussians._opacity.grad += torch.autograd.grad(args.opacity_reg * torch.abs(gaussians.get_opacity).mean(), gaussians._opacity)[0]
+    if opt_params.scale_reg > 0:
         gaussians._scaling.grad += torch.autograd.grad(args.scale_reg * torch.abs(gaussians.get_scaling).mean(), gaussians._scaling)[0]
+
+    with torch.no_grad():
+        if opt_params.opacity_decay < 1.0:
+            gaussians._opacity.copy_(inverse_sigmoid(gaussians.get_opacity * opt_params.opacity_decay)) 
+        if opt_params.scale_decay < 1.0:
+            gaussians._scaling.copy_(torch.log(gaussians.get_scaling * opt_params.scale_decay))
+        if opt_params.lod_mean_decay < 1.0:
+            gaussians._lod_mean.copy_(torch.log(gaussians.get_lod_mean * opt_params.lod_mean_decay))
+        if opt_params.lod_scale_decay < 1.0:
+            gaussians._lod_scale.copy_(torch.log(gaussians.get_lod_scale * opt_params.lod_scale_decay))
 
     # todo clamp the min opacities so they don't go under ALPHA_THRESHOLD
     iter_end.record()
@@ -285,19 +321,53 @@ for iteration in tqdm(range(first_iter, opt_params.iterations + 1), desc="Traini
         if model_params.mcmc_densify:
             assert False
             print("num nans in opacity grad:", gaussians.get_opacity.isnan().sum())
-        
-        if iteration in args.save_iterations:
+
+        if iteration % 3000 == 0 or iteration == 1:
+            # Save the elapsed time
             delta = time.time() - start
             with open(os.path.join(args.model_path, "time.txt"), "a") as f:
                 minutes, seconds = divmod(int(delta), 60)
                 timestamp = f"{minutes:02}:{seconds:02}"
+                print("Elapsed time: ", timestamp)
                 f.write(f"{iteration:5}: {timestamp}\n")
-            print("\n[ITER {}] Saving Gaussians".format(iteration))
-            scene.save(iteration)
-            print("Elapsed time: ", timestamp)
+
+            # Save the average and std opacity
+            with open(os.path.join(args.model_path, "opacity.txt"), "a") as f:
+                f.write(f"{iteration:5}: {gaussians.get_opacity.mean().item():.3f} +- {gaussians.get_opacity.std().item():.3f}\n")
+            
+            # Save the average and std size
+            with open(os.path.join(args.model_path, "size.txt"), "a") as f:
+                f.write(f"{iteration:5}: {gaussians.get_scaling.mean().item():.3f} +- {gaussians.get_scaling.std().item():.3f}\n")
+
+            # Save the average and std size of the largest axis per gaussian
+            with open(os.path.join(args.model_path, "size_axis_max.txt"), "a") as f:
+                f.write(f"{iteration:5}: {gaussians.get_scaling.amax(dim=1).mean().item():.5f} +- {gaussians.get_scaling.amax(dim=1).std().item():.5f}\n")
+
+            # same but for the median axis
+            with open(os.path.join(args.model_path, "size_axis_median.txt"), "a") as f:
+                f.write(f"{iteration:5}: {gaussians.get_scaling.median(dim=1).values.mean().item():.5f} +- {gaussians.get_scaling.median(dim=1).values.std().item():.5f}\n")
+
+            # Same but for the smallest axis
+            with open(os.path.join(args.model_path, "size_axis_min.txt"), "a") as f:
+                f.write(f"{iteration:5}: {gaussians.get_scaling.amin(dim=1).mean().item():.5f} +- {gaussians.get_scaling.amin(dim=1).std().item():.5f}\n")
+
+            # From raytracer.num_hits, print the mean, max, and std 
+            num_hits = raytracer.cuda_module.num_hits_per_pixel.float()
+            with open(os.path.join(args.model_path, "num_hits.txt"), "a") as f:
+                f.write(f"{iteration:5}: {num_hits.mean().item():.3f} +- {num_hits.std().item():.3f}\n")
+
+            num_traversed = raytracer.cuda_module.num_traversed_per_pixel.float()
+            with open(os.path.join(args.model_path, "num_traversed.txt"), "a") as f:
+                f.write(f"{iteration:5}: {num_traversed.mean().item():.3f} +- {num_traversed.std().item():.3f}\n")
+
             with open(os.path.join(args.model_path, "num_gaussians.txt"), "a") as f:
                 f.write(f"{iteration:5}: {gaussians.get_xyz.shape[0]}\n")
                 print("Number of gaussians: ", gaussians.get_xyz.shape[0])
+
+        
+        if iteration in args.save_iterations:
+            print("\n[ITER {}] Saving Gaussians".format(iteration))
+            scene.save(iteration)
 
         # todo check these again & review position, in this codecase it used to be after the densification step, but i don't recall where it was originally in 3dgs
         if model_params.use_opacity_resets and iteration < opt_params.densify_until_iter: 
@@ -305,7 +375,7 @@ for iteration in tqdm(range(first_iter, opt_params.iterations + 1), desc="Traini
                 gaussians.reset_opacity()
 
         if opt_params.densif_use_top_k and iteration <= opt_params.densify_until_iter:
-            gaussians.add_densification_stats_3d(raytracer.cuda_raytracer.densification_gradient_score)
+            gaussians.add_densification_stats_3d(raytracer.cuda_module.densification_gradient_score)
 
         if opt_params.densif_use_top_k and iteration > opt_params.densify_from_iter and iteration % opt_params.densification_interval == 0:
             if iteration < opt_params.densify_until_iter:
@@ -320,6 +390,7 @@ for iteration in tqdm(range(first_iter, opt_params.iterations + 1), desc="Traini
             raytracer.rebuild_bvh()
 
         gaussians.optimizer.step()
+        # print(gaussians._diffuse.grad.sum())
         gaussians.optimizer.zero_grad(set_to_none=False) # todo not sure if this set_to_none=False is still required
         raytracer.zero_grad()
 
@@ -328,6 +399,13 @@ for iteration in tqdm(range(first_iter, opt_params.iterations + 1), desc="Traini
                 gaussians._scaling.data.clamp_(min=math.log(model_params.min_gaussian_size))
 
         gaussians._lod_mean.data.clamp_(min=0)
+
+        # Clamp the gaussian scales to min 1% of the longest axis for numerical stability
+        if "SKIP_CLAMP_MINSIZE" not in os.environ:
+            with torch.no_grad():
+                scaling = gaussians.get_scaling
+                max_scaling = scaling.amax(dim=1)
+                gaussians._scaling.data.clamp_(min=torch.log(max_scaling * 0.01).unsqueeze(-1))
 
         if model_params.max_opacity < 1.0:
             with torch.no_grad():
