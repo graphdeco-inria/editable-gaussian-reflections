@@ -93,6 +93,7 @@ def render_set(model_params, model_path, split, iteration, views, gaussians, pip
                         view0 = view
                         view0.FoVx = 2.0944 * 2 # ??? wrong value still works?
                         view0.FoVy = -2.0944 * 2 #?? why negative
+                        continue # * Skip frame 0, rotation is incorrect for some reason I don't understand
                     view = view0
 
                     R_colmap_init = view.R
@@ -102,13 +103,12 @@ def render_set(model_params, model_path, split, iteration, views, gaussians, pip
                     T_blender = -R_colmap_init @ view.T
                     
                     if "env_rot" in mode:
-                        theta = 2 * math.pi * idx / (len(views) - 1)
+                        theta = (2 * math.pi * idx) / len(views) 
                         rotation = torch.tensor((
                             (math.cos(theta), -math.sin(theta), 0.0),
                             (math.sin(theta), math.cos(theta), 0.0),
                             (0.0, 0.0, 1.0)
                         ))
-                        print(math.cos(theta), math.sin(theta))
                         if idx > 0:
                             R_blender = rotation.to(torch.float64) @  np.array(((-0.9882196187973022, 0.10767492651939392, -0.10875695198774338),
                 (-0.10844696313142776, 0.008747747167944908, 0.9940638542175293),
@@ -144,7 +144,6 @@ def render_set(model_params, model_path, split, iteration, views, gaussians, pip
                     view.T = np.array(T_colmap)
                     
                     view.update()
-                    print(view.world_view_transform)
                 
                 if mode == "lod":
                     alpha = idx / (len(views) - 1)
@@ -248,14 +247,14 @@ def render_set(model_params, model_path, split, iteration, views, gaussians, pip
                     torchvision.io.write_video(path.format(name=f"F0_gts_{label}", dir=video_dir), torch.stack(all_F0_gts), **kwargs)
                     torchvision.io.write_video(path.format(name=f"F0_comparison_{label}", dir=video_dir), torch.cat([torch.stack(all_F0_renders), torch.stack(all_F0_gts)], dim=2), **kwargs)
                     
-                if split == "test" and mode == "normal":
+                if split == "test":
                     shutil.copy(
                         path.format(name=f"comparison_lq", dir=video_dir), 
-                        path.format(name="comparison_lq", dir="")
+                        path.format(name=f"comparison_lq_{mode}{blur_suffix}", dir="")
                     )
                     shutil.copy(
                         path.format(name=f"comparison_hq", dir=video_dir), 
-                        path.format(name="comparison_hq", dir="")
+                        path.format(name=f"comparison_hq_{mode}{blur_suffix}", dir="")
                     )
 
 @torch.no_grad()
@@ -304,8 +303,8 @@ if __name__ == "__main__":
     parser.add_argument("--iteration", default=-1, type=int)
     parser.add_argument("--train_views", action="store_true")
     parser.add_argument("--quiet", action="store_true")
-    parser.add_argument("--modes", type=str, choices=["normal", "lod", "env_rot_1", "env_rot_2", "env_move_1", "env_move_2"], default=["normal", "lod", "env_rot_2", "env_move_1"], nargs="+")
-    parser.add_argument("--blur_sigmas", type=float, default=[None, 4.0], nargs="+")
+    parser.add_argument("--modes", type=str, choices=["regular", "lod", "env_rot_1", "env_rot_2", "env_move_1", "env_move_2"], default=["regular", "lod", "env_rot_1", "env_move_1", "env_move_1"], nargs="+") # env_rot_1 is at the scene's origin, env_rot_2 it somewhere in the far-field, env_move_1 dollys forward, env_move_2 trucks sideways
+    parser.add_argument("--blur_sigmas", type=float, default=[None, 4.0, 16.0], nargs="+")
     parser.add_argument("--skip_video", action="store_true")
     parser.add_argument("--red_region", action="store_true")
     parser.add_argument("--save_frames", action="store_true")

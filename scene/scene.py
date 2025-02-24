@@ -100,11 +100,15 @@ class Scene:
             extra_colors = scene_info_synthetic.point_cloud.colors
             extra_normals = scene_info_synthetic.point_cloud.normals
 
-        scene_info.point_cloud = BasicPointCloud(
-            np.concatenate([scene_info.point_cloud.points, extra_points]),
-            np.concatenate([scene_info.point_cloud.colors, extra_colors]),
-            np.concatenate([scene_info.point_cloud.normals, extra_normals])
-        )
+        import sys
+        sys.path.append(f"raytracer_builds/{gaussians.model_params.raytracer_version}")
+        import raytracer_config
+        if raytracer_config.MAX_BOUNCES > 0:
+            scene_info.point_cloud = BasicPointCloud(
+                np.concatenate([scene_info.point_cloud.points, extra_points]),
+                np.concatenate([scene_info.point_cloud.colors, extra_colors]),
+                np.concatenate([scene_info.point_cloud.normals, extra_normals])
+            )
 
         if self.loaded_iter:
             self.gaussians.load_ply(os.path.join(self.model_path,
