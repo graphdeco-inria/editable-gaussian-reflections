@@ -31,7 +31,9 @@ from scene.gaussian_model import build_scaling_rotation
 import math 
 from scene.tonemapping import *
 from utils.general_utils import inverse_sigmoid, get_expon_lr_func, build_rotation
-
+import pandas as pd
+import plotly.express as px
+import random
 
 try:
     from torch.utils.tensorboard import SummaryWriter
@@ -62,7 +64,7 @@ def prepare_output_and_logger(args: ModelParams, opt_params):
     return tb_writer
 
 @torch.no_grad()
-def training_report(tb_writer, iteration, elpased):
+def training_report(tb_writer, iteration):
     if iteration in args.test_iterations:
         torch.cuda.empty_cache()
         validation_configs = ({'name': 'test', 'cameras' : scene.getTestCameras()}, 
@@ -88,7 +90,7 @@ def training_report(tb_writer, iteration, elpased):
                     glossy_image = torch.clamp(package.rgb[1:].sum(dim=0), 0.0, 1.0)
                     diffuse_gt_image = torch.clamp(viewpoint.diffuse_image, 0.0, 1.0)
                     glossy_gt_image = torch.clamp(viewpoint.glossy_image, 0.0, 1.0)
-                    normal_gt_image = torch.clamp(viewpoint.get_normal_image() / 2 + 0.5, 0.0, 1.0)
+                    normal_gt_image = torch.clamp(viewpoint.normal_image / 2 + 0.5, 0.0, 1.0)
                     pred_image = tonemap(untonemap(package.rgb).sum(dim=0))
 
                     gt_image = torch.clamp(viewpoint.original_image, 0.0, 1.0)
@@ -102,13 +104,20 @@ def training_report(tb_writer, iteration, elpased):
                     if model_params.brdf_mode != "disabled":
                         brdf_image = torch.clamp(package.brdf[0], 0.0, 1.0)
 
-                    normal_gt_image = torch.clamp(viewpoint.get_normal_image() / 2 + 0.5, 0.0, 1.0)
-                    position_gt_image = torch.clamp(viewpoint.get_position_image(), 0.0, 1.0)
-                    F0_gt_image = torch.clamp(viewpoint.get_F0_image(), 0.0, 1.0)
-                    roughness_gt_image = torch.clamp(viewpoint.get_roughness_image(), 0.0, 1.0)
+                    normal_gt_image = torch.clamp(viewpoint.normal_image / 2 + 0.5, 0.0, 1.0)
+                    position_gt_image = torch.clamp(viewpoint.position_image, 0.0, 1.0)
+                    F0_gt_image = torch.clamp(viewpoint.F0_image, 0.0, 1.0)
+                    roughness_gt_image = torch.clamp(viewpoint.roughness_image, 0.0, 1.0)
                     if model_params.brdf_mode != "disabled":
-                        brdf_gt_image = torch.clamp(viewpoint.get_brdf_image(), 0.0, 1.0)
-                        
+                        brdf_gt_image = torch.clamp(viewpoint.brdf_image, 0.0, 1.0)
+
+                    diffuse_l1_test += l1_loss(diffuse_image, diffuse_gt_image).mean().double()
+                    diffuse_psnr_test += psnr(diffuse_image, diffuse_gt_image).mean().double()
+                    glossy_l1_test += l1_loss(glossy_image, glossy_gt_image).mean().double()
+                    glossy_psnr_test += psnr(glossy_image, glossy_gt_image).mean().double()
+                    l1_test += l1_loss(pred_image, gt_image).mean().double()
+                    psnr_test += psnr(pred_image, gt_image).mean().double()
+
                     if tb_writer and (idx < 5): 
                         if package.rgb.shape[0] > 2:
                             for k, (rgb_img, normal_img, pos_image,F0_image, brdf_image) in enumerate(zip(package.rgb, package.normal, package.position, package.F0, package.brdf)):
@@ -142,10 +151,9 @@ def training_report(tb_writer, iteration, elpased):
                         if model_params.brdf_mode != "disabled":
                             save_image(torch.stack([brdf_image, brdf_gt_image.cuda()]), tb_writer.log_dir + "/" + f"{config['name']}_view/iter_{iteration:09}_{idx}_brdf.png", nrow=2, padding=0)
 
-                        if model_params.prob_blur_targets > 0.0:
+                        if raytracer.config.USE_LEVEL_OF_DETAIL:
                             for k, alpha in enumerate(torch.linspace(0.0, 1.0, 4)):
-                                print(k, alpha * model_params.target_blur_max)
-                                package = render(viewpoint, raytracer, pipe_params, bg, blur_sigma=alpha * model_params.target_blur_max)
+                                package = render(viewpoint, raytracer, pipe_params, bg, blur_sigma=alpha * scene.max_pixel_blur_sigma if not model_params.lod_force_blur_sigma >= 0.0 else torch.tensor(model_params.lod_force_blur_sigma, device="cuda"))
 
                                 diffuse_gt_image = package.target_diffuse
                                 glossy_gt_image = package.target_glossy
@@ -156,14 +164,6 @@ def training_report(tb_writer, iteration, elpased):
                                 pred = tonemap(untonemap(package.rgb).sum(dim=0))
 
                                 save_image(torch.stack([diffuse_pred, diffuse_gt_image, glossy_pred, glossy_gt_image, pred, gt_image]), tb_writer.log_dir + "/" + f"{config['name']}_view/iter_{iteration:09}_{idx}_blurred_{k}÷3.png", nrow=2)        
-
-
-                    diffuse_l1_test += l1_loss(diffuse_image, diffuse_gt_image).mean().double()
-                    diffuse_psnr_test += psnr(diffuse_image, diffuse_gt_image).mean().double()
-                    glossy_l1_test += l1_loss(glossy_image, glossy_gt_image).mean().double()
-                    glossy_psnr_test += psnr(glossy_image, glossy_gt_image).mean().double()
-                    l1_test += l1_loss(pred_image, gt_image).mean().double()
-                    psnr_test += psnr(pred_image, gt_image).mean().double()
 
                 if model_params.brdf_mode == "static_lut":
                     save_image(torch.stack([ gaussians.get_brdf_lut ]).abs(), os.path.join(tb_writer.log_dir, f"{config['name']}_view/lut_iter_{iteration:09}.png"), nrow=1)
@@ -209,7 +209,7 @@ parser.add_argument('--port', type=int, default=6009)
 parser.add_argument('--detect_anomaly', action='store_true', default=False)
 parser.add_argument('--flip_camera', action='store_true', default=False)
 # parser.add_argument("--test_iterations", nargs="+", type=int, default=[1, 100, 500, 1_000, 2_500, 5_000, 10_000, 20_000, 30_000, 60_000, 90_000])
-parser.add_argument("--test_iterations", nargs="+", type=int, default=[1, 1_000, 5_000, 10_000, 20_000, 30_000, 60_000, 90_000])
+parser.add_argument("--test_iterations", nargs="+", type=int, default=[1, 1_000, 2_000, 3_000, 5_000, 10_000, 20_000, 30_000, 60_000, 90_000])
 parser.add_argument("--save_iterations", nargs="+", type=int, default=[1, 7_000, 15_000, 30_000, 60_000, 90_000])
 parser.add_argument("--quiet", action="store_true")
 parser.add_argument("--viewer", action="store_true")
@@ -244,8 +244,6 @@ tb_writer = prepare_output_and_logger(model_params, opt_params)
 gaussians = GaussianModel(model_params)
 scene = Scene(model_params, gaussians)
 
-if model_params.znear_init_pruning:
-    scene.autoadjust_znear()
 gaussians.training_setup(opt_params)
 
 
@@ -293,7 +291,15 @@ for iteration in tqdm(range(first_iter, opt_params.iterations + 1), desc="Traini
     bg = torch.rand((3), device="cuda") if opt_params.random_background else background
 
     # *** run fused forward + backprop
-    package = render(viewpoint_cam, raytracer, pipe_params, bg)
+    if raytracer.config.USE_LEVEL_OF_DETAIL and random.random() < model_params.lod_prob_blur_targets:
+        if model_params.lod_force_blur_sigma >= 0.0:
+            blur_sigma = torch.tensor(model_params.lod_force_blur_sigma, device="cuda")
+        else:
+            blur_sigma = torch.rand(1, device="cuda")**model_params.lod_schedule_power * scene.max_pixel_blur_sigma
+    else:
+        blur_sigma = None
+
+    package = render(viewpoint_cam, raytracer, pipe_params, bg, blur_sigma=blur_sigma)
 
     if opt_params.opacity_reg > 0:
         gaussians._opacity.grad += torch.autograd.grad(args.opacity_reg * torch.abs(gaussians.get_opacity).mean(), gaussians._opacity)[0]
@@ -315,14 +321,39 @@ for iteration in tqdm(range(first_iter, opt_params.iterations + 1), desc="Traini
 
     with torch.no_grad():
         # Log and save
-        #! buggy iter_start.elapsed_time(iter_end), RuntimeError: CUDA error: device not ready
-        training_report(tb_writer, iteration, 0.0) 
+        training_report(tb_writer, iteration) 
 
-        if model_params.mcmc_densify:
-            assert False
-            print("num nans in opacity grad:", gaussians.get_opacity.isnan().sum())
+        if iteration % 1000 == 0 or iteration == 1:
+            os.makedirs(os.path.join(args.model_path, "plots"), exist_ok=True)
 
-        if iteration % 3000 == 0 or iteration == 1:
+            if False:
+                # Save a histogram of gaussian opacities
+                opacities = gaussians.get_opacity.cpu().numpy()
+                df = pd.DataFrame(opacities, columns=["opacity"])
+                fig = px.histogram(df, x="opacity", nbins=50, title="Histogram of Gaussian Opacities")
+                fig.write_image(os.path.join(args.model_path, f"plots/opacity_histogram_{iteration:05d}.png"))
+
+                # Save a histogram of gaussian _lod_mean
+                lod_mean = gaussians.get_lod_mean.cpu().numpy()
+                df = pd.DataFrame(lod_mean, columns=["lod_mean"])
+                fig = px.histogram(df, x="lod_mean", nbins=50, title="Histogram of Gaussian LOD Mean")
+                fig.write_image(os.path.join(args.model_path, f"plots/lod_mean_histogram_{iteration:05d}.png"))
+
+                # Save a histogram of gaussian _lod_scale
+                lod_scale = gaussians.get_lod_scale.cpu().numpy()
+                df = pd.DataFrame(lod_scale, columns=["lod_scale"])
+                fig = px.histogram(df, x="lod_scale", nbins=50, title="Histogram of Gaussian LOD Scale")
+                fig.write_image(os.path.join(args.model_path, f"plots/lod_scale_histogram_{iteration:05d}.png"))
+
+            if True:
+                # Save a scatter plot of gaussian round counter vs lod_mean
+                sample_indices = random.sample(range(gaussians._round_counter.shape[0]), int(0.20 * gaussians._round_counter.shape[0]))
+                round_counter = gaussians._round_counter[sample_indices].cpu().numpy()
+                lod_mean = gaussians.get_lod_mean[sample_indices].cpu().numpy()
+                df = pd.DataFrame({ 'round_counter': round_counter[:, 0], 'lod_mean': lod_mean[:, 0] })
+                fig = px.scatter(df, x="lod_mean", y="round_counter", title="Scatter Plot of Gaussian Densification Round Counter vs LOD Mean", opacity=0.01)
+                fig.write_image(os.path.join(args.model_path, f"plots/round_counter_vs_lod_mean_{iteration:05d}.png"))
+
             # Save the elapsed time
             delta = time.time() - start
             with open(os.path.join(args.model_path, "time.txt"), "a") as f:
@@ -364,7 +395,6 @@ for iteration in tqdm(range(first_iter, opt_params.iterations + 1), desc="Traini
                 f.write(f"{iteration:5}: {gaussians.get_xyz.shape[0]}\n")
                 print("Number of gaussians: ", gaussians.get_xyz.shape[0])
 
-        
         if iteration in args.save_iterations:
             print("\n[ITER {}] Saving Gaussians".format(iteration))
             scene.save(iteration)
@@ -377,28 +407,37 @@ for iteration in tqdm(range(first_iter, opt_params.iterations + 1), desc="Traini
         if opt_params.densif_use_top_k and iteration <= opt_params.densify_until_iter:
             gaussians.add_densification_stats_3d(raytracer.cuda_module.densification_gradient_score)
 
-        if opt_params.densif_use_top_k and iteration > opt_params.densify_from_iter and iteration % opt_params.densification_interval == 0:
-            if iteration < opt_params.densify_until_iter:
-                #!!!!!!!! review why I'm starting with so many fewer gaussians than the # of sfm points.
-                max_screen_size = 20 if iteration > opt_params.opacity_reset_interval else None
-                trace = gaussians.densify_and_prune_top_k(scene, opt_params, model_params.min_opacity, scene.cameras_extent * model_params.glossy_bbox_size_mult * model_params.scene_extent_multiplier)
-                trace = f"Iteration {iteration}; " + trace
-                with open(os.path.join(scene.model_path + "/densification_trace.txt"), "a") as f:
-                    f.write(trace)
+        if iteration % opt_params.densification_interval == 0 or iteration == 1:
+            max_ws_size = scene.cameras_extent * model_params.glossy_bbox_size_mult * model_params.scene_extent_multiplier
+            densif_args = (scene, opt_params, model_params.min_opacity, max_ws_size)
+            if opt_params.densif_use_top_k and iteration > opt_params.densify_from_iter:
+                if iteration < opt_params.densify_until_iter:
+                    #!!!!!!!! review why I'm starting with so many fewer gaussians than the # of sfm points.
+                    trace = gaussians.densify_and_prune_top_k(*densif_args)
+                    trace = f"Iteration {iteration}; " + trace
+                    with open(os.path.join(scene.model_path + "/densification_trace.txt"), "a") as f:
+                        f.write(trace)
+                else:
+                    gaussians.prune_znear_only(scene)
             else:
-                gaussians.prune_znear_only(scene)
+                gaussians.prune(*densif_args)
             raytracer.rebuild_bvh()
 
         gaussians.optimizer.step()
-        # print(gaussians._diffuse.grad.sum())
         gaussians.optimizer.zero_grad(set_to_none=False) # todo not sure if this set_to_none=False is still required
         raytracer.zero_grad()
 
-        if model_params.min_gaussian_size > 0:
-            with torch.no_grad():
-                gaussians._scaling.data.clamp_(min=math.log(model_params.min_gaussian_size))
-
-        gaussians._lod_mean.data.clamp_(min=0)
+        with torch.no_grad():
+            gaussians._lod_mean.data.clamp_(min=0)
+        
+        if model_params.lod_clamp_minsize:
+            with torch.no_grad(): 
+                # gaussians._scaling.data.clamp_(min=torch.log(torch.tensor(1e-8, device="cuda")))
+                gaussians._scaling.data.clamp_(min=torch.log(gaussians._lod_mean.clamp(min=1e-8))) 
+                #!!!!!!!!!!!!!!!!!!!!!!!!!!!!! + 1e-8 didnt work, this is where the bug lies.
+            if torch.isnan(gaussians._lod_mean).any() or torch.isnan(gaussians._scaling).any():
+                print("NANs in lod_mean or _scaling")
+                quit()
 
         # Clamp the gaussian scales to min 1% of the longest axis for numerical stability
         if "SKIP_CLAMP_MINSIZE" not in os.environ:
@@ -406,10 +445,6 @@ for iteration in tqdm(range(first_iter, opt_params.iterations + 1), desc="Traini
                 scaling = gaussians.get_scaling
                 max_scaling = scaling.amax(dim=1)
                 gaussians._scaling.data.clamp_(min=torch.log(max_scaling * 0.01).unsqueeze(-1))
-
-        if model_params.max_opacity < 1.0:
-            with torch.no_grad():
-                gaussians._opacity.data.clamp_(max=gaussians.inverse_opacity_activation(torch.tensor(model_params.max_opacity, device="cuda")))
 
         if model_params.add_mcmc_noise:
             L = build_scaling_rotation(gaussians.get_scaling, gaussians.get_rotation)

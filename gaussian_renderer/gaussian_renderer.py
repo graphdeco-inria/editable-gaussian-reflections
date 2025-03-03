@@ -32,19 +32,16 @@ def render(camera: Camera, raytracer: GaussianRaytracer, pipe_params: PipelinePa
     target = camera.original_image
     target_diffuse = camera.diffuse_image
     target_glossy = camera.glossy_image
-    target_position = camera.get_position_image()
-    target_normal = camera.get_normal_image()
-    target_f0 = camera.get_F0_image()
-    target_roughness = camera.get_roughness_image().mean(dim=0, keepdim=True) # todo do this averaging during image load
-    target_brdf = camera.get_brdf_image()
+    target_position = camera.position_image
+    target_normal = camera.normal_image
+    target_f0 = camera.F0_image
+    target_roughness = camera.roughness_image.mean(dim=0, keepdim=True) # todo do this averaging during image load
+    target_brdf = camera.brdf_image
 
     if iteration is not None:
         do_backprop = torch.is_grad_enabled() and iteration > raytracer.pc.model_params.warmup
     else:
         do_backprop = torch.is_grad_enabled()
-
-    if torch.is_grad_enabled() and blur_sigma is None and random.random() < raytracer.pc.model_params.prob_blur_targets:
-        blur_sigma = torch.rand(1, device="cuda") * raytracer.pc.model_params.target_blur_max
 
     if blur_sigma is not None:
         if not isinstance(blur_sigma, torch.Tensor):
@@ -65,6 +62,11 @@ def render(camera: Camera, raytracer: GaussianRaytracer, pipe_params: PipelinePa
         _target_roughness = target_roughness
         _target_f0 = target_f0
         _target_brdf = target_brdf
+
+    if raytracer.pc.model_params.use_diffuse_target:
+        _target = _target_diffuse
+    if raytracer.pc.model_params.use_glossy_target:
+        _target = _target_diffuse
 
     with torch.set_grad_enabled(do_backprop):
         raytracer(camera, pipe_params, bg_color, target=_target, target_diffuse=_target_diffuse, target_glossy=_target_glossy, target_position=_target_position, target_normal=_target_normal, target_roughness=_target_roughness, target_f0=_target_f0, target_brdf=_target_brdf)

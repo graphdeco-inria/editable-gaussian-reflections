@@ -15,6 +15,7 @@ import json
 from utils.system_utils import searchForMaxIteration
 from scene.dataset_readers import *
 from scene.gaussian_model import GaussianModel
+import math 
 
 from arguments import ModelParams
 from utils.camera_utils import cameraList_from_camInfos, camera_to_JSON
@@ -85,7 +86,7 @@ class Scene:
 
         ## Remove all init points that are too close to the camera
         if gaussians.model_params.znear_init_pruning or gaussians.model_params.znear_densif_pruning:
-            self.autoadjust_znear()
+            self.autoadjust_zplanes()
         
         if gaussians.model_params.znear_init_pruning:
             points = torch.from_numpy(scene_info_synthetic.point_cloud.points).cuda().float()
@@ -100,6 +101,8 @@ class Scene:
             extra_colors = scene_info_synthetic.point_cloud.colors
             extra_normals = scene_info_synthetic.point_cloud.normals
 
+        self.autoadjust_zplanes()
+            
         import sys
         sys.path.append(f"raytracer_builds/{gaussians.model_params.raytracer_version}")
         import raytracer_config
@@ -116,9 +119,9 @@ class Scene:
                                                            "iteration_" + str(self.loaded_iter),
                                                            "point_cloud.ply"))
         else:
-            self.gaussians.create_from_pcd(scene_info.point_cloud, self.cameras_extent)
-
-
+            
+            self.gaussians.create_from_pcd(scene_info.point_cloud, self.cameras_extent, self.train_cameras[1.0][0].FoVy, self.max_zfar, raytracer_config)
+        
         self.gaussians.scene = self
 
     def select_points_to_prune_near_cameras(self, points):
@@ -160,7 +163,7 @@ class Scene:
         return points_to_prune
 
     @torch.no_grad()
-    def autoadjust_znear(self):
+    def autoadjust_zplanes(self):
         for camera in self.train_cameras[1.0]:
             R = torch.from_numpy(camera.R).cuda().float()
             T = camera.camera_center
@@ -183,8 +186,26 @@ class Scene:
                 camera.znear = (-points_in_frustrum[:, 2]).quantile(self.modelParams.znear_quantile) * self.modelParams.znear_scale
                 camera.update()
             else:
-                camera.znear = (camera._position_image - camera.camera_center[:, None, None]).norm(dim=0).amin() * self.model_params.znear_pruning_scale # * set to half of the nearest point
+                distances = (camera.position_image - camera.camera_center[:, None, None]).norm(dim=0)
+                camera.znear = distances.amin() * self.model_params.znear_scaledown # * set to half of the nearest point
+                camera.zfar = distances.amax() * self.model_params.zfar_scaleup
                 camera.update()
+                #!!!!!!!! these are distance values, not z values
+
+        # Assert that for all cameras, image_height is equal and FoVy is equal
+        train_cameras = self.train_cameras[1.0]
+        test_cameras = self.test_cameras[1.0]
+        first_train_camera = train_cameras[0]
+        first_test_camera = test_cameras[0]
+        for camera in train_cameras:
+            assert camera.image_height == first_train_camera.image_height, "All train cameras must have the same image_height"
+            assert camera.FoVy == first_train_camera.FoVy, "All train cameras must have the same FoVy"
+        for camera in test_cameras:
+            assert camera.image_height == first_test_camera.image_height, "All test cameras must have the same image_height"
+            assert camera.FoVy == first_test_camera.FoVy, "All test cameras must have the same FoVy"
+
+        self.max_zfar = max([x.zfar for x in self.train_cameras[1.0]]).item()
+        self.max_pixel_blur_sigma = self.gaussians.model_params.lod_max_world_size_blur / (2 * math.tan(self.train_cameras[1.0][0].FoVy / 2) / self.train_cameras[1.0][0].image_height * self.max_zfar) 
 
     def save(self, iteration):
         point_cloud_path = os.path.join(self.model_path, "point_cloud/iteration_{}".format(iteration))

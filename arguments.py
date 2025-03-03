@@ -81,44 +81,20 @@ class ModelParams(ParamGroup):
 
         self.disable_bounce_grads = False
 
-        self.freeze_brdf = False
-        self.optimize_roughness = False
-        self.freeze_optimize_roughness = False
-        self.optimize_position = False
-        self.optimize_normals = False
-        self.freeze_optimize_normals = False
-        self.gaussian_subsets = False
         self.keep_every_kth_view = 1
         self.max_images = 9999999
-        self.num_init_points = 10_000 # 100_000
-        self.opacity_modulation = False
+        self.num_farfield_init_points = 10_000 # 100_000
 
-        self.min_gaussian_size = 0.0 
         self.min_opacity = 0.005
 
-        #!!!!!!!!!!!!!! disabled for now
         self.znear_init_pruning = True
-        self.znear_pruning_scale = 0.8
-        self.znear_densif_pruning = True # todo not yet implemented, might not be necessary
+        self.znear_densif_pruning = True
+        self.znear_scaledown = 0.8
+        self.zfar_scaleup = 1.5
 
-        self.mcmc_densify = False
-        self.mcmc_densify_disable_custom_init = False
-        self.mcmc_skip_relocate = False
-        self.force_mcmc_custom_init = False #! was true
+        self.force_mcmc_custom_init = False
+        self.add_mcmc_noise = False
 
-        self.init_lod_prob_0 = 0.7 # todo all points in the rest of the scene, set to random values 
-        self.init_lod_mean_max_value = 3.0 
-        self.init_lod_scale = 1.0
-
-        self.warmup = -1
-
-        self.remap_position = False 
-        # self.aux_randn_init = False
-
-        self.ray_offset = 0.0 
-
-        self.num_bounces = 1
-        self.random_pool_props = False
         self.downsampling_mode = "area"
 
         self.linear_space = True
@@ -143,12 +119,18 @@ class ModelParams(ParamGroup):
         self.albedo_loss_weight = 1.0
         self.metalness_loss_weight = 1.0
 
-        self.prob_blur_targets = 0.0
-        self.target_blur_max = 16
-        
-        self.max_opacity = 1.0
+        # level of detail args below
+        self.lod_prob_blur_targets = 1.0
+        self.lod_init_scale = 0.005
+        self.lod_init_frac_extra_points = 0.25
+        self.lod_clamp_minsize = True
+        self.lod_clamp_minsize_factor = 1.0
+        self.lod_max_world_size_blur = 0.05
+        self.lod_force_blur_sigma = -1.0
+        self.lod_schedule_power = 1.0
 
-        self.add_mcmc_noise = False
+        self.use_diffuse_target = False
+        self.use_glossy_target = False
 
         super().__init__(parser, "Loading Parameters", sentinel)
 
@@ -180,8 +162,8 @@ class OptimizationParams(ParamGroup):
         self.f0_lr = 0.0025
         self.feature_lr = 0.0025
 
-        self.lod_mean_lr = 0.005
-        self.lod_scale_lr = 0.005
+        self.lod_mean_lr = 0.005 / 100
+        self.lod_scale_lr = 0.005 / 100 * 5
 
         self.opacity_lr = 0.05
         self.scaling_lr = 0.005
@@ -215,6 +197,7 @@ class OptimizationParams(ParamGroup):
         self.densif_final_num_gaussians = 500_000
         self.densif_size_ranking_weight = 0.0
         self.densif_opacity_ranking_weight = 0.0
+        self.densif_lod_ranking_weight = 0.0
         self.densif_no_pruning_large_radii = False
         self.densif_use_fixed_split_clone_ratio = True
         self.densif_split_clone_ratio = 0.2

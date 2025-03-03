@@ -22,6 +22,8 @@ from utils.graphics_utils import BasicPointCloud
 from utils.general_utils import strip_symmetric, build_scaling_rotation
 from arguments import ModelParams
 import cv2 
+import math 
+from scene.tonemapping import * 
 
 class GaussianModel:
     def setup_functions(self):
@@ -60,6 +62,7 @@ class GaussianModel:
         self._opacity = torch.empty(0)
         self._lod_mean = torch.empty(0)
         self._lod_scale = torch.empty(0)
+        self._round_counter = torch.empty(0)
         self.max_radii2D = torch.empty(0)
         self.xyz_gradient_accum = torch.empty(0)
         self.denom = torch.empty(0)
@@ -96,6 +99,7 @@ class GaussianModel:
             self._opacity,
             self._lod_mean,
             self._lod_scale,
+            self._round_counter,
             self.max_radii2D,
             self.xyz_gradient_accum,
             self.denom,
@@ -115,6 +119,7 @@ class GaussianModel:
         self._opacity,
         self._lod_mean,
         self._lod_scale,
+        self._round_counter,
         self.max_radii2D, 
         xyz_gradient_accum, 
         denom,
@@ -133,6 +138,7 @@ class GaussianModel:
         self._opacity.grad = torch.zeros_like(self._opacity)
         self._lod_mean.grad = torch.zeros_like(self._lod_mean)
         self._lod_scale.grad = torch.zeros_like(self._lod_scale)
+        self._round_counter.grad = torch.zeros_like(self._round_counter)
         self._diffuse.grad = torch.zeros_like(self._diffuse)
         self._scaling.grad = torch.zeros_like(self._scaling)
         self._rotation.grad = torch.zeros_like(self._rotation)
@@ -197,23 +203,25 @@ class GaussianModel:
     def get_covariance(self, scaling_modifier = 1):
         return self.covariance_activation(self.get_scaling, scaling_modifier, self._rotation)
 
-    def create_from_pcd(self, pcd : BasicPointCloud, spatial_lr_scale : float):
+    def create_from_pcd(self, pcd: BasicPointCloud, spatial_lr_scale: float, fovY_radians: float, max_camera_zfar: float, raytracer_config):
         self.spatial_lr_scale = spatial_lr_scale
 
-        if "DUPLICATE_INIT_PCD" in os.environ:
-            pcd = BasicPointCloud(
-                np.concatenate([pcd.points] * 2),
-                np.concatenate([pcd.colors] * 2),
-                np.concatenate([pcd.normals] * 2)
-            )
+        if raytracer_config.USE_LEVEL_OF_DETAIL:
+            init_N = len(pcd.points)
+            num_new_points = int(self.model_params.lod_init_frac_extra_points * len(pcd.points))
+            indices = np.random.choice(len(pcd.points), num_new_points, replace=False)
+            new_points = np.concatenate([pcd.points, pcd.points[indices]])
+            new_colors = np.concatenate([pcd.colors, pcd.colors[indices]])
+            new_normals = np.concatenate([pcd.normals, pcd.normals[indices]])
+            pcd = BasicPointCloud(new_points, new_colors, new_normals)
 
         fused_point_cloud = torch.tensor(np.asarray(pcd.points)).float().cuda()
-        fused_color = RGB2SH(torch.tensor(np.asarray(pcd.colors)).float().cuda())
+        fused_color = torch.tensor(np.asarray(pcd.colors)).float().cuda()
         fused_normal = torch.tensor(np.asarray(pcd.normals)).float().cuda()
 
         print("Number of points at initialisation : ", fused_point_cloud.shape[0])
         
-        if self.model_params.force_mcmc_custom_init or (self.model_params.mcmc_densify and not self.model_params.mcmc_densify_disable_custom_init):
+        if self.model_params.force_mcmc_custom_init:
             dist2 = torch.clamp_min(distCUDA2(torch.from_numpy(np.asarray(pcd.points)).float().cuda()), 0.0000001)
             scales = torch.log(torch.sqrt(dist2)*0.1)[...,None].repeat(1, 3)
             rots = torch.zeros((fused_point_cloud.shape[0], 4), device="cuda")
@@ -234,19 +242,23 @@ class GaussianModel:
         self._normal = nn.Parameter(fused_normal.clone())
         self._roughness = nn.Parameter(torch.zeros((fused_point_cloud.shape[0], 1), device="cuda"))
         self._f0 = nn.Parameter(torch.zeros((fused_point_cloud.shape[0], 3), device="cuda"))
-        self._diffuse = nn.Parameter(fused_color.clone())
+        self._diffuse = nn.Parameter(untonemap(fused_color.clone()))
         self._scaling = nn.Parameter(scales.requires_grad_(True))
         self._rotation = nn.Parameter(rots.requires_grad_(True))
         self._opacity = nn.Parameter(opacities.requires_grad_(True))
-        self._lod_mean = nn.Parameter(torch.rand((fused_point_cloud.shape[0], 1), device="cuda") * self.model_params.init_lod_mean_max_value)
-        self._lod_scale = nn.Parameter(torch.log(torch.ones((fused_point_cloud.shape[0], 1), device="cuda") * self.model_params.init_lod_scale))
-        with torch.no_grad():
-            self._lod_mean.data[torch.rand_like(self._lod_mean) < self.model_params.init_lod_prob_0] = 0.0
-        if "DUPLICATE_INIT_PCD" in os.environ:
-            with torch.no_grad(): 
-                self._lod_mean.copy_(torch.rand_like(self._lod_mean))
-                self._lod_mean[:self._lod_mean.shape[0]//2] = 0.0
 
+        self._lod_scale = nn.Parameter(torch.log(torch.ones((fused_point_cloud.shape[0], 1), device="cuda") * self.model_params.lod_init_scale))
+        self._lod_mean = nn.Parameter(torch.zeros((fused_point_cloud.shape[0], 1), device="cuda"))
+        self._round_counter = torch.zeros((fused_point_cloud.shape[0], 1), device="cuda")
+        
+        if raytracer_config.USE_LEVEL_OF_DETAIL and "DISABLE_LOD_INIT" not in os.environ:
+            with torch.no_grad(): 
+                self._lod_mean.copy_(torch.distributions.Beta(1.5, 5.0).sample((self._lod_mean.shape[0],))[:, None] * self.model_params.lod_max_world_size_blur) 
+                self._lod_mean[:init_N] = 0.0
+            if self.model_params.lod_clamp_minsize:
+                with torch.no_grad():
+                    self._scaling.data.clamp_(min=torch.log(self._lod_mean * self.model_params.lod_clamp_minsize_factor))
+                
         self.max_radii2D = torch.zeros((self.get_xyz.shape[0]), device="cuda")
 
         self._xyz.grad = torch.zeros_like(self._xyz)
@@ -415,8 +427,6 @@ class GaussianModel:
         self._normal = nn.Parameter(torch.tensor(normals, dtype=torch.float, device="cuda"))
         self._roughness = nn.Parameter(torch.tensor(roughness, dtype=torch.float, device="cuda"))
         self._f0 = nn.Parameter(torch.tensor(f0, dtype=torch.float, device="cuda"))
-        self._lod_mean = nn.Parameter(torch.tensor(lod_mean, dtype=torch.float, device="cuda"))
-        self._lod_scale = nn.Parameter(torch.tensor(lod_scale, dtype=torch.float, device="cuda"))
 
         if self.model_params.brdf_mode == "finetuned_lut":
             self._brdf_lut_residual = nn.Parameter(torch.load(path.replace("point_cloud.ply", "brdf_lut_residuals.pt")).to("cuda"))
@@ -495,6 +505,8 @@ class GaussianModel:
 
         self.xyz_gradient_accum = self.xyz_gradient_accum[valid_points_mask]
 
+        self._round_counter = self._round_counter[valid_points_mask]
+
         self.denom = self.denom[valid_points_mask]
         self.max_radii2D = self.max_radii2D[valid_points_mask]
 
@@ -522,7 +534,7 @@ class GaussianModel:
 
         return optimizable_tensors
 
-    def densification_postfix(self, new_xyz, new_position, new_normal, new_roughness_params, new_f0_params, new_diffuse, new_opacity, new_lod_mean, new_lod_scale, new_scaling, new_rotation, reset_params=True):
+    def densification_postfix(self, new_xyz, new_position, new_normal, new_roughness_params, new_f0_params, new_diffuse, new_opacity, new_lod_mean, new_lod_scale, new_scaling, new_rotation, new_round_counter, reset_params=True):
 
         d = {"xyz": new_xyz,
         "position": new_position,
@@ -534,8 +546,9 @@ class GaussianModel:
         "scaling" : new_scaling,
         "rotation" : new_rotation,
         "lod_mean": new_lod_mean,
-        "lod_scale": new_lod_scale,
+        "lod_scale": new_lod_scale
         }
+
 
         optimizable_tensors = self.cat_tensors_to_optimizer(d)
 
@@ -572,6 +585,8 @@ class GaussianModel:
         optimizable_tensors["rotation"].grad = torch.zeros_like(optimizable_tensors["rotation"])
         self._rotation = optimizable_tensors["rotation"]
 
+        self._round_counter = torch.cat((self._round_counter, new_round_counter), dim=0)
+        
         if reset_params:
             self.xyz_gradient_accum = torch.zeros((self.get_xyz.shape[0], 1), device="cuda")
             self.denom = torch.zeros((self.get_xyz.shape[0], 1), device="cuda")
@@ -601,8 +616,9 @@ class GaussianModel:
         new_rotation = self._rotation[selected_pts_mask].repeat(N,1)
         new_lod_mean = self._lod_mean[selected_pts_mask].repeat(N,1)
         new_lod_scale = self._lod_mean[selected_pts_mask].repeat(N,1)
+        new_round_counter = self._round_counter[selected_pts_mask].repeat(N,1) + 1
         
-        self.densification_postfix(new_xyz, new_position, new_normal, new_roughness, new_f0, new_diffuse,  new_opacity, new_lod_mean, new_lod_scale, new_scaling, new_rotation)
+        self.densification_postfix(new_xyz, new_position, new_normal, new_roughness, new_f0, new_diffuse,  new_opacity, new_lod_mean, new_lod_scale, new_scaling, new_rotation, new_round_counter)
 
         prune_filter = torch.cat((selected_pts_mask, torch.zeros(N * selected_pts_mask.sum(), device="cuda", dtype=bool)))
         self.prune_points(prune_filter)
@@ -632,17 +648,15 @@ class GaussianModel:
         new_rotation = self._rotation[selected_pts_mask]
         new_lod_mean = self._lod_mean[selected_pts_mask]
         new_lod_scale = self._lod_mean[selected_pts_mask]
+        new_round_counter = self._round_counter[selected_pts_mask] + 1
 
-        self.densification_postfix(new_xyz, new_position, new_normal, new_roughness, new_f0, new_diffuse,  new_opacity, new_lod_mean, new_lod_scale, new_scaling, new_rotation)
+        self.densification_postfix(new_xyz, new_position, new_normal, new_roughness, new_f0, new_diffuse,  new_opacity, new_lod_mean, new_lod_scale, new_scaling, new_rotation, new_round_counter)
 
     def prune_znear_only(self, scene):
         prune_mask = scene.select_points_to_prune_near_cameras(self._xyz.data)
         self.prune_points(prune_mask)
-    
-    def densify_and_prune_top_k(self, scene, opt, min_opacity, extent):
-        self.num_densification_steps += 1
-        num_gaussians_before_pruning = self.get_xyz.shape[0]
 
+    def prune(self, scene, opt, min_opacity, extent):
         # Prune
         prune_mask = (self.get_opacity < min_opacity).squeeze()
         if not opt.densif_skip_big_points_ws:
@@ -654,9 +668,13 @@ class GaussianModel:
 
         if self.model_params.znear_densif_pruning:
             prune_mask |= scene.select_points_to_prune_near_cameras(self._xyz.data)
-            print("PRUNING CAM!" + str(prune_mask.sum().item()))
         
         self.prune_points(prune_mask)
+    
+    def densify_and_prune_top_k(self, scene, opt, min_opacity, extent):
+        self.num_densification_steps += 1
+        num_gaussians_before_pruning = self.get_xyz.shape[0]
+        self.prune(scene, opt, min_opacity, extent)
 
         # Densify
         if self.schedule is None:
@@ -676,7 +694,17 @@ class GaussianModel:
             grad_ranking = torch.argsort(torch.argsort(padded_grad)) / num_gaussians_before_densification
             size_ranking = torch.argsort(torch.argsort(largest_axis_size)) / num_gaussians_before_densification
             opacity_ranking = torch.argsort(torch.argsort(self.get_opacity.squeeze())) / num_gaussians_before_densification
-            score = grad_ranking + size_ranking*opt.densif_size_ranking_weight + size_ranking*opt.densif_opacity_ranking_weight
+            lod_ranking = torch.argsort(torch.argsort(-self.get_lod_mean.squeeze())) / num_gaussians_before_densification
+            score = grad_ranking + size_ranking*opt.densif_size_ranking_weight + opacity_ranking*opt.densif_opacity_ranking_weight + opacity_ranking*opt.densif_opacity_ranking_weight + lod_ranking * opt.densif_lod_ranking_weight
+
+            if opt.densif_lod_ranking_weight != 0.0: #!!!! tmp
+                print("lod ranking is enabled")
+                score = grad_ranking.log() + lod_ranking.log() * opt.densif_lod_ranking_weight
+
+            if "DONT_DENSIFY_HIGH_LOD" in os.environ:
+                score[self.get_lod_mean.squeeze() > float(os.environ["DONT_DENSIFY_HIGH_LOD"])] = 0.0
+
+                # log(quantile(grad_score)) + w * log(quantile(-lod_score))
             
             target = self.schedule[self.num_densification_steps]
             k = target - num_gaussians_before_densification 

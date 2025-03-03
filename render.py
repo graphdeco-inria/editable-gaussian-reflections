@@ -29,7 +29,7 @@ import torch.nn.functional as F
 from scene.tonemapping import * 
 
 @torch.no_grad()
-def render_set(model_params, model_path, split, iteration, views, gaussians, pipeline, background, raytracer):
+def render_set(scene, model_params, model_path, split, iteration, views, gaussians, pipeline, background, raytracer):
     for mode in args.modes:
         for blur_sigma in args.blur_sigmas:
             render_path = os.path.join(model_path, split, "ours_{}".format(iteration), "renders")
@@ -147,7 +147,7 @@ def render_set(model_params, model_path, split, iteration, views, gaussians, pip
                 
                 if mode == "lod":
                     alpha = idx / (len(views) - 1)
-                    blur_sigma = alpha * model_params.target_blur_max
+                    blur_sigma = alpha * scene.max_pixel_blur_sigma
                 else:
                     blur_sigma = blur_sigma
                 package = render(view, raytracer, pipeline, background, blur_sigma=blur_sigma)
@@ -155,10 +155,10 @@ def render_set(model_params, model_path, split, iteration, views, gaussians, pip
                 diffuse_gt_image = torch.clamp(view.diffuse_image, 0.0, 1.0)
                 glossy_gt_image = torch.clamp(view.glossy_image, 0.0, 1.0)
                 gt_image = torch.clamp(view.original_image, 0.0, 1.0)
-                position_gt_image = view.get_position_image()
-                normal_gt_image = view.get_normal_image()
-                roughness_gt_image = view.get_roughness_image()
-                F0_gt_image = view.get_F0_image()
+                position_gt_image = view.position_image
+                normal_gt_image = view.normal_image
+                roughness_gt_image = view.roughness_image
+                F0_gt_image = view.F0_image
                 
                 if args.save_frames:
                     torchvision.utils.save_image(gt_image, os.path.join(gts_path, '{0:05d}'.format(idx) + ".png"))
@@ -278,9 +278,9 @@ def render_sets(model_params: ModelParams, iteration: int, pipeline: PipelinePar
     raytracer = GaussianRaytracer(gaussians, scene.getTrainCameras()[0])
 
     if args.train_views:
-        render_set(model_params, model_params.model_path, "train", scene.loaded_iter, scene.getTrainCameras(), gaussians, pipeline, background, raytracer)
+        render_set(scene, model_params, model_params.model_path, "train", scene.loaded_iter, scene.getTrainCameras(), gaussians, pipeline, background, raytracer)
     else:
-        render_set(model_params, model_params.model_path, "test", scene.loaded_iter, scene.getTestCameras(), gaussians, pipeline, background, raytracer)
+        render_set(scene, model_params, model_params.model_path, "test", scene.loaded_iter, scene.getTestCameras(), gaussians, pipeline, background, raytracer)
     
 if __name__ == "__main__":
     # Set up command line argument parser

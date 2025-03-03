@@ -9,4 +9,4 @@ build=v15_1bounce_noblur; CLAMP01=1 python3 train.py --raytracer_version $build 
 
 
 
-build=v15_1bounce_noblur; CLAMP01=1 python3 train.py --raytracer_version $build -s colmap/shiny_bedroom --glossy_loss_weight 0.0 -m output_${BASH_SOURCE[0]/.sh/}/${build}_no_extra_points --num_init_points 0 
+build=v15_1bounce_noblur; CLAMP01=1 python3 train.py --raytracer_version $build -s colmap/shiny_bedroom --glossy_loss_weight 0.0 -m output_${BASH_SOURCE[0]/.sh/}/${build}_no_extra_points --num_farfield_init_points 0 

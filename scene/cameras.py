@@ -29,8 +29,7 @@ class Camera(nn.Module):
                  base_color_image,
                  brdf_image,
                  specular_image,
-                 trans=np.array([0.0, 0.0, 0.0]), scale=1.0, data_device = "cuda",
-                 random_pool=False
+                 trans=np.array([0.0, 0.0, 0.0]), scale=1.0, data_device = "cuda"
                  ):
         super(Camera, self).__init__()
         self.uid = uid
@@ -65,29 +64,18 @@ class Camera(nn.Module):
             self.diffuse_image = self.diffuse_image.clamp(0.5, 1) 
             self.glossy_image = self.glossy_image.clamp(0.5, 1) 
 
-        self._normal_image = normal_image
-        self._position_image = position_image
-        self._roughness_image = roughness_image
-        self._brdf_image = brdf_image
-        self._F0_image = ((1.0 - metalness_image) * 0.08 * specular_image + metalness_image * base_color_image).cuda()
-
-        # self.base_color_image = base_color_image
-        # self.metalness_image = metalness_image 
-        # self.specular_image = specular_image
-
+        self.normal_image = normal_image
+        self.position_image = position_image
+        self.roughness_image = roughness_image
+        self.brdf_image = brdf_image
+        self.F0_image = ((1.0 - metalness_image) * 0.08 * specular_image + metalness_image * base_color_image).cuda()
 
         try:
             self.data_device = torch.device(data_device)
         except Exception as e:
             print(e)
-            print(f"[Warning] Custom device {data_device} failed, fallback to default cuda device" )
+            print(f"[Warning] Custom device {data_device} failed, fallback to default cuda device")
             self.data_device = torch.device("cuda")
-
-        
-        
-
-        self.zfar = 100.0
-        self.znear = 0.01
 
         self.trans = trans
         self.scale = scale
@@ -97,74 +85,12 @@ class Camera(nn.Module):
 
         self.update()
 
-        self.random_pool = random_pool
-
-    def get_position_image(self):
-        if self.random_pool:
-            if torch.is_grad_enabled():
-                return _random_pool(self._position_image)
-            else:
-                return torch.nn.functional.interpolate(self._position_image[None], scale_factor=1/3, mode='nearest')[0]
-        else:
-            return self._position_image
-
-    def get_normal_image(self):
-        if self.random_pool:
-            if torch.is_grad_enabled():
-                return _random_pool(self._normal_image)
-            else:
-                return torch.nn.functional.interpolate(self._normal_image[None], scale_factor=1/3, mode='nearest')[0]
-        else:
-            return self._normal_image
-        
-    def get_roughness_image(self):
-        if self.random_pool:
-            if torch.is_grad_enabled():
-                return _random_pool(self._roughness_image)
-            else:
-                return torch.nn.functional.interpolate(self._roughness_image[None], scale_factor=1/3, mode='nearest')[0]
-        else:
-            return self._roughness_image
-        
-    def get_brdf_image(self):
-        if self.random_pool:
-            if torch.is_grad_enabled():
-                return _random_pool(self._brdf_image)
-            else:
-                return torch.nn.functional.interpolate(self._brdf_image[None], scale_factor=1/3, mode='nearest')[0]
-        else:
-            return self._brdf_image
-        
-    def get_F0_image(self):
-        if self.random_pool:
-            if torch.is_grad_enabled():
-                return _random_pool(self._F0_image)
-            else:
-                return torch.nn.functional.interpolate(self._F0_image[None], scale_factor=1/3, mode='nearest')[0]
-        else:
-            return self._F0_image
-
+    #!! todo try using the updates znear and far
     def update(self):
         self.world_view_transform = torch.tensor(getWorld2View2(self.R, self.T, self.trans, self.scale)).transpose(0, 1).cuda()
-        self.projection_matrix = getProjectionMatrix(znear=self.znear, zfar=self.zfar, fovX=self.FoVx, fovY=self.FoVy).transpose(0,1).cuda()
-        self.full_proj_transform = (self.world_view_transform.unsqueeze(0).bmm(self.projection_matrix.unsqueeze(0))).squeeze(0)
-        self.camera_center = self.world_view_transform.inverse()[3, :3]
-
-        self.focal_x = self.image_width / (2 * np.tan(self.FoVx * 0.5))
-        self.focal_y = self.image_height / (2 * np.tan(self.FoVy * 0.5))
-
-    def update(self):
-        self.world_view_transform = torch.tensor(getWorld2View2(self.R, self.T, self.trans, self.scale)).transpose(0, 1).cuda()
-        self.projection_matrix = getProjectionMatrix(znear=self.znear, zfar=self.zfar, fovX=self.FoVx, fovY=self.FoVy).transpose(0,1).cuda()
+        self.projection_matrix = getProjectionMatrix(znear=0.01, zfar=100.0, fovX=self.FoVx, fovY=self.FoVy).transpose(0,1).cuda()
         self.full_proj_transform = (self.world_view_transform.unsqueeze(0).bmm(self.projection_matrix.unsqueeze(0))).squeeze(0)
         self.camera_center = self.world_view_transform.cpu().inverse().cuda()[3, :3]
-        
-
-def _random_pool(x):
-    patches = torch.nn.functional.unfold(x.unsqueeze(1), kernel_size=(3, 3), stride=(3, 3), padding=0) 
-    indices = torch.randint(0, 9, (patches.shape[2],), device=x.device)
-    return patches[:, indices, torch.arange(patches.shape[2])].reshape(x.shape[0], x.shape[1]//3, x.shape[2]//3)
-
 
 
 class MiniCam:

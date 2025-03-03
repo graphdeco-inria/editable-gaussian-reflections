@@ -61,10 +61,7 @@ def loadCam(args, id, cam_info, resolution_scale):
 
         def resize_property(property_image):
             x = torch.from_numpy(property_image).moveaxis(-1, 0).cuda()
-            if args.random_pool_props:
-                return x
-            else:
-                return torch.nn.functional.interpolate(x[:3, ...][None], (resolution[1], resolution[0]), mode=args.downsampling_mode)[0]
+            return torch.nn.functional.interpolate(x[:3, ...][None], (resolution[1], resolution[0]), mode=args.downsampling_mode)[0]
 
         position_image = resize_property(cam_info.position_image)
         normal_image = resize_property(cam_info.normal_image)
@@ -86,7 +83,7 @@ def loadCam(args, id, cam_info, resolution_scale):
     return Camera(colmap_id=cam_info.uid, R=cam_info.R, T=cam_info.T, 
                   FoVx=cam_info.FovX, FoVy=cam_info.FovY, 
                   image=gt_image, gt_alpha_mask=loaded_mask,
-                  image_name=cam_info.image_name, uid=id, data_device=args.data_device, diffuse_image=diffuse_image, glossy_image=glossy_image, position_image=position_image, normal_image=normal_image, roughness_image=roughness_image, metalness_image=metalness_image, base_color_image=base_color_image, brdf_image=brdf_image, specular_image=specular_image, random_pool=args.random_pool_props)
+                  image_name=cam_info.image_name, uid=id, data_device=args.data_device, diffuse_image=diffuse_image, glossy_image=glossy_image, position_image=position_image, normal_image=normal_image, roughness_image=roughness_image, metalness_image=metalness_image, base_color_image=base_color_image, brdf_image=brdf_image, specular_image=specular_image)
 
 def cameraList_from_camInfos(cam_infos, resolution_scale, args):
     camera_list = []
