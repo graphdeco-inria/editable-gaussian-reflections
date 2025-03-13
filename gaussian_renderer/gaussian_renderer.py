@@ -52,7 +52,6 @@ def render(camera: Camera, raytracer: GaussianRaytracer, pipe_params: PipelinePa
             target_stack = tonemap(kornia.filters.gaussian_blur2d(untonemap(target_stack)[None], (kernel_size, kernel_size), (blur_sigma, blur_sigma))[0])
         _target, _target_diffuse, _target_glossy, _target_position, _target_normal, _target_roughness, _target_f0, _target_brdf = torch.split(target_stack, [3, 3, 3, 3, 3, 1, 3, 3])
         raytracer.cuda_module.init_blur_sigma.fill_(blur_sigma.item())
-        torch.cuda.synchronize()
     else:
         _target = target
         _target_diffuse = target_diffuse
@@ -69,7 +68,7 @@ def render(camera: Camera, raytracer: GaussianRaytracer, pipe_params: PipelinePa
         _target = _target_diffuse
 
     with torch.set_grad_enabled(do_backprop):
-        raytracer(camera, pipe_params, bg_color, target=_target, target_diffuse=_target_diffuse, target_glossy=_target_glossy, target_position=_target_position, target_normal=_target_normal, target_roughness=_target_roughness, target_f0=_target_f0, target_brdf=_target_brdf)
+        raytracer(camera, pipe_params, bg_color, blur_sigma, target=_target, target_diffuse=_target_diffuse, target_glossy=_target_glossy, target_position=_target_position, target_normal=_target_normal, target_roughness=_target_roughness, target_f0=_target_f0, target_brdf=_target_brdf)
         # if blur_sigma is not None:
         raytracer.cuda_module.init_blur_sigma.fill_(0.0)
 

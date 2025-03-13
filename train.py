@@ -345,7 +345,7 @@ for iteration in tqdm(range(first_iter, opt_params.iterations + 1), desc="Traini
                 fig = px.histogram(df, x="lod_scale", nbins=50, title="Histogram of Gaussian LOD Scale")
                 fig.write_image(os.path.join(args.model_path, f"plots/lod_scale_histogram_{iteration:05d}.png"))
 
-            if True:
+            if False:
                 # Save a scatter plot of gaussian round counter vs lod_mean
                 sample_indices = random.sample(range(gaussians._round_counter.shape[0]), int(0.20 * gaussians._round_counter.shape[0]))
                 round_counter = gaussians._round_counter[sample_indices].cpu().numpy()
@@ -433,8 +433,7 @@ for iteration in tqdm(range(first_iter, opt_params.iterations + 1), desc="Traini
         if model_params.lod_clamp_minsize:
             with torch.no_grad(): 
                 # gaussians._scaling.data.clamp_(min=torch.log(torch.tensor(1e-8, device="cuda")))
-                gaussians._scaling.data.clamp_(min=torch.log(gaussians._lod_mean.clamp(min=1e-8))) 
-                #!!!!!!!!!!!!!!!!!!!!!!!!!!!!! + 1e-8 didnt work, this is where the bug lies.
+                gaussians._scaling.data.clamp_(min=torch.log(gaussians._lod_mean.clamp(min=float(os.getenv("LOD_CLAMP_EPS", 0.0))))) #!!!!!!!!!!!!!!! was 1e-8
             if torch.isnan(gaussians._lod_mean).any() or torch.isnan(gaussians._scaling).any():
                 print("NANs in lod_mean or _scaling")
                 quit()

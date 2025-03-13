@@ -26,7 +26,7 @@ class GaussianRaytracer:
     def __init__(self, pc: GaussianModel, example_camera):
         global LOADED
         if not LOADED:
-            torch.classes.load_library(f"raytracer_builds/{pc.model_params.raytracer_version}/libgausstracer.so")
+            torch.classes.load_library(f"{pc.model_params.raytracer_version}/libgausstracer.so")
             LOADED = True
 
         self.cuda_module = torch.classes.gausstracer.Raytracer(
@@ -55,7 +55,7 @@ class GaussianRaytracer:
         torch.cuda.synchronize() #!!! remove
 
         import sys
-        sys.path.append(f"raytracer_builds/{pc.model_params.raytracer_version}")
+        sys.path.append(f"{pc.model_params.raytracer_version}")
         import raytracer_config
         self.config = raytracer_config
         torch.cuda.synchronize()
@@ -138,7 +138,7 @@ class GaussianRaytracer:
         if hasattr(self.cuda_module, "densification_gradient_score"):
             self.cuda_module.densification_gradient_score.zero_()
 
-    def __call__(self, viewpoint_camera,  pipe_params: PipelineParams, bg_color: torch.Tensor, target = None, target_diffuse = None, target_glossy = None, target_position=None, target_normal=None, target_roughness=None, target_f0=None, target_brdf=None):
+    def __call__(self, viewpoint_camera,  pipe_params: PipelineParams, bg_color: torch.Tensor, blur_sigma, target = None, target_diffuse = None, target_glossy = None, target_position=None, target_normal=None, target_roughness=None, target_f0=None, target_brdf=None):
         """
         Render the scene. 
         
@@ -152,7 +152,14 @@ class GaussianRaytracer:
             R_c2w_blender = -R 
             R_c2w_blender[:, 0] = -R_c2w_blender[:, 0] 
 
-            self.cuda_module.set_camera(R_c2w_blender.contiguous(), viewpoint_camera.camera_center.contiguous(), viewpoint_camera.FoVy)
+            self.cuda_module.set_camera(
+                R_c2w_blender.contiguous(), 
+                viewpoint_camera.camera_center.contiguous(), 
+                viewpoint_camera.FoVy,
+                viewpoint_camera.znear,
+                viewpoint_camera.zfar,
+                self.pc.model_params.lod_max_world_size_blur
+            )
 
             self._export_param_values()
 

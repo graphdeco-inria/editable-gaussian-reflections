@@ -187,9 +187,9 @@ class OptimizationParams(ParamGroup):
         self.densif_scaledown_clones = False
         self.densif_jitter_clones = False
 
-        self.densification_interval = 100
+        self.densification_interval = 500 # was 100 in 3dgs
         self.opacity_reset_interval = 3000
-        self.densify_from_iter = 500
+        self.densify_from_iter = 1500 # was 500 in 3dgs
         self.densify_until_iter = 15_000 # was 25k in mcmc
         self.densify_grad_threshold = 0.0002
 
@@ -212,7 +212,6 @@ class OptimizationParams(ParamGroup):
 
         self.sh_slowdown_factor = 20.0
         self.random_background = False
-
 
         super().__init__(parser, "Optimization Parameters")
 

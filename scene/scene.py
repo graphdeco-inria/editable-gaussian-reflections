@@ -104,7 +104,7 @@ class Scene:
         self.autoadjust_zplanes()
             
         import sys
-        sys.path.append(f"raytracer_builds/{gaussians.model_params.raytracer_version}")
+        sys.path.append(f"{gaussians.model_params.raytracer_version}")
         import raytracer_config
         if raytracer_config.MAX_BOUNCES > 0:
             scene_info.point_cloud = BasicPointCloud(
@@ -164,33 +164,13 @@ class Scene:
 
     @torch.no_grad()
     def autoadjust_zplanes(self):
-        for camera in self.train_cameras[1.0]:
+        for camera in self.train_cameras[1.0] + self.test_cameras[1.0]:
             R = torch.from_numpy(camera.R).cuda().float()
             T = camera.camera_center
-
-            if False:
-                points_world = torch.from_numpy(self.scene_info.point_cloud.points).cuda().float()
-                R_c2w_blender = -R 
-                R_c2w_blender[:, 0] = -R_c2w_blender[:, 0]
-                
-                points_local = (R_c2w_blender.T @ (points_world - T).T).T
-                
-                x_size = math.tan(camera.FoVx / 2)
-                y_size = math.tan(camera.FoVy / 2)
-                
-                x = points_local[:, 0]
-                y = points_local[:, 1]
-                z = points_local[:, 2]
-                frustrum_mask = (-z > 0) & (x / z > -x_size) & (x / z < x_size) & (y / z > -y_size) & (y / z < y_size)
-                points_in_frustrum = points_local[frustrum_mask]
-                camera.znear = (-points_in_frustrum[:, 2]).quantile(self.modelParams.znear_quantile) * self.modelParams.znear_scale
-                camera.update()
-            else:
-                distances = (camera.position_image - camera.camera_center[:, None, None]).norm(dim=0)
-                camera.znear = distances.amin() * self.model_params.znear_scaledown # * set to half of the nearest point
-                camera.zfar = distances.amax() * self.model_params.zfar_scaleup
-                camera.update()
-                #!!!!!!!! these are distance values, not z values
+            distances = (camera.position_image - camera.camera_center[:, None, None]).norm(dim=0)
+            camera.znear = distances.amin() * self.model_params.znear_scaledown
+            camera.zfar = distances.amax() * self.model_params.zfar_scaleup
+            camera.update()
 
         # Assert that for all cameras, image_height is equal and FoVy is equal
         train_cameras = self.train_cameras[1.0]

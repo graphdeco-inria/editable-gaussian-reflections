@@ -335,8 +335,6 @@ class GaussianModel:
         normal = self._normal.detach().cpu().numpy()
         roughness = self._roughness.detach().cpu().numpy()
         f0 = self._f0.detach().cpu().numpy()
-        lod_mean = self._lod_mean.detach().cpu().numpy()
-        lod_scale = self._lod_scale.detach().cpu().numpy()
 
         all_attributes = [
             'x', 'y', 'z', 
@@ -614,8 +612,10 @@ class GaussianModel:
         new_opacity = self._opacity[selected_pts_mask].repeat(N,1)
         new_scaling = self.scaling_inverse_activation(self.get_scaling[selected_pts_mask].repeat(N,1) / (0.8*N))
         new_rotation = self._rotation[selected_pts_mask].repeat(N,1)
-        new_lod_mean = self._lod_mean[selected_pts_mask].repeat(N,1)
-        new_lod_scale = self._lod_mean[selected_pts_mask].repeat(N,1)
+        new_lod_mean = self._lod_mean[selected_pts_mask].repeat(N,1) 
+        if "ON_SPLIT_SKIP_DONT_TOUCH_LOD" not in os.environ:
+            new_lod_mean /= (0.8*N) 
+        new_lod_scale = self._lod_scale[selected_pts_mask].repeat(N,1)
         new_round_counter = self._round_counter[selected_pts_mask].repeat(N,1) + 1
         
         self.densification_postfix(new_xyz, new_position, new_normal, new_roughness, new_f0, new_diffuse,  new_opacity, new_lod_mean, new_lod_scale, new_scaling, new_rotation, new_round_counter)
@@ -642,12 +642,12 @@ class GaussianModel:
         new_diffuse = self._diffuse[selected_pts_mask]
         new_opacity = self._opacity[selected_pts_mask]
         if opt.densif_scaledown_clones: 
-            new_scaling = self.scaling_inverse_activation(self.get_scaling[selected_pts_mask] / 0.8)
+            new_scaling = self.scaling_inverse_activation(self.get_scaling[selected_pts_mask] / (0.8*2))
         else:
             new_scaling = self._scaling[selected_pts_mask]
         new_rotation = self._rotation[selected_pts_mask]
         new_lod_mean = self._lod_mean[selected_pts_mask]
-        new_lod_scale = self._lod_mean[selected_pts_mask]
+        new_lod_scale = self._lod_scale[selected_pts_mask]
         new_round_counter = self._round_counter[selected_pts_mask] + 1
 
         self.densification_postfix(new_xyz, new_position, new_normal, new_roughness, new_f0, new_diffuse,  new_opacity, new_lod_mean, new_lod_scale, new_scaling, new_rotation, new_round_counter)
