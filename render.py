@@ -32,11 +32,11 @@ from scene.tonemapping import *
 def render_set(scene, model_params, model_path, split, iteration, views, gaussians, pipeline, background, raytracer):
     for mode in args.modes:
         for blur_sigma in args.blur_sigmas:
-            render_path = os.path.join(model_path, split, "ours_{}".format(iteration), "renders")
-            gts_path = os.path.join(model_path, split, "ours_{}".format(iteration), "gt")
-            diffuse_render_path = os.path.join(model_path, split, "ours_{}".format(iteration), "diffuse_renders")
+            render_path = os.path.join(model_path, split, "ours_{}".format(iteration), "render")
+            gts_path = os.path.join(model_path, split, "ours_{}".format(iteration), "render_gt")
+            diffuse_render_path = os.path.join(model_path, split, "ours_{}".format(iteration), "diffuse")
             diffuse_gts_path = os.path.join(model_path, split, "ours_{}".format(iteration), "diffuse_gt")
-            glossy_render_path = os.path.join(model_path, split, "ours_{}".format(iteration), "glossy_renders")
+            glossy_render_path = os.path.join(model_path, split, "ours_{}".format(iteration), "glossy")
             glossy_gts_path = os.path.join(model_path, split, "ours_{}".format(iteration), "glossy_gt")
             position_path = os.path.join(model_path, split, "ours_{}".format(iteration), "position")
             position_gts_path = os.path.join(model_path, split, "ours_{}".format(iteration), "position_gt")
@@ -159,33 +159,36 @@ def render_set(scene, model_params, model_path, split, iteration, views, gaussia
                 normal_gt_image = view.normal_image
                 roughness_gt_image = view.roughness_image
                 F0_gt_image = view.F0_image
+
+                pred_image = torch.clamp(tonemap(untonemap(package.rgb).sum(dim=0)), 0.0, 1.0)
                 
-                if args.save_frames:
-                    torchvision.utils.save_image(gt_image, os.path.join(gts_path, '{0:05d}'.format(idx) + ".png"))
-                    torchvision.utils.save_image(package.rgb[0:1], os.path.join(diffuse_render_path, '{0:05d}'.format(idx) + ".png"))
-                    torchvision.utils.save_image(diffuse_gt_image, os.path.join(diffuse_gts_path, '{0:05d}'.format(idx) + ".png"))
+                if not args.skip_save_frames and mode == "regular":
+                    torchvision.utils.save_image(package.rgb[1:].sum(dim=0, keepdim=True), os.path.join(glossy_render_path, '{0:05d}'.format(idx) + "_glossy.png"))
+                    torchvision.utils.save_image(glossy_gt_image, os.path.join(glossy_gts_path, '{0:05d}'.format(idx) + "_glossy.png"))
+                    
+                    torchvision.utils.save_image(package.rgb[0:1], os.path.join(diffuse_render_path, '{0:05d}'.format(idx) + "_diffuse.png"))
+                    torchvision.utils.save_image(diffuse_gt_image, os.path.join(diffuse_gts_path, '{0:05d}'.format(idx) + "_diffuse.png"))
 
-                    torchvision.utils.save_image(package.rgb[1:].sum(dim=0, keepdim=True), os.path.join(glossy_render_path, '{0:05d}'.format(idx) + ".png"))
-                    torchvision.utils.save_image(glossy_gt_image, os.path.join(glossy_gts_path, '{0:05d}'.format(idx) + ".png"))
-
-                    torchvision.utils.save_image(package.position, os.path.join(position_path, '{0:05d}'.format(idx) + "_position.png"))
+                    torchvision.utils.save_image(package.position[0], os.path.join(position_path, '{0:05d}'.format(idx) + "_position.png"))
                     torchvision.utils.save_image(position_gt_image, os.path.join(position_gts_path, '{0:05d}'.format(idx) + "_position.png"))
                     
-                    torchvision.utils.save_image(package.normal / 2 + 0.5, os.path.join(normal_path, '{0:05d}'.format(idx) + "_normal.png"))
+                    torchvision.utils.save_image(package.normal[0] / 2 + 0.5, os.path.join(normal_path, '{0:05d}'.format(idx) + "_normal.png"))
                     torchvision.utils.save_image(normal_gt_image / 2 + 0.5, os.path.join(normal_gts_path, '{0:05d}'.format(idx) + "_normal.png"))
 
-                    torchvision.utils.save_image(package.roughness, os.path.join(roughness_path, '{0:05d}'.format(idx) + "_roughness.png"))
+                    breakpoint()
+                    torchvision.utils.save_image(package.roughness[0], os.path.join(roughness_path, '{0:05d}'.format(idx) + "_roughness.png"))
                     torchvision.utils.save_image(roughness_gt_image, os.path.join(roughness_gts_path, '{0:05d}'.format(idx) + "_roughness.png"))
 
-                    torchvision.utils.save_image(package.F0, os.path.join(F0_path, '{0:05d}'.format(idx) + "_F0.png"))
+                    torchvision.utils.save_image(package.F0[0], os.path.join(F0_path, '{0:05d}'.format(idx) + "_F0.png"))
                     torchvision.utils.save_image(F0_gt_image, os.path.join(F0_gts_path, '{0:05d}'.format(idx) + "_F0.png"))
 
+                    torchvision.utils.save_image(gt_image, os.path.join(gts_path, '{0:05d}'.format(idx) + "_glossy.png"))
+                    torchvision.utils.save_image(pred_image, os.path.join(render_path, '{0:05d}'.format(idx) + ".png"))
+                    
                 def format_image(image):
                     image = F.interpolate(image[None], (image.shape[-2] // 2 * 2, image.shape[-1] // 2 * 2), mode="bilinear")[0]
                     return (image.clamp(0, 1) * 255).to(torch.uint8).moveaxis(0, -1).cpu()
 
-                pred_image = torch.clamp(tonemap(untonemap(package.rgb).sum(dim=0)), 0.0, 1.0)
-                torchvision.utils.save_image(pred_image, os.path.join(render_path, '{0:05d}'.format(idx) + ".png"))
 
                 all_renders.append(format_image(pred_image))
                 all_gts.append(format_image(package.target))
@@ -303,11 +306,11 @@ if __name__ == "__main__":
     parser.add_argument("--iteration", default=-1, type=int)
     parser.add_argument("--train_views", action="store_true")
     parser.add_argument("--quiet", action="store_true")
-    parser.add_argument("--modes", type=str, choices=["regular", "lod", "env_rot_1", "env_rot_2", "env_move_1", "env_move_2"], default=["regular", "lod", "env_rot_1", "env_move_1", "env_move_1"], nargs="+") # env_rot_1 is at the scene's origin, env_rot_2 it somewhere in the far-field, env_move_1 dollys forward, env_move_2 trucks sideways
-    parser.add_argument("--blur_sigmas", type=float, default=[None, 4.0, 16.0], nargs="+")
+    parser.add_argument("--modes", type=str, choices=["regular", "lod", "env_rot_1", "env_rot_2", "env_move_1", "env_move_2"], default=["regular", "env_rot_1", "env_move_1", "env_move_2"], nargs="+") # env_rot_1 is at the scene's origin, env_rot_2 it somewhere in the far-field, env_move_1 dollys forward, env_move_2 trucks sideways # ["regular", "lod", "env_rot_1", "env_move_1", "env_move_2"]
+    parser.add_argument("--blur_sigmas", type=float, default=[None], nargs="+") # [None, 4.0, 16.0]
     parser.add_argument("--skip_video", action="store_true")
     parser.add_argument("--red_region", action="store_true")
-    parser.add_argument("--save_frames", action="store_true")
+    parser.add_argument("--skip_save_frames", action="store_true")
 
     args = get_combined_args(parser)
     print("Rendering " + args.model_path)

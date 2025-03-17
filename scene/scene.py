@@ -71,7 +71,6 @@ class Scene:
 
         if shuffle:
             random.shuffle(scene_info.train_cameras)  # Multi-res consistent random shuffling
-            # random.shuffle(scene_info.test_cameras)  # Multi-res consistent random shuffling
 
         self.cameras_extent = scene_info.nerf_normalization["radius"]
         
@@ -82,7 +81,6 @@ class Scene:
             self.test_cameras[resolution_scale] = cameraList_from_camInfos(scene_info_synthetic.test_cameras, resolution_scale, model_params)
 
         print(f"I have {len(self.train_cameras)} cameras")
-
 
         ## Remove all init points that are too close to the camera
         if gaussians.model_params.znear_init_pruning or gaussians.model_params.znear_densif_pruning:
@@ -104,7 +102,7 @@ class Scene:
         self.autoadjust_zplanes()
             
         import sys
-        sys.path.append(f"{gaussians.model_params.raytracer_version}")
+        sys.path.append(gaussians.model_params.raytracer_version)
         import raytracer_config
         if raytracer_config.MAX_BOUNCES > 0:
             scene_info.point_cloud = BasicPointCloud(

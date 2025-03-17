@@ -40,35 +40,18 @@ class Camera(nn.Module):
         self.FoVy = FoVy
         self.image_name = image_name
 
-        self.original_image = tonemap(diffuse_image + glossy_image)
-        self.image_width = self.original_image.shape[2]
-        self.image_height = self.original_image.shape[1]
+        self.image_width = diffuse_image.shape[2]
+        self.image_height = diffuse_image.shape[1]
 
         #*** optimized as tonemapped values, will need to be inverse the tonemapping before adding both passes
-        self.diffuse_image = tonemap(diffuse_image) 
-        self.glossy_image = tonemap(glossy_image) 
-
-        if "CLAMP01" in os.environ:
-            self.diffuse_image = self.diffuse_image.clamp(0.0, 1) 
-            self.glossy_image = self.glossy_image.clamp(0.0, 1) 
-
-        if "CLAMP21" in os.environ:
-            self.diffuse_image = self.diffuse_image.clamp(0.2, 1) 
-            self.glossy_image = self.glossy_image.clamp(0.2, 1) 
-
-        if "CLAMP28" in os.environ:
-            self.diffuse_image = self.diffuse_image.clamp(0.2, 0.8) 
-            self.glossy_image = self.glossy_image.clamp(0.2, 0.8) 
-
-        if "CLAMP51" in os.environ:
-            self.diffuse_image = self.diffuse_image.clamp(0.5, 1) 
-            self.glossy_image = self.glossy_image.clamp(0.5, 1) 
-
-        self.normal_image = normal_image
-        self.position_image = position_image
-        self.roughness_image = roughness_image
-        self.brdf_image = brdf_image
-        self.F0_image = ((1.0 - metalness_image) * 0.08 * specular_image + metalness_image * base_color_image).cuda()
+        self._original_image = (tonemap(diffuse_image + glossy_image) * 255).byte().cpu()
+        self._diffuse_image = (tonemap(diffuse_image).half() * 255).byte().cpu()
+        self._glossy_image = (tonemap(glossy_image).half() * 255).byte().cpu()
+        self._normal_image = normal_image.half().cpu()
+        self._position_image = position_image.half().cpu()
+        self._roughness_image = (roughness_image * 255).byte().cpu()
+        self._brdf_image = brdf_image.half().cpu()
+        self._F0_image = (((1.0 - metalness_image) * 0.08 * specular_image + metalness_image * base_color_image) * 255).byte().cpu()
 
         try:
             self.data_device = torch.device(data_device)
@@ -85,7 +68,38 @@ class Camera(nn.Module):
 
         self.update()
 
-    #!! todo try using the updates znear and far
+    @property
+    def original_image(self):
+        return self._original_image.float().cuda() / 255
+
+    @property
+    def diffuse_image(self):
+        return self._diffuse_image.float().cuda() / 255
+
+    @property
+    def glossy_image(self):
+        return self._glossy_image.float().cuda() / 255
+
+    @property
+    def normal_image(self):
+        return self._normal_image.float().cuda()
+
+    @property
+    def position_image(self):
+        return self._position_image.float().cuda()
+
+    @property
+    def roughness_image(self):
+        return self._roughness_image.float().cuda() / 255
+
+    @property
+    def brdf_image(self):
+        return self._brdf_image.float().cuda()
+
+    @property
+    def F0_image(self):
+        return self._F0_image.float().cuda() / 255
+
     def update(self):
         self.world_view_transform = torch.tensor(getWorld2View2(self.R, self.T, self.trans, self.scale)).transpose(0, 1).cuda()
         self.projection_matrix = getProjectionMatrix(znear=0.01, zfar=100.0, fovX=self.FoVx, fovY=self.FoVy).transpose(0,1).cuda()

@@ -22,7 +22,6 @@ import numpy as np
 LOADED = False
 
 class GaussianRaytracer:
-
     def __init__(self, pc: GaussianModel, example_camera):
         global LOADED
         if not LOADED:

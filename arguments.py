@@ -57,7 +57,7 @@ class ModelParams(ParamGroup):
         self._source_path = ""
         self._model_path = ""
         self._images = "images"
-        self._resolution = 768
+        self._resolution = 1152
         
         # // 2 ## Yohan: on quarter res this crashes at 600 iters and I don't know why => this is because this gives the width, not the height! so it results in non-pow2 sizes for the height
         self._white_background = False
@@ -187,7 +187,7 @@ class OptimizationParams(ParamGroup):
         self.densif_scaledown_clones = False
         self.densif_jitter_clones = False
 
-        self.densification_interval = 500 # was 100 in 3dgs
+        self.densification_interval = 100 # # was 100 in 3dgs, 500 to fix LOD densification
         self.opacity_reset_interval = 3000
         self.densify_from_iter = 1500 # was 500 in 3dgs
         self.densify_until_iter = 15_000 # was 25k in mcmc
