@@ -43,15 +43,18 @@ class Camera(nn.Module):
         self.image_width = diffuse_image.shape[2]
         self.image_height = diffuse_image.shape[1]
 
+
+        image_holding_device = "cpu"
+
         #*** optimized as tonemapped values, will need to be inverse the tonemapping before adding both passes
-        self._original_image = (tonemap(diffuse_image + glossy_image) * 255).byte().cpu()
-        self._diffuse_image = (tonemap(diffuse_image).half() * 255).byte().cpu()
-        self._glossy_image = (tonemap(glossy_image).half() * 255).byte().cpu()
-        self._normal_image = normal_image.half().cpu()
-        self._position_image = position_image.half().cpu()
-        self._roughness_image = (roughness_image * 255).byte().cpu()
-        self._brdf_image = brdf_image.half().cpu()
-        self._F0_image = (((1.0 - metalness_image) * 0.08 * specular_image + metalness_image * base_color_image) * 255).byte().cpu()
+        self._original_image = (tonemap(diffuse_image + glossy_image) * 255).byte().to(image_holding_device)
+        self._diffuse_image = (tonemap(diffuse_image).half() * 255).byte().to(image_holding_device)
+        self._glossy_image = (tonemap(glossy_image).half() * 255).byte().to(image_holding_device)
+        self._normal_image = normal_image.half().to(image_holding_device)
+        self._position_image = position_image.half().to(image_holding_device)
+        self._roughness_image = (roughness_image * 255).byte().to(image_holding_device)
+        self._brdf_image = brdf_image.half().to(image_holding_device)
+        self._F0_image = (((1.0 - metalness_image) * 0.08 * specular_image + metalness_image * base_color_image) * 255).byte().to(image_holding_device)
 
         try:
             self.data_device = torch.device(data_device)

@@ -175,15 +175,14 @@ def render_set(scene, model_params, model_path, split, iteration, views, gaussia
                     torchvision.utils.save_image(package.normal[0] / 2 + 0.5, os.path.join(normal_path, '{0:05d}'.format(idx) + "_normal.png"))
                     torchvision.utils.save_image(normal_gt_image / 2 + 0.5, os.path.join(normal_gts_path, '{0:05d}'.format(idx) + "_normal.png"))
 
-                    breakpoint()
                     torchvision.utils.save_image(package.roughness[0], os.path.join(roughness_path, '{0:05d}'.format(idx) + "_roughness.png"))
                     torchvision.utils.save_image(roughness_gt_image, os.path.join(roughness_gts_path, '{0:05d}'.format(idx) + "_roughness.png"))
 
                     torchvision.utils.save_image(package.F0[0], os.path.join(F0_path, '{0:05d}'.format(idx) + "_F0.png"))
                     torchvision.utils.save_image(F0_gt_image, os.path.join(F0_gts_path, '{0:05d}'.format(idx) + "_F0.png"))
 
-                    torchvision.utils.save_image(gt_image, os.path.join(gts_path, '{0:05d}'.format(idx) + "_glossy.png"))
-                    torchvision.utils.save_image(pred_image, os.path.join(render_path, '{0:05d}'.format(idx) + ".png"))
+                    torchvision.utils.save_image(gt_image, os.path.join(gts_path, '{0:05d}'.format(idx) + "_render.png"))
+                    torchvision.utils.save_image(pred_image, os.path.join(render_path, '{0:05d}'.format(idx) + "_render.png"))
                     
                 def format_image(image):
                     image = F.interpolate(image[None], (image.shape[-2] // 2 * 2, image.shape[-1] // 2 * 2), mode="bilinear")[0]

@@ -408,10 +408,10 @@ for iteration in tqdm(range(first_iter, opt_params.iterations + 1), desc="Traini
         if opt_params.densif_use_top_k and iteration <= opt_params.densify_until_iter:
             gaussians.add_densification_stats_3d(raytracer.cuda_module.densification_gradient_score)
 
-        if iteration % opt_params.densification_interval == 0 or iteration == 1:
+        if opt_params.densif_use_top_k and (iteration % opt_params.densification_interval == 0 or iteration == 1):
             max_ws_size = scene.cameras_extent * model_params.glossy_bbox_size_mult * model_params.scene_extent_multiplier
             densif_args = (scene, opt_params, model_params.min_opacity, max_ws_size)
-            if opt_params.densif_use_top_k and iteration > opt_params.densify_from_iter:
+            if iteration > opt_params.densify_from_iter:
                 if iteration < opt_params.densify_until_iter:
                     #!!!!!!!! review why I'm starting with so many fewer gaussians than the # of sfm points.
                     trace = gaussians.densify_and_prune_top_k(*densif_args)

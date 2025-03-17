@@ -27,6 +27,7 @@ import os
 import random
 import kornia
 from scene.tonemapping import *
+from types import SimpleNamespace   
 
 def render(camera: Camera, raytracer: GaussianRaytracer, pipe_params: PipelineParams, bg_color: torch.Tensor, iteration=None, blur_sigma=None):
     target = camera.original_image
@@ -72,43 +73,20 @@ def render(camera: Camera, raytracer: GaussianRaytracer, pipe_params: PipelinePa
         # if blur_sigma is not None:
         raytracer.cuda_module.init_blur_sigma.fill_(0.0)
 
-    class package:
-        "All of these results are reshaped to (C, H, W)"
-
-        rgb = raytracer.cuda_module.output_rgb.clone().detach().moveaxis(-1, 1)
-
-        if raytracer.cuda_module.output_position is not None:
-            position = raytracer.cuda_module.output_position.clone().detach().moveaxis(-1, 1)
-        else:
-            position = torch.zeros_like(rgb)
-
-        if raytracer.cuda_module.output_normal is not None:
-            normal = raytracer.cuda_module.output_normal.clone().detach().moveaxis(-1, 1)
-        else:
-            normal = torch.zeros_like(rgb)
-
-        if raytracer.cuda_module.output_roughness is not None:
-            roughness = raytracer.cuda_module.output_roughness.clone().detach().moveaxis(-1, 1).repeat(1, 3, 1, 1)
-        else:
-            roughness = torch.zeros_like(rgb)
-
-        if raytracer.cuda_module.output_f0 is not None:
-            F0 = raytracer.cuda_module.output_f0.clone().detach().moveaxis(-1, 1)
-        else:
-            F0 = torch.zeros_like(rgb)
-        
-        if raytracer.cuda_module.output_brdf is not None:
-            brdf = raytracer.cuda_module.output_brdf.clone().detach().moveaxis(-1, 1)
-        else:
-            brdf = torch.zeros_like(rgb)
-
-        target = _target 
-        target_diffuse = _target_diffuse
-        target_glossy = _target_glossy
-        target_position = _target_position
-        target_normal = _target_normal
-        target_roughness = _target_roughness
-        target_f0 = _target_f0
-
-
-    return package
+    # All of these results are reshaped to (C, H, W)
+    return SimpleNamespace(
+        rgb=raytracer.cuda_module.output_rgb.clone().detach().moveaxis(-1, 1),
+        position=raytracer.cuda_module.output_position.clone().detach().moveaxis(-1, 1) if raytracer.cuda_module.output_position is not None else torch.zeros_like(rgb),
+        normal=raytracer.cuda_module.output_normal.clone().detach().moveaxis(-1, 1) if raytracer.cuda_module.output_normal is not None else torch.zeros_like(rgb),
+        roughness=raytracer.cuda_module.output_roughness.clone().detach().moveaxis(-1, 1).repeat(1, 3, 1, 1) if raytracer.cuda_module.output_roughness is not None else torch.zeros_like(rgb),
+        F0=raytracer.cuda_module.output_f0.clone().detach().moveaxis(-1, 1) if raytracer.cuda_module.output_f0 is not None else torch.zeros_like(rgb),
+        brdf=raytracer.cuda_module.output_brdf.clone().detach().moveaxis(-1, 1) if raytracer.cuda_module.output_brdf is not None else torch.zeros_like(rgb),
+        target=_target,
+        target_diffuse=_target_diffuse,
+        target_glossy=_target_glossy,
+        target_position=_target_position,
+        target_normal=_target_normal,
+        target_roughness=_target_roughness,
+        target_f0=_target_f0,
+        target_brdf=_target_brdf
+    )

@@ -17,3 +17,4 @@ renders
 *.stdout
 /raytracer_builds/
 /dump/
+*.ignore.*
