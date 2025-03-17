@@ -43,8 +43,7 @@ class Camera(nn.Module):
         self.image_width = diffuse_image.shape[2]
         self.image_height = diffuse_image.shape[1]
 
-
-        image_holding_device = "cpu"
+        image_holding_device = "cuda"
 
         #*** optimized as tonemapped values, will need to be inverse the tonemapping before adding both passes
         self._original_image = (tonemap(diffuse_image + glossy_image) * 255).byte().to(image_holding_device)
