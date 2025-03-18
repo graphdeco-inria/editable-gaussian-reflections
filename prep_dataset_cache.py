@@ -1,9 +1,9 @@
-import cv2 
 import sys 
 import glob 
 import os 
+os.environ["OPENCV_IO_ENABLE_OPENEXR"] = "1"
+import cv2 
 import torch 
-import h5py # can compress halfway down, maybe not worth it 
 import numpy as np 
 from tqdm import tqdm
 
