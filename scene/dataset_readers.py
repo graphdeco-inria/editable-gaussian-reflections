@@ -117,57 +117,39 @@ def readColmapCameras(model_params, cam_extrinsics, cam_intrinsics, images_folde
         image_path = os.path.join(images_folder, os.path.basename(extr.name))
         image_name = os.path.basename(image_path).split(".")[0]
         image = Image.open(image_path.replace("/colmap/", "/renders/").replace("/images/", "/render/"))
-        
-        diffuse_image_path = image_path.replace("/render_", "/diffuse_").replace("/colmap/", "/renders/").replace("/images/", "/diffuse/")
-        if model_params.linear_space:
-            diffuse_image = cv2.imread(diffuse_image_path.replace(".png", ".exr"), cv2.IMREAD_UNCHANGED)
-            assert diffuse_image is not None, f"Diffuse image not found at {diffuse_image_path}"
-            diffuse_image = cv2.cvtColor(diffuse_image, cv2.COLOR_BGR2RGB) * model_params.exposure
-        else:
-            diffuse_image = Image.open(diffuse_image_path).convert("RGB") 
 
-        glossy_image_path = image_path.replace("/render_", "/glossy_").replace("/colmap/", "/renders/").replace("/images/", "/glossy/")
-        if model_params.linear_space:
-            glossy_image = cv2.imread(glossy_image_path.replace(".png", ".exr"), cv2.IMREAD_UNCHANGED)
-            assert glossy_image is not None, f"Glossy image not found at {glossy_image_path}"
-            glossy_image = cv2.cvtColor(glossy_image, cv2.COLOR_BGR2RGB) * model_params.exposure
-        else:
-            glossy_image = Image.open(glossy_image_path).convert("RGB") 
+        def imread(image_path, image_name):
+            image = cv2.imread(image_path, cv2.IMREAD_UNCHANGED)
+            image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+            assert image is not None, f"{image_name} image not found at {image_path}"
+            return image
+        
+        diffuse_image_path = image_path.replace("/render_", "/diffuse_").replace("/colmap/", "/renders/").replace("/images/", "/diffuse/").replace(".png", ".exr")
+        diffuse_image = imread(diffuse_image_path, "Diffuse") * model_params.exposure
+
+        glossy_image_path = image_path.replace("/render_", "/glossy_").replace("/colmap/", "/renders/").replace("/images/", "/glossy/").replace(".png", ".exr")
+        glossy_image = imread(glossy_image_path, "Glossy") * model_params.exposure
         
         normal_image_path = image_path.replace("/render_", "/normal_").replace(".png", ".exr").replace("/colmap/", "/renders/").replace("/images/", "/normal/")
-        normal_image = cv2.imread(normal_image_path, cv2.IMREAD_UNCHANGED)
-        assert normal_image is not None, f"Normal image not found at {normal_image_path}"
-        normal_image = cv2.cvtColor(normal_image, cv2.COLOR_BGR2RGB)
+        normal_image = imread(normal_image_path, "Normal")
 
         position_image_path = image_path.replace("/render_", "/position_").replace(".png", ".exr").replace("/colmap/", "/renders/").replace("/images/", "/position/")
-        position_image = cv2.imread(position_image_path, cv2.IMREAD_UNCHANGED)
-        assert position_image is not None, f"Position image not found at {position_image_path}"
-        position_image = cv2.cvtColor(position_image, cv2.COLOR_BGR2RGB)
+        position_image = imread(position_image_path, "Position")
 
         roughness_image_path = image_path.replace("/render_", "/roughness_").replace(".png", ".exr").replace("/colmap/", "/renders/").replace("/images/", "/roughness/")
-        roughness_image = cv2.imread(roughness_image_path, cv2.IMREAD_UNCHANGED)
-        assert roughness_image is not None, f"Roughness image not found at {roughness_image_path}"
-        roughness_image = cv2.cvtColor(roughness_image, cv2.COLOR_BGR2RGB)
+        roughness_image = imread(roughness_image_path, "Roughness")
 
         specular_image_path = image_path.replace("/render_", "/specular_").replace(".png", ".exr").replace("/colmap/", "/renders/").replace("/images/", "/specular/")
-        specular_image = cv2.imread(specular_image_path, cv2.IMREAD_UNCHANGED)
-        assert specular_image is not None, f"Specular image not found at {specular_image_path}"
-        specular_image = cv2.cvtColor(specular_image, cv2.COLOR_BGR2RGB)
+        specular_image = imread(specular_image_path, "Specular")
 
         metalness_path = image_path.replace("/render_", "/metalness_").replace(".png", ".exr").replace("/colmap/", "/renders/").replace("/images/", "/metalness/")
-        metalness_image = cv2.imread(metalness_path, cv2.IMREAD_UNCHANGED)
-        assert metalness_image is not None, f"Metalness image not found at {metalness_path}"
-        metalness_image = cv2.cvtColor(metalness_image, cv2.COLOR_BGR2RGB)
+        metalness_image = imread(metalness_path, "Metalness")
 
         base_color_path = image_path.replace("/render_", "/base_color_").replace(".png", ".exr").replace("/colmap/", "/renders/").replace("/images/", "/base_color/")
-        base_color_image = cv2.imread(base_color_path, cv2.IMREAD_UNCHANGED)
-        assert base_color_image is not None, f"base_color image not found at {base_color_path}"
-        base_color_image = cv2.cvtColor(base_color_image, cv2.COLOR_BGR2RGB)
+        base_color_image = imread(base_color_path, "BaseColor")
 
         brdf_path = image_path.replace("/render_", "/glossy_brdf_").replace(".png", ".exr").replace("/colmap/", "/renders/").replace("/images/", "/glossy_brdf/")
-        brdf_image = cv2.imread(brdf_path, cv2.IMREAD_UNCHANGED)
-        brdf_image = cv2.cvtColor(brdf_image, cv2.COLOR_BGR2RGB)
-        assert brdf_image is not None, f"brdf image not found at {brdf_path}"
+        brdf_image = imread(brdf_path, "BRDF")
 
         cam_info = CameraInfo(uid=uid, R=R, T=T, FovY=FovY, FovX=FovX, image=image,
                               image_path=image_path, image_name=image_name, width=width, height=height, diffuse_image=diffuse_image, glossy_image=glossy_image, position_image=position_image, normal_image=normal_image, roughness_image=roughness_image, metalness_image=metalness_image, base_color_image=base_color_image, brdf_image=brdf_image, specular_image=specular_image)
@@ -323,69 +305,35 @@ def readCamerasFromTransforms(model_params, path, transformsfile, white_backgrou
             image_path = os.path.join(path, cam_name)
             image_name = Path(cam_name).stem
             image = Image.open(image_path)
-            
-            diffuse_image_path = image_path.replace("/render_", "/diffuse_").replace("/colmap/", "/renders/").replace("/render/", "/diffuse/")
-            if model_params.linear_space:
-                diffuse_image = cv2.imread(diffuse_image_path.replace(".png", ".exr"), cv2.IMREAD_UNCHANGED)
-                assert diffuse_image is not None, f"Diffuse image not found at {diffuse_image_path}"
-                diffuse_image = cv2.cvtColor(diffuse_image, cv2.COLOR_BGR2RGB) * model_params.exposure
-            else:
-                diffuse_image = Image.open(diffuse_image_path).convert("RGB")
 
-            glossy_image_path = image_path.replace("/render_", "/glossy_").replace("/colmap/", "/renders/").replace("/render/", "/glossy/")
-            if model_params.linear_space:
-                glossy_image = cv2.imread(glossy_image_path.replace(".png", ".exr"), cv2.IMREAD_UNCHANGED)
-                assert glossy_image is not None, f"Glossy image not found at {glossy_image_path}"
-                glossy_image = cv2.cvtColor(glossy_image, cv2.COLOR_BGR2RGB) * model_params.exposure
-            else:
-                glossy_image = Image.open(glossy_image_path).convert("RGB")
+            assert model_params.linear_space
+            
+            diffuse_image_path = image_path.replace("/render_", "/diffuse_").replace("/colmap/", "/renders/").replace("/render/", "/diffuse/").replace(".png", ".exr")
+            diffuse_image = imread(diffuse_image_path, "Diffuse") * model_params.exposure
+
+            glossy_image_path = image_path.replace("/render_", "/glossy_").replace("/colmap/", "/renders/").replace("/render/", "/glossy/").replace(".png", ".exr")
+            glossy_image = imread(glossy_image_path, "Glossy") * model_params.exposure
             
             normal_image_path = image_path.replace("/render_", "/normal_").replace(".png", ".exr").replace("/colmap/", "/renders/").replace("/render/", "/normal/")
             normal_image = imread(normal_image_path, "Normal")
-            # normal_image = cv2.imread(normal_image_path, cv2.IMREAD_UNCHANGED)
-            # normal_image = cv2.cvtColor(normal_image, cv2.COLOR_BGR2RGB)
-            # assert normal_image is not None, f"Normal image not found at {normal_image_path}"
 
             position_image_path = image_path.replace("/render_", "/position_").replace(".png", ".exr").replace("/colmap/", "/renders/").replace("/render/", "/position/")
             position_image = imread(position_image_path, "Position")
-            # position_image = cv2.imread(position_image_path, cv2.IMREAD_UNCHANGED)
-            # position_image = cv2.cvtColor(position_image, cv2.COLOR_BGR2RGB)
 
             roughness_image_path = image_path.replace("/render_", "/roughness_").replace(".png", ".exr").replace("/colmap/", "/renders/").replace("/render/", "/roughness/")
             roughness_image = imread(roughness_image_path, "Roughness")
-            # roughness_image = cv2.imread(roughness_image_path, cv2.IMREAD_UNCHANGED)
-            # roughness_image = cv2.cvtColor(roughness_image, cv2.COLOR_BGR2RGB)
-            # assert roughness_image is not None, f"Roughness image not found at {roughness_image_path}"
 
             specular_image_path = image_path.replace("/render_", "/specular_").replace(".png", ".exr").replace("/colmap/", "/renders/").replace("/render/", "/specular/")
             specular_image = imread(specular_image_path, "Specular")
-            # specular_image = cv2.imread(specular_image_path, cv2.IMREAD_UNCHANGED)
-            # specular_image = cv2.cvtColor(specular_image, cv2.COLOR_BGR2RGB)
-            # assert specular_image is not None, f"Specular image not found at {specular_image_path}"
 
             metalness_path = image_path.replace("/render_", "/metalness_").replace(".png", ".exr").replace("/colmap/", "/renders/").replace("/render/", "/metalness/")
             metalness_image = imread(metalness_path, "Metalness")
-            # metalness_image = cv2.imread(metalness_path, cv2.IMREAD_UNCHANGED)
-            # metalness_image = cv2.cvtColor(metalness_image, cv2.COLOR_BGR2RGB)
-            # assert metalness_image is not None, f"Metalness image not found at {metalness_path}"
 
             base_color_path = image_path.replace("/render_", "/base_color_").replace(".png", ".exr").replace("/colmap/", "/renders/").replace("/render/", "/base_color/")
             base_color_image = imread(base_color_path, "BaseColor")
-            # base_color_image = cv2.imread(base_color_path, cv2.IMREAD_UNCHANGED)
-            # base_color_image = cv2.cvtColor(base_color_image, cv2.COLOR_BGR2RGB)
-            # assert base_color_image is not None, f"base_color image not found at {base_color_path}"
 
             brdf_path = image_path.replace("/render_", "/glossy_brdf_").replace(".png", ".exr").replace("/colmap/", "/renders/").replace("/render/", "/glossy_brdf/")
             brdf_image = imread(brdf_path, "BRDF")
-            # brdf_image = cv2.imread(brdf_path, cv2.IMREAD_UNCHANGED)
-            # brdf_image = cv2.cvtColor(brdf_image, cv2.COLOR_BGR2RGB)
-            # assert brdf_image is not None, f"brdf image not found at {brdf_path}"
-
-            # im_data = np.array(image.convert("RGBA"))
-            # bg = np.array([1,1,1]) if white_background else np.array([0, 0, 0])
-            # norm_data = im_data / 255.0
-            # arr = norm_data[:,:,:3] * norm_data[:, :, 3:4] + bg * (1 - norm_data[:, :, 3:4])
-            # image = Image.fromarray(np.array(arr*255.0, dtype=np.byte), "RGB")
 
             fovy = focal2fov(fov2focal(fovx, image.size[0]), image.size[1])
             FovY = fovy 

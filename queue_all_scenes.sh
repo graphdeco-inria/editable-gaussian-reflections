@@ -15,10 +15,21 @@
 
 
 # for scene in shiny_bedroom shiny_office; do 
-#     q a40 -name fullres_$scene <<< "bash run.sh --raytracer_version /home/ypoirier/optix/gausstracer/build/v30 -s colmap/$scene -m output_eval_highres/$scene -r 1536"
+#     q a40 -n fullres_$scene <<< "bash run.sh --raytracer_version /home/ypoirier/optix/gausstracer/build/v30 -s colmap/$scene -m output_eval_highres/$scene -r 1536"
 # done
 
 
-for scene in shiny_bedroom shiny_kitchen shiny_livingroom shiny_office; do 
-    q a40 -n highres_1m_$scene <<< "bash run.sh --raytracer_version /home/ypoirier/optix/gausstracer/build/v30 -s colmap/$scene -m output_eval_highres_1m/$scene --densif_final_num_gaussians 1000000 -r 1536"
+# for scene in shiny_bedroom shiny_kitchen shiny_livingroom shiny_office; do 
+#     q a40 -n highres_4m_$scene <<< "bash run.sh --raytracer_version /home/ypoirier/optix/gausstracer/build/v30 -s colmap/$scene -m output_eval_highres_4m/$scene --densif_final_num_gaussians 4000000"
+# done
+
+# for scene in shiny_bedroom shiny_kitchen shiny_livingroom shiny_office; do 
+#     q a40 -n highres_4m_$scene <<< "bash run.sh --raytracer_version /home/ypoirier/optix/gausstracer/build/v30 -s colmap/$scene -m output_eval_highres_8m/$scene --densif_final_num_gaussians 8000000"
+# done
+
+
+for scene in shiny_livingroom; do 
+    for m in 1 2 4 8 16; do
+        q a40 -n fullres_${m}m_${scene} <<< "bash run.sh --raytracer_version /home/ypoirier/optix/gausstracer/build/v30 -s colmap/$scene -m output_num_gaussians/${m}m_$scene -r 1536 --densif_final_num_gaussians ${m}000000"
+    done
 done
