@@ -129,7 +129,7 @@ def readColmapCameras(model_params, cam_extrinsics, cam_intrinsics, images_folde
         image_path = os.path.join(images_folder, os.path.basename(extr.name))
         image_name = os.path.basename(image_path).split(".")[0]
 
-        if True:
+        if "LOAD_FROM_IMAGE_FILES" not in os.environ:
             image_tensor = torch.load(image_path.replace("/colmap/", "/cache/").replace("/images/", "/").replace("/render_", "/").replace(".png", ".pt"))
             image, diffuse_image, glossy_image, normal_image, position_image, roughness_image, specular_image, metalness_image, base_color_image, brdf_image = torch.unbind(image_tensor, dim=0)
             height, width = image.size(1), image.size(0)
@@ -269,7 +269,7 @@ def readCamerasFromTransforms(model_params, path, transformsfile, white_backgrou
 
             assert model_params.linear_space
             
-            if True:
+            if "LOAD_FROM_IMAGE_FILES" not in os.environ:
                 image_tensor = torch.load(image_path.replace("/renders/", "/cache/").replace("/render/", "/").replace("/render_", "/").replace(".png", ".pt"))
                 image, diffuse_image, glossy_image, normal_image, position_image, roughness_image, metalness_image, base_color_image, brdf_image, specular_image = torch.unbind(image_tensor, dim=0)
                 width, height = image.shape[1], image.shape[0]

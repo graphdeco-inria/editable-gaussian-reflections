@@ -24,14 +24,10 @@ input_passes = [
 
 def imread(image_path, render_pass_name):
     path = image_path.replace("/images/", "/render/").replace("/colmap/", "/renders/").replace("/render_", f"/{render_pass_name}_").replace("/render/", f"/{render_pass_name}/")
-    if True or (render_pass_name in ["position", "diffuse", "glossy"]):
-        path = path.replace(".png", ".exr")
-        assert os.path.exists(path), f"{render_pass_name} render pass not found at {path}"
-        image = cv2.imread(path, cv2.IMREAD_UNCHANGED)
-        image = torch.tensor(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
-    else:
-        assert os.path.exists(path), f"{render_pass_name} render pass not found at {path}"
-        image = torch.tensor(Image.open(path).convert("RGB"))
+    path = path.replace(".png", ".exr")
+    assert os.path.exists(path), f"{render_pass_name} render pass not found at {path}"
+    image = cv2.imread(path, cv2.IMREAD_UNCHANGED)
+    image = torch.tensor(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
     return image
     
 assert path.startswith("renders/")

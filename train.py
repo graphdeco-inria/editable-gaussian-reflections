@@ -95,7 +95,7 @@ def training_report(tb_writer, iteration):
 
                     gt_image = torch.clamp(viewpoint.original_image, 0.0, 1.0)
                     if tb_writer and (idx < 5): 
-                        save_image(torch.stack([diffuse_image, diffuse_gt_image, glossy_image, glossy_gt_image, pred_image, gt_image]), tb_writer.log_dir + "/" + f"{config['name']}_view/iter_{iteration:09}_{idx}.png", nrow=2)
+                        save_image(torch.stack([diffuse_image, diffuse_gt_image, glossy_image, glossy_gt_image, pred_image, gt_image]).clamp(0, 1), tb_writer.log_dir + "/" + f"{config['name']}_view/iter_{iteration:09}_{idx}.png", nrow=2)
                     
                     roughness_image = torch.clamp(package.roughness[0], 0.0, 1.0)
                     normal_image = torch.clamp(package.normal[0] / 2 + 0.5, 0.0, 1.0) 
@@ -121,7 +121,7 @@ def training_report(tb_writer, iteration):
                     if tb_writer and (idx < 5): 
                         if package.rgb.shape[0] > 2:
                             for k, (rgb_img, normal_img, pos_image,F0_image, brdf_image) in enumerate(zip(package.rgb, package.normal, package.position, package.F0, package.brdf)):
-                                save_image(rgb_img, tb_writer.log_dir + "/" + f"{config['name']}_view/iter_{iteration:09}_{idx}_rgb_bounce_{k}.png", padding=0)
+                                save_image(rgb_img.clamp(0, 1), tb_writer.log_dir + "/" + f"{config['name']}_view/iter_{iteration:09}_{idx}_rgb_bounce_{k}.png", padding=0)
                                 save_image(torch.clamp(normal_img / 2 + 0.5, 0.0, 1.0), tb_writer.log_dir + "/" + f"{config['name']}_view/iter_{iteration:09}_{idx}_normal_bounce_{k}.png", padding=0)
                                 save_image(torch.clamp(F0_image, 0.0, 1.0), tb_writer.log_dir + "/" + f"{config['name']}_view/iter_{iteration:09}_{idx}_F0_bounce_{k}.png", padding=0)
                                 save_image(torch.clamp(pos_image, 0.0, 1.0), tb_writer.log_dir + "/" + f"{config['name']}_view/iter_{iteration:09}_{idx}_pos_bounce_{k}.png", padding=0)
@@ -140,16 +140,16 @@ def training_report(tb_writer, iteration):
                             save_image((raytracer.cuda_module.num_hits_per_pixel.float() / raytracer.cuda_module.num_hits_per_pixel.max()), tb_writer.log_dir + "/" + f"{config['name']}_view/iter_{iteration:09}_{idx}_num_hits_per_pixel.png", padding=0)
                             save_image((raytracer.cuda_module.num_traversed_per_pixel.float() / raytracer.cuda_module.num_traversed_per_pixel.max()), tb_writer.log_dir + "/" + f"{config['name']}_view/iter_{iteration:09}_{idx}_num_traversed_per_pixel.png", padding=0)
 
-                        save_image(torch.stack([roughness_image.cuda(), roughness_gt_image]), tb_writer.log_dir + "/" + f"{config['name']}_view/iter_{iteration:09}_{idx}_roughness.png", nrow=2, padding=0)
-                        save_image(torch.stack([F0_image.cuda(), F0_gt_image]), tb_writer.log_dir + "/" + f"{config['name']}_view/iter_{iteration:09}_{idx}_F0.png", nrow=2, padding=0)
-                        save_image(torch.stack([pred_image, gt_image]), tb_writer.log_dir + "/" + f"{config['name']}_view/iter_{iteration:09}_{idx}_final.png", nrow=2, padding=0)
-                        save_image(torch.stack([diffuse_image, diffuse_gt_image]), tb_writer.log_dir + "/" + f"{config['name']}_view/iter_{iteration:09}_{idx}_diffuse.png", nrow=2, padding=0)
-                        save_image(torch.stack([glossy_image, glossy_gt_image]), tb_writer.log_dir + "/" + f"{config['name']}_view/iter_{iteration:09}_{idx}_glossy.png", nrow=2, padding=0)
-                        save_image(torch.stack([position_image.cuda(), position_gt_image]), tb_writer.log_dir + "/" + f"{config['name']}_view/iter_{iteration:09}_{idx}_position.png", nrow=2, padding=0)
-                        save_image(torch.stack([normal_image.cuda(), normal_gt_image]), tb_writer.log_dir + "/" + f"{config['name']}_view/iter_{iteration:09}_{idx}_normal.png", nrow=2, padding=0)
-                        save_image(torch.stack([normal_image.cuda(), normal_gt_image]), tb_writer.log_dir + "/" + f"{config['name']}_view/iter_{iteration:09}_{idx}_normal.png", nrow=2, padding=0)
+                        save_image(torch.stack([roughness_image.cuda(), roughness_gt_image]).clamp(0, 1), tb_writer.log_dir + "/" + f"{config['name']}_view/iter_{iteration:09}_{idx}_roughness.png", nrow=2, padding=0)
+                        save_image(torch.stack([F0_image.cuda(), F0_gt_image]).clamp(0, 1), tb_writer.log_dir + "/" + f"{config['name']}_view/iter_{iteration:09}_{idx}_F0.png", nrow=2, padding=0)
+                        save_image(torch.stack([pred_image, gt_image]).clamp(0, 1), tb_writer.log_dir + "/" + f"{config['name']}_view/iter_{iteration:09}_{idx}_final.png", nrow=2, padding=0)
+                        save_image(torch.stack([diffuse_image, diffuse_gt_image]).clamp(0, 1), tb_writer.log_dir + "/" + f"{config['name']}_view/iter_{iteration:09}_{idx}_diffuse.png", nrow=2, padding=0)
+                        save_image(torch.stack([glossy_image, glossy_gt_image]).clamp(0, 1), tb_writer.log_dir + "/" + f"{config['name']}_view/iter_{iteration:09}_{idx}_glossy.png", nrow=2, padding=0)
+                        save_image(torch.stack([position_image.cuda(), position_gt_image]).clamp(0, 1), tb_writer.log_dir + "/" + f"{config['name']}_view/iter_{iteration:09}_{idx}_position.png", nrow=2, padding=0)
+                        save_image(torch.stack([normal_image.cuda(), normal_gt_image]).clamp(0, 1), tb_writer.log_dir + "/" + f"{config['name']}_view/iter_{iteration:09}_{idx}_normal.png", nrow=2, padding=0)
+                        save_image(torch.stack([normal_image.cuda(), normal_gt_image]).clamp(0, 1), tb_writer.log_dir + "/" + f"{config['name']}_view/iter_{iteration:09}_{idx}_normal.png", nrow=2, padding=0)
                         if model_params.brdf_mode != "disabled":
-                            save_image(torch.stack([brdf_image, brdf_gt_image.cuda()]), tb_writer.log_dir + "/" + f"{config['name']}_view/iter_{iteration:09}_{idx}_brdf.png", nrow=2, padding=0)
+                            save_image(torch.stack([brdf_image, brdf_gt_image.cuda()]).clamp(0, 1), tb_writer.log_dir + "/" + f"{config['name']}_view/iter_{iteration:09}_{idx}_brdf.png", nrow=2, padding=0)
 
                         if raytracer.config.USE_LEVEL_OF_DETAIL:
                             for k, alpha in enumerate(torch.linspace(0.0, 1.0, 4)):
@@ -163,7 +163,7 @@ def training_report(tb_writer, iteration):
                                 glossy_pred = tonemap(untonemap(package.rgb[1:].sum(dim=0)))
                                 pred = tonemap(untonemap(package.rgb).sum(dim=0))
 
-                                save_image(torch.stack([diffuse_pred, diffuse_gt_image, glossy_pred, glossy_gt_image, pred, gt_image]), tb_writer.log_dir + "/" + f"{config['name']}_view/iter_{iteration:09}_{idx}_blurred_{k}÷3.png", nrow=2, padding=0)        
+                                save_image(torch.stack([diffuse_pred, diffuse_gt_image, glossy_pred, glossy_gt_image, pred, gt_image]).clamp(0, 1), tb_writer.log_dir + "/" + f"{config['name']}_view/iter_{iteration:09}_{idx}_blurred_{k}÷3.png", nrow=2, padding=0)        
 
                 if model_params.brdf_mode == "static_lut":
                     save_image(torch.stack([ gaussians.get_brdf_lut ]).abs(), os.path.join(tb_writer.log_dir, f"{config['name']}_view/lut_iter_{iteration:09}.png"), nrow=1, padding=0)
@@ -210,8 +210,8 @@ parser.add_argument('--detect_anomaly', action='store_true', default=False)
 parser.add_argument('--flip_camera', action='store_true', default=False)
 # parser.add_argument("--test_iterations", nargs="+", type=int, default=[1, 100, 500, 1_000, 2_500, 5_000, 10_000, 20_000, 30_000, 60_000, 90_000])
 # parser.add_argument("--test_iterations", nargs="+", type=int, default=[1, 1_000, 2_000, 3_000, 5_000, 10_000, 20_000, 30_000, 60_000, 90_000])
-parser.add_argument("--test_iterations", nargs="+", type=int, default=[1, 7_000, 15_000, 30_000, 60_000, 90_000])
-parser.add_argument("--save_iterations", nargs="+", type=int, default=[1, 7_000, 15_000, 30_000, 60_000, 90_000])
+parser.add_argument("--test_iterations", nargs="+", type=int, default=[1, 3_000, 7_000, 15_000, 30_000, 60_000, 90_000])
+parser.add_argument("--save_iterations", nargs="+", type=int, default=[1, 3_000, 7_000, 15_000, 30_000, 60_000, 90_000])
 parser.add_argument("--quiet", action="store_true")
 parser.add_argument("--viewer", action="store_true")
 parser.add_argument("--checkpoint_iterations", nargs="+", type=int, default=[])
