@@ -82,6 +82,18 @@ def getNerfppNorm(cam_info):
 
     return {"translate": translate, "radius": radius}
 
+def imread(image_path, render_pass_name):
+    path = image_path.replace("/images/", "/render/").replace("/colmap/", "/renders/").replace("/render_", f"/{render_pass_name}_").replace("/render/", f"/{render_pass_name}/")
+    if True or (render_pass_name in ["position", "diffuse", "glossy"]):
+        path = path.replace(".png", ".exr")
+        assert os.path.exists(path), f"{render_pass_name} render pass not found at {path}"
+        image = cv2.imread(path, cv2.IMREAD_UNCHANGED)
+        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+    else:
+        assert os.path.exists(path), f"{render_pass_name} render pass not found at {path}"
+        image = np.array(Image.open(path).convert("RGB"))
+    return image
+    
 def readColmapCameras(model_params, cam_extrinsics, cam_intrinsics, images_folder):
     cam_infos = []
 
@@ -116,55 +128,30 @@ def readColmapCameras(model_params, cam_extrinsics, cam_intrinsics, images_folde
 
         image_path = os.path.join(images_folder, os.path.basename(extr.name))
         image_name = os.path.basename(image_path).split(".")[0]
-        image = Image.open(image_path.replace("/colmap/", "/renders/").replace("/images/", "/render/"))
 
-        def imread(image_path, image_name):
-            image = cv2.imread(image_path, cv2.IMREAD_UNCHANGED)
-            image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-            assert image is not None, f"{image_name} image not found at {image_path}"
-            return image
-        
-        diffuse_image_path = image_path.replace("/render_", "/diffuse_").replace("/colmap/", "/renders/").replace("/images/", "/diffuse/").replace(".png", ".exr")
-        diffuse_image = imread(diffuse_image_path, "Diffuse") * model_params.exposure
-
-        glossy_image_path = image_path.replace("/render_", "/glossy_").replace("/colmap/", "/renders/").replace("/images/", "/glossy/").replace(".png", ".exr")
-        glossy_image = imread(glossy_image_path, "Glossy") * model_params.exposure
-        
-        normal_image_path = image_path.replace("/render_", "/normal_").replace(".png", ".exr").replace("/colmap/", "/renders/").replace("/images/", "/normal/")
-        normal_image = imread(normal_image_path, "Normal")
-
-        position_image_path = image_path.replace("/render_", "/position_").replace(".png", ".exr").replace("/colmap/", "/renders/").replace("/images/", "/position/")
-        position_image = imread(position_image_path, "Position")
-
-        roughness_image_path = image_path.replace("/render_", "/roughness_").replace(".png", ".exr").replace("/colmap/", "/renders/").replace("/images/", "/roughness/")
-        roughness_image = imread(roughness_image_path, "Roughness")
-
-        specular_image_path = image_path.replace("/render_", "/specular_").replace(".png", ".exr").replace("/colmap/", "/renders/").replace("/images/", "/specular/")
-        specular_image = imread(specular_image_path, "Specular")
-
-        metalness_path = image_path.replace("/render_", "/metalness_").replace(".png", ".exr").replace("/colmap/", "/renders/").replace("/images/", "/metalness/")
-        metalness_image = imread(metalness_path, "Metalness")
-
-        base_color_path = image_path.replace("/render_", "/base_color_").replace(".png", ".exr").replace("/colmap/", "/renders/").replace("/images/", "/base_color/")
-        base_color_image = imread(base_color_path, "BaseColor")
-
-        brdf_path = image_path.replace("/render_", "/glossy_brdf_").replace(".png", ".exr").replace("/colmap/", "/renders/").replace("/images/", "/glossy_brdf/")
-        brdf_image = imread(brdf_path, "BRDF")
+        if True:
+            image_tensor = torch.load(image_path.replace("/colmap/", "/cache/").replace("/images/", "/").replace("/render_", "/").replace(".png", ".pt"))
+            image, diffuse_image, glossy_image, normal_image, position_image, roughness_image, specular_image, metalness_image, base_color_image, brdf_image = torch.unbind(image_tensor, dim=0)
+            height, width = image.size(1), image.size(0)
+        else:
+            image = Image.open(image_path.replace("/colmap/", "/renders/").replace("/images/", "/render/"))
+            diffuse_image = imread(image_path, "diffuse") 
+            glossy_image = imread(image_path, "glossy") 
+            normal_image = imread(image_path, "normal")
+            position_image = imread(image_path, "position")
+            roughness_image = imread(image_path, "roughness")
+            specular_image = imread(image_path, "specular")
+            metalness_image = imread(image_path, "metalness")
+            base_color_image = imread(image_path, "base_color")
+            brdf_image = imread(image_path, "glossy_brdf")
+            width, height = image.size[0], image.size[1]
+        diffuse_image = diffuse_image * model_params.exposure
+        glossy_image = glossy_image * model_params.exposure
 
         cam_info = CameraInfo(uid=uid, R=R, T=T, FovY=FovY, FovX=FovX, image=image,
                               image_path=image_path, image_name=image_name, width=width, height=height, diffuse_image=diffuse_image, glossy_image=glossy_image, position_image=position_image, normal_image=normal_image, roughness_image=roughness_image, metalness_image=metalness_image, base_color_image=base_color_image, brdf_image=brdf_image, specular_image=specular_image)
 
         cam_infos.append(cam_info)
-
-    cache_path = os.path.join(model_params.source_path, "cam_infos.pth")
-    if "DBGCACHE" in os.environ and os.path.exists(cache_path):
-        print("Loading", cache_path)
-        
-        cam_infos = torch.load(cache_path)
-        if len(cam_infos) == model_params.max_images:
-            return cam_infos
-        else:
-            print("Cache invalid")
     
     futures = []
     with ThreadPoolExecutor() as executor: 
@@ -175,8 +162,6 @@ def readColmapCameras(model_params, cam_extrinsics, cam_intrinsics, images_folde
         future.result()
 
     cam_infos = sorted(cam_infos, key=lambda x: x.image_name)
-    if "DBGCACHE" in os.environ:
-        torch.save(cam_infos, cache_path)
     
     sys.stdout.write('\n')
     return cam_infos
@@ -265,30 +250,7 @@ def readCamerasFromTransforms(model_params, path, transformsfile, white_backgrou
         fovx = contents["camera_angle_x"]
 
         frames = sorted(contents["frames"], key=lambda frame: frame["file_path"])[:model_params.max_images]
-
-        cache = None
-        index_mapping = {
-            "Render": slice(0, 3),
-            "Diffuse": slice(3, 6),
-            "Glossy": slice(6, 9),
-            "Normal": slice(9, 12),
-            "Position": slice(12, 15),
-            "Roughness": slice(15, 18),
-            "Metalness": slice(18, 21),
-            "BaseColor": slice(21, 24),
-            "BRDF": slice(24, 27),
-            "Specular": slice(27, 30)
-        }
-        
-        def imread(image_path, image_name):
-            if cache is None:
-                image = cv2.imread(image_path, cv2.IMREAD_UNCHANGED)
-                image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-                assert image is not None, f"{image_name} image not found at {image_path}"
-                return image
-            else:
-                return cache[idx, index_mapping[image_name]]
-
+                
         def readFrame(idx, frame):
             cam_name = os.path.join(path, frame["file_path"] + extension)
 
@@ -304,56 +266,34 @@ def readCamerasFromTransforms(model_params, path, transformsfile, white_backgrou
 
             image_path = os.path.join(path, cam_name)
             image_name = Path(cam_name).stem
-            image = Image.open(image_path)
 
             assert model_params.linear_space
             
-            diffuse_image_path = image_path.replace("/render_", "/diffuse_").replace("/colmap/", "/renders/").replace("/render/", "/diffuse/").replace(".png", ".exr")
-            diffuse_image = imread(diffuse_image_path, "Diffuse") * model_params.exposure
+            if True:
+                image_tensor = torch.load(image_path.replace("/renders/", "/cache/").replace("/render/", "/").replace("/render_", "/").replace(".png", ".pt"))
+                image, diffuse_image, glossy_image, normal_image, position_image, roughness_image, metalness_image, base_color_image, brdf_image, specular_image = torch.unbind(image_tensor, dim=0)
+                width, height = image.shape[1], image.shape[0]
+            else:
+                image = Image.open(image_path)
+                diffuse_image = imread(image_path, "diffuse") 
+                glossy_image = imread(image_path, "glossy") 
+                normal_image = imread(image_path, "normal")
+                position_image = imread(image_path, "position")
+                roughness_image = imread(image_path, "roughness")
+                specular_image = imread(image_path, "specular")
+                metalness_image = imread(image_path, "metalness")
+                base_color_image = imread(image_path, "base_color")
+                brdf_image = imread(image_path, "glossy_brdf")
+                width, height = image.size[0], image.size[1]
 
-            glossy_image_path = image_path.replace("/render_", "/glossy_").replace("/colmap/", "/renders/").replace("/render/", "/glossy/").replace(".png", ".exr")
-            glossy_image = imread(glossy_image_path, "Glossy") * model_params.exposure
-            
-            normal_image_path = image_path.replace("/render_", "/normal_").replace(".png", ".exr").replace("/colmap/", "/renders/").replace("/render/", "/normal/")
-            normal_image = imread(normal_image_path, "Normal")
-
-            position_image_path = image_path.replace("/render_", "/position_").replace(".png", ".exr").replace("/colmap/", "/renders/").replace("/render/", "/position/")
-            position_image = imread(position_image_path, "Position")
-
-            roughness_image_path = image_path.replace("/render_", "/roughness_").replace(".png", ".exr").replace("/colmap/", "/renders/").replace("/render/", "/roughness/")
-            roughness_image = imread(roughness_image_path, "Roughness")
-
-            specular_image_path = image_path.replace("/render_", "/specular_").replace(".png", ".exr").replace("/colmap/", "/renders/").replace("/render/", "/specular/")
-            specular_image = imread(specular_image_path, "Specular")
-
-            metalness_path = image_path.replace("/render_", "/metalness_").replace(".png", ".exr").replace("/colmap/", "/renders/").replace("/render/", "/metalness/")
-            metalness_image = imread(metalness_path, "Metalness")
-
-            base_color_path = image_path.replace("/render_", "/base_color_").replace(".png", ".exr").replace("/colmap/", "/renders/").replace("/render/", "/base_color/")
-            base_color_image = imread(base_color_path, "BaseColor")
-
-            brdf_path = image_path.replace("/render_", "/glossy_brdf_").replace(".png", ".exr").replace("/colmap/", "/renders/").replace("/render/", "/glossy_brdf/")
-            brdf_image = imread(brdf_path, "BRDF")
-
-            fovy = focal2fov(fov2focal(fovx, image.size[0]), image.size[1])
+            fovy = focal2fov(fov2focal(fovx, width), height)
             FovY = fovy 
             FovX = fovx
 
             cam_infos.append(CameraInfo(uid=idx, R=R, T=T, FovY=FovY, FovX=FovX, image=image,
-                            image_path=image_path, image_name=image_name, width=image.size[0], height=image.size[1], diffuse_image=diffuse_image, glossy_image=glossy_image, position_image=position_image, normal_image=normal_image, roughness_image=roughness_image, metalness_image=metalness_image, base_color_image=base_color_image, brdf_image=brdf_image, specular_image=specular_image))
+                            image_path=image_path, image_name=image_name, width=width, height=height, diffuse_image=diffuse_image, glossy_image=glossy_image, position_image=position_image, normal_image=normal_image, roughness_image=roughness_image, metalness_image=metalness_image, base_color_image=base_color_image, brdf_image=brdf_image, specular_image=specular_image))
 
 
-        cache_path = os.path.join(model_params.source_path, "cam_infos_" + str(model_params.max_images) + "images_" + str(model_params.resolution) + "px_" + transformsfile.replace(".json", ".pt"))
-
-        if "DBGCACHE" in os.environ and os.path.exists(cache_path):
-            print("Loading", cache_path)
-            
-            cam_infos = torch.load(cache_path)
-            if len(cam_infos) == model_params.max_images: # todo just put the # of images and the resolution in the file name
-                return cam_infos
-            else:
-                print("Cache invalid")
-                
         with ThreadPoolExecutor() as executor: 
             futures = []
             for idx, frame in tqdm(enumerate(frames)):
@@ -363,10 +303,6 @@ def readCamerasFromTransforms(model_params, path, transformsfile, white_backgrou
                 future.result()
 
         assert len(cam_infos) > 0
-
-        cam_infos = sorted(cam_infos, key=lambda x: x.image_name)
-        if "DBGCACHE" in os.environ:
-            torch.save(cam_infos, cache_path)
 
         cam_infos = sorted(cam_infos, key=lambda x: x.image_name)
             

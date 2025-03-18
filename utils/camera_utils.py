@@ -18,68 +18,69 @@ import torch
 WARNED = False
 
 def loadCam(args, id, cam_info, resolution_scale): 
-    orig_w, orig_h = cam_info.image.size
+    resolution = args.resolution
 
-    if args.resolution in [1, 2, 4, 8]:
-        resolution = round(orig_w/(resolution_scale * args.resolution)), round(orig_h/(resolution_scale * args.resolution))
-    else:  # should be a type that converts to float
-        if args.resolution == -1:
-            if orig_w > 1600:
-                global WARNED
-                if not WARNED:
-                    print("[ INFO ] Encountered quite large input images (>1.6K pixels width), rescaling to 1.6K.\n "
-                        "If this is not desired, please explicitly specify '--resolution/-r' as 1")
-                    WARNED = True
-                global_down = orig_w / 1600
+    if isinstance(cam_info.image, torch.Tensor):
+        def downsize(x):
+            if resolution != x.shape[-1]:
+                return torch.nn.functional.interpolate(x[None].cuda().float(), (resolution, int(resolution*1.5)), mode="area")[0].half().cpu()
             else:
-                global_down = 1
-        else:
-            global_down = orig_w / args.resolution
-
-        scale = float(global_down) * float(resolution_scale)
-        resolution = (int(orig_w / scale), int(orig_h / scale))
-
-    resized_image_rgb = PILtoTorch(cam_info.image, resolution)
-    gt_image = resized_image_rgb[:3, ...]
-    loaded_mask = None
-
-    if resized_image_rgb.shape[1] == 4:
-        loaded_mask = resized_image_rgb[3:4, ...]
-
-    if cam_info.diffuse_image is not None:
-        if isinstance(cam_info.diffuse_image, np.ndarray):
-            diffuse_image = torch.nn.functional.interpolate(torch.from_numpy(cam_info.diffuse_image).moveaxis(-1, 0)[None], (resolution[1], resolution[0]), mode="area")[0].cuda()
-        else:
-            resized_diffuse_image_rgb = PILtoTorch(cam_info.diffuse_image, resolution)
-            diffuse_image = resized_diffuse_image_rgb[:3, ...].cuda()
-
-        if isinstance(cam_info.glossy_image, np.ndarray):
-            glossy_image = torch.nn.functional.interpolate(torch.from_numpy(cam_info.glossy_image).moveaxis(-1, 0)[None], (resolution[1], resolution[0]), mode="area")[0].cuda()
-        else:
-            resized_glossy_image_rgb = PILtoTorch(cam_info.glossy_image, resolution)
-            glossy_image = resized_glossy_image_rgb[:3, ...].cuda()
-
-        def resize_property(property_image):
-            x = torch.from_numpy(property_image).moveaxis(-1, 0).cuda()
-            return torch.nn.functional.interpolate(x[:3, ...][None], (resolution[1], resolution[0]), mode=args.downsampling_mode)[0]
-
-        position_image = resize_property(cam_info.position_image)
-        normal_image = resize_property(cam_info.normal_image)
-        roughness_image = resize_property(cam_info.roughness_image)
-        metalness_image = resize_property(cam_info.metalness_image)
-        base_color_image = resize_property(cam_info.base_color_image)
-        specular_image = resize_property(cam_info.specular_image)
-        brdf_image = resize_property(cam_info.brdf_image)
+                return x.cuda()
+        diffuse_image = downsize(cam_info.diffuse_image.moveaxis(-1, 0))
+        glossy_image = downsize(cam_info.glossy_image.moveaxis(-1, 0))
+        position_image = downsize(cam_info.position_image.moveaxis(-1, 0))
+        normal_image = downsize(cam_info.normal_image.moveaxis(-1, 0))
+        roughness_image = downsize(cam_info.roughness_image.moveaxis(-1, 0))
+        metalness_image = downsize(cam_info.metalness_image.moveaxis(-1, 0))
+        base_color_image = downsize(cam_info.base_color_image.moveaxis(-1, 0))
+        specular_image = downsize(cam_info.specular_image.moveaxis(-1, 0))
+        brdf_image = downsize(cam_info.brdf_image.moveaxis(-1, 0))
+        gt_image = downsize(cam_info.image.moveaxis(-1, 0))
+        loaded_mask = None
     else:
-        diffuse_image = None 
-        glossy_image = None
-        position_image = None 
-        normal_image = None
-        roughness_image = None
-        metalness_image = None
-        base_color_image = None
-        brdf_image = None
+        assert False 
 
+        resized_image_rgb = PILtoTorch(cam_info.image, resolution)
+        gt_image = resized_image_rgb[:3, ...]
+        loaded_mask = None
+
+        if resized_image_rgb.shape[1] == 4:
+            loaded_mask = resized_image_rgb[3:4, ...]
+
+        if cam_info.diffuse_image is not None:
+            if isinstance(cam_info.diffuse_image, np.ndarray):
+                diffuse_image = torch.nn.functional.interpolate(torch.from_numpy(cam_info.diffuse_image).moveaxis(-1, 0)[None], (resolution[1], resolution[0]), mode="area")[0].cuda()
+            else:
+                resized_diffuse_image_rgb = PILtoTorch(cam_info.diffuse_image, resolution)
+                diffuse_image = resized_diffuse_image_rgb[:3, ...].cuda()
+
+            if isinstance(cam_info.glossy_image, np.ndarray):
+                glossy_image = torch.nn.functional.interpolate(torch.from_numpy(cam_info.glossy_image).moveaxis(-1, 0)[None], (resolution[1], resolution[0]), mode="area")[0].cuda()
+            else:
+                resized_glossy_image_rgb = PILtoTorch(cam_info.glossy_image, resolution)
+                glossy_image = resized_glossy_image_rgb[:3, ...].cuda()
+
+            def resize_property(property_image):
+                x = torch.from_numpy(property_image).moveaxis(-1, 0).cuda()
+                return torch.nn.functional.interpolate(x[:3, ...][None], (resolution[1], resolution[0]), mode=args.downsampling_mode)[0]
+
+            position_image = resize_property(cam_info.position_image)
+            normal_image = resize_property(cam_info.normal_image)
+            roughness_image = resize_property(cam_info.roughness_image)
+            metalness_image = resize_property(cam_info.metalness_image)
+            base_color_image = resize_property(cam_info.base_color_image)
+            specular_image = resize_property(cam_info.specular_image)
+            brdf_image = resize_property(cam_info.brdf_image)
+        else:
+            diffuse_image = None 
+            glossy_image = None
+            position_image = None 
+            normal_image = None
+            roughness_image = None
+            metalness_image = None
+            base_color_image = None
+            brdf_image = None
+    
     return Camera(colmap_id=cam_info.uid, R=cam_info.R, T=cam_info.T, 
                   FoVx=cam_info.FovX, FoVy=cam_info.FovY, 
                   image=gt_image, gt_alpha_mask=loaded_mask,
