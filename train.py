@@ -87,7 +87,7 @@ def training_report(tb_writer, iteration):
                     os.makedirs(tb_writer.log_dir + "/" + f"{config['name']}_view", exist_ok=True)
 
                     diffuse_image = torch.clamp(package.rgb[0], 0.0, 1.0)
-                    glossy_image = package.rgb[1]#!!torch.clamp(tonemap(untonemap(package.rgb[1:-1]).sum(dim=0)), 0.0, 1.0)
+                    glossy_image = torch.clamp(tonemap(untonemap(package.rgb[1:-1]).sum(dim=0)), 0.0, 1.0)
                     pred_image = package.rgb[-1]
                     diffuse_gt_image = torch.clamp(viewpoint.diffuse_image, 0.0, 1.0)
                     glossy_gt_image = torch.clamp(viewpoint.glossy_image, 0.0, 1.0)
