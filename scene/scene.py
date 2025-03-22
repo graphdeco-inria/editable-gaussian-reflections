@@ -72,8 +72,14 @@ class Scene:
         if shuffle:
             random.shuffle(scene_info.train_cameras)  # Multi-res consistent random shuffling
 
-        self.cameras_extent = scene_info.nerf_normalization["radius"]
+        if hasattr(model_params, "sparseness") and model_params.sparseness != -1:
+            cameras = sorted(scene_info.train_cameras, key=lambda x: x.image_path)
+            cameras = cameras[:50] + cameras[-50:]
+            # take every kth cameras where k = args.sparseness
+            scene_info = scene_info._replace(train_cameras = cameras[::args.sparseness])
         
+        self.cameras_extent = scene_info.nerf_normalization["radius"]
+
         for resolution_scale in resolution_scales:
             print("Loading Training Cameras")
             self.train_cameras[resolution_scale] = cameraList_from_camInfos(scene_info.train_cameras, resolution_scale, model_params)
@@ -104,7 +110,7 @@ class Scene:
         import sys
         sys.path.append(gaussians.model_params.raytracer_version)
         import raytracer_config
-        if raytracer_config.MAX_BOUNCES > 0:
+        if raytracer_config.MAX_BOUNCES > 0 and "SKIP_EXTRA_POINTS" not in os.environ:
             scene_info.point_cloud = BasicPointCloud(
                 np.concatenate([scene_info.point_cloud.points, extra_points]),
                 np.concatenate([scene_info.point_cloud.colors, extra_colors]),

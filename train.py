@@ -87,11 +87,11 @@ def training_report(tb_writer, iteration):
                     os.makedirs(tb_writer.log_dir + "/" + f"{config['name']}_view", exist_ok=True)
 
                     diffuse_image = torch.clamp(package.rgb[0], 0.0, 1.0)
-                    glossy_image = torch.clamp(package.rgb[1:].sum(dim=0), 0.0, 1.0)
+                    glossy_image = package.rgb[1]#!!torch.clamp(tonemap(untonemap(package.rgb[1:-1]).sum(dim=0)), 0.0, 1.0)
+                    pred_image = package.rgb[-1]
                     diffuse_gt_image = torch.clamp(viewpoint.diffuse_image, 0.0, 1.0)
                     glossy_gt_image = torch.clamp(viewpoint.glossy_image, 0.0, 1.0)
                     normal_gt_image = torch.clamp(viewpoint.normal_image / 2 + 0.5, 0.0, 1.0)
-                    pred_image = tonemap(untonemap(package.rgb).sum(dim=0))
 
                     gt_image = torch.clamp(viewpoint.original_image, 0.0, 1.0)
                     if tb_writer and (idx < 5): 
@@ -120,13 +120,16 @@ def training_report(tb_writer, iteration):
 
                     if tb_writer and (idx < 5): 
                         if package.rgb.shape[0] > 2:
-                            for k, (rgb_img, normal_img, pos_image,F0_image, brdf_image) in enumerate(zip(package.rgb, package.normal, package.position, package.F0, package.brdf)):
+                            for k, (rgb_img, normal_img, pos_image, F0_image, brdf_image) in enumerate(zip(package.rgb, package.normal, package.position, package.F0, package.brdf)):
                                 save_image(rgb_img.clamp(0, 1), tb_writer.log_dir + "/" + f"{config['name']}_view/iter_{iteration:09}_{idx}_rgb_bounce_{k}.png", padding=0)
                                 save_image(torch.clamp(normal_img / 2 + 0.5, 0.0, 1.0), tb_writer.log_dir + "/" + f"{config['name']}_view/iter_{iteration:09}_{idx}_normal_bounce_{k}.png", padding=0)
                                 save_image(torch.clamp(F0_image, 0.0, 1.0), tb_writer.log_dir + "/" + f"{config['name']}_view/iter_{iteration:09}_{idx}_F0_bounce_{k}.png", padding=0)
                                 save_image(torch.clamp(pos_image, 0.0, 1.0), tb_writer.log_dir + "/" + f"{config['name']}_view/iter_{iteration:09}_{idx}_pos_bounce_{k}.png", padding=0)
                                 save_image(torch.clamp(brdf_image, 0.0, 1.0), tb_writer.log_dir + "/" + f"{config['name']}_view/iter_{iteration:09}_{idx}_brdf_bounce_{k}.png", padding=0)
 
+                                if raytracer.cuda_module.output_incident_radiance is not None:
+                                    save_image(raytracer.cuda_module.output_incident_radiance[k].clamp(0, 1).moveaxis(-1, 0), tb_writer.log_dir + "/" + f"{config['name']}_view/iter_{iteration:09}_{idx}_incident_radiance_{k}.png", padding=0)
+                        
                         if raytracer.config.SAVE_LOD_IMAGES:
                             for k, (lod_mean, lod_scale, ray_lod) in enumerate(zip(raytracer.cuda_module.output_lod_mean, raytracer.cuda_module.output_lod_scale, raytracer.cuda_module.output_ray_lod)):
                                 save_image(lod_mean.moveaxis(-1, 0), tb_writer.log_dir + "/" + f"{config['name']}_view/iter_{iteration:09}_{idx}_lod_mean_{k}.png", padding=0)
@@ -151,6 +154,11 @@ def training_report(tb_writer, iteration):
                         if model_params.brdf_mode != "disabled":
                             save_image(torch.stack([brdf_image, brdf_gt_image.cuda()]).clamp(0, 1), tb_writer.log_dir + "/" + f"{config['name']}_view/iter_{iteration:09}_{idx}_brdf.png", nrow=2, padding=0)
 
+                        if raytracer.cuda_module.output_incident_radiance is not None:
+                            save_image(raytracer.cuda_module.output_incident_radiance[1].clamp(0, 1).moveaxis(-1, 0), tb_writer.log_dir + "/" + f"{config['name']}_view/iter_{iteration:09}_{idx}_incident_radiance.png", padding=0)
+                            save_image(raytracer.cuda_module.output_incident_radiance[1].clamp(0, 1).moveaxis(-1, 0) * package.brdf[0], tb_writer.log_dir + "/" + f"{config['name']}_view/iter_{iteration:09}_{idx}_sanity_check.png", padding=0)
+                            torch.save(raytracer.cuda_module.output_incident_radiance[1].clamp(0, 1).moveaxis(-1, 0), tb_writer.log_dir + "/" + f"{config['name']}_view/iter_{iteration:09}_{idx}_incident_radiance.pt")
+
                         if raytracer.config.USE_LEVEL_OF_DETAIL:
                             for k, alpha in enumerate(torch.linspace(0.0, 1.0, 4)):
                                 package = render(viewpoint, raytracer, pipe_params, bg, blur_sigma=alpha * scene.max_pixel_blur_sigma if not model_params.lod_force_blur_sigma >= 0.0 else torch.tensor(model_params.lod_force_blur_sigma, device="cuda"))
@@ -159,9 +167,9 @@ def training_report(tb_writer, iteration):
                                 glossy_gt_image = package.target_glossy
                                 gt_image = package.target
                             
-                                diffuse_pred = tonemap(untonemap(package.rgb[0]))
-                                glossy_pred = tonemap(untonemap(package.rgb[1:].sum(dim=0)))
-                                pred = tonemap(untonemap(package.rgb).sum(dim=0))
+                                diffuse_pred = package.rgb[0]
+                                glossy_pred = tonemap(untonemap(package.rgb[1:-1]).sum(dim=0))
+                                pred = package.rgb[-1]
 
                                 save_image(torch.stack([diffuse_pred, diffuse_gt_image, glossy_pred, glossy_gt_image, pred, gt_image]).clamp(0, 1), tb_writer.log_dir + "/" + f"{config['name']}_view/iter_{iteration:09}_{idx}_blurred_{k}÷3.png", nrow=2, padding=0)        
 
@@ -210,8 +218,8 @@ parser.add_argument('--detect_anomaly', action='store_true', default=False)
 parser.add_argument('--flip_camera', action='store_true', default=False)
 # parser.add_argument("--test_iterations", nargs="+", type=int, default=[1, 100, 500, 1_000, 2_500, 5_000, 10_000, 20_000, 30_000, 60_000, 90_000])
 # parser.add_argument("--test_iterations", nargs="+", type=int, default=[1, 1_000, 2_000, 3_000, 5_000, 10_000, 20_000, 30_000, 60_000, 90_000])
-parser.add_argument("--test_iterations", nargs="+", type=int, default=[1, 3_000, 7_000, 15_000, 30_000, 60_000, 90_000])
-parser.add_argument("--save_iterations", nargs="+", type=int, default=[1, 3_000, 7_000, 15_000, 30_000, 60_000, 90_000])
+parser.add_argument("--test_iterations", nargs="+", type=int, default=[1, 1_000, 3_000, 7_000, 15_000, 30_000, 60_000, 90_000])
+parser.add_argument("--save_iterations", nargs="+", type=int, default=[1, 1_000, 3_000, 7_000, 15_000, 30_000, 60_000, 90_000])
 parser.add_argument("--quiet", action="store_true")
 parser.add_argument("--viewer", action="store_true")
 parser.add_argument("--checkpoint_iterations", nargs="+", type=int, default=[])
@@ -267,6 +275,10 @@ first_iter += 1
 start = time.time()
 
 for iteration in tqdm(range(first_iter, opt_params.iterations + 1), desc="Training progress"):     
+    if iteration > 0 and iteration == model_params.disable_glossy_until_iter:
+        os.environ["GLOSSY_LOSS_WEIGHT"] = str(model_params.glossy_loss_weight)
+        raytracer.cuda_module.set_losses(True)
+
     if network_gui.conn == None:
         network_gui.try_connect()
     while network_gui.conn != None:
@@ -275,7 +287,7 @@ for iteration in tqdm(range(first_iter, opt_params.iterations + 1), desc="Traini
             custom_cam, do_training, pipe_params.convert_SHs_python, pipe_params.compute_cov3D_python, keep_alive, scaling_modifer = network_gui.receive()
             if custom_cam != None:
                 package = render(viewpoint_cam, raytracer, pipe_params, bg)
-                render = package.rgb.sum(dim=0)
+                render = package.rgb[-1]
                 net_image_bytes = memoryview((torch.clamp(net_image, min=0, max=1.0) * 255).byte().permute(1, 2, 0).contiguous().cpu().numpy())
             network_gui.send(net_image_bytes, model_params.source_path)
             if do_training and ((iteration < int(opt_params.iterations)) or not keep_alive):
@@ -466,5 +478,3 @@ for iteration in tqdm(range(first_iter, opt_params.iterations + 1), desc="Traini
 
 # All done
 print("\nTraining complete.")
-
-os.system(f"python render.py" + " ".join(sys.argv[1:]))

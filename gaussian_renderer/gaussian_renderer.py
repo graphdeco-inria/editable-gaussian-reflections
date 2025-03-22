@@ -36,7 +36,7 @@ def render(camera: Camera, raytracer: GaussianRaytracer, pipe_params: PipelinePa
     target_position = camera.position_image
     target_normal = camera.normal_image
     target_f0 = camera.F0_image
-    target_roughness = camera.roughness_image.mean(dim=0, keepdim=True) # todo do this averaging during image load
+    target_roughness = camera.roughness_image.mean(dim=0, keepdim=True) 
     target_brdf = camera.brdf_image
 
     if iteration is not None:

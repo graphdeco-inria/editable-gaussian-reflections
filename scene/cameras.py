@@ -43,17 +43,29 @@ class Camera(nn.Module):
         self.image_width = diffuse_image.shape[2]
         self.image_height = diffuse_image.shape[1]
 
-        image_holding_device = "cuda"
+        image_holding_device = os.getenv("IMAGE_HOLDING_DEVICE", "cuda")
 
         #*** optimized as tonemapped values, will need to be inverse the tonemapping before adding both passes
-        self._original_image = (tonemap(diffuse_image + glossy_image) * 255).byte().to(image_holding_device)
-        self._diffuse_image = (tonemap(diffuse_image).half() * 255).byte().to(image_holding_device)
-        self._glossy_image = (tonemap(glossy_image).half() * 255).byte().to(image_holding_device)
+        if "NO_TONEMAPPING" in os.environ:
+            self._original_image = (diffuse_image + glossy_image).half().to(image_holding_device)
+            self._diffuse_image = diffuse_image.half().to(image_holding_device)
+            self._glossy_image = glossy_image.half().to(image_holding_device)
+        else:
+            self._original_image = (tonemap(diffuse_image + glossy_image)).half().to(image_holding_device)
+            self._diffuse_image = (tonemap(diffuse_image)).half().to(image_holding_device)
+            self._glossy_image = (tonemap(glossy_image)).half().to(image_holding_device)
+
+        if "DONT_CLAMP_TARGETS" not in os.environ:
+            self._original_image = torch.clamp(self._original_image, 0.0, 1.0)
+            self._diffuse_image = torch.clamp(self._diffuse_image, 0.0, 1.0)
+            self._glossy_image = torch.clamp(self._glossy_image, 0.0, 1.0)
+
+
         self._normal_image = normal_image.half().to(image_holding_device)
         self._position_image = position_image.half().to(image_holding_device)
-        self._roughness_image = (roughness_image * 255).byte().to(image_holding_device)
-        self._brdf_image = brdf_image.half().to(image_holding_device)
-        self._F0_image = (((1.0 - metalness_image) * 0.08 * specular_image + metalness_image * base_color_image) * 255).byte().to(image_holding_device)
+        self._roughness_image = (roughness_image).half().to(image_holding_device)
+        self._brdf_image = brdf_image.half().to(image_holding_device) 
+        self._F0_image = (((1.0 - metalness_image) * 0.08 * specular_image + metalness_image * base_color_image)).half().to(image_holding_device)
 
         try:
             self.data_device = torch.device(data_device)
@@ -72,15 +84,15 @@ class Camera(nn.Module):
 
     @property
     def original_image(self):
-        return self._original_image.float().cuda() / 255
+        return self._original_image.float().cuda() 
 
     @property
     def diffuse_image(self):
-        return self._diffuse_image.float().cuda() / 255
+        return self._diffuse_image.float().cuda() 
 
     @property
     def glossy_image(self):
-        return self._glossy_image.float().cuda() / 255
+        return self._glossy_image.float().cuda() 
 
     @property
     def normal_image(self):
@@ -92,7 +104,7 @@ class Camera(nn.Module):
 
     @property
     def roughness_image(self):
-        return self._roughness_image.float().cuda() / 255
+        return self._roughness_image.float().cuda() 
 
     @property
     def brdf_image(self):
@@ -100,7 +112,7 @@ class Camera(nn.Module):
 
     @property
     def F0_image(self):
-        return self._F0_image.float().cuda() / 255
+        return self._F0_image.float().cuda() 
 
     def update(self):
         self.world_view_transform = torch.tensor(getWorld2View2(self.R, self.T, self.trans, self.scale)).transpose(0, 1).cuda()

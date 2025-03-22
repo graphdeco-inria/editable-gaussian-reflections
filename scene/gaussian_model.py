@@ -242,7 +242,7 @@ class GaussianModel:
         self._normal = nn.Parameter(fused_normal.clone())
         self._roughness = nn.Parameter(torch.zeros((fused_point_cloud.shape[0], 1), device="cuda"))
         self._f0 = nn.Parameter(torch.zeros((fused_point_cloud.shape[0], 3), device="cuda"))
-        self._diffuse = nn.Parameter(untonemap(fused_color.clone()))
+        self._diffuse = nn.Parameter(torch.log(torch.exp(untonemap(fused_color.clone())) - 1))
         self._scaling = nn.Parameter(scales.requires_grad_(True))
         self._rotation = nn.Parameter(rots.requires_grad_(True))
         self._opacity = nn.Parameter(opacities.requires_grad_(True))
@@ -747,10 +747,11 @@ class GaussianModel:
             self.xyz_gradient_accum[update_filter] += (score[:, 1:2] )[update_filter] 
         elif "NO_DENS_SCORE" in os.environ:
             pass
+        elif "DENS_BOTH_EQUAL" in os.environ:
+            self.xyz_gradient_accum[update_filter] += (score[:, 0:1] + score[:, 1:2])[update_filter]
         else:
             self.xyz_gradient_accum[update_filter] += (score[:, 0:1] )[update_filter] 
         self.denom[update_filter] += 1
-
 
 def get_count_array(start_count, opt):
     # Eq. (2) of taming-3dgs

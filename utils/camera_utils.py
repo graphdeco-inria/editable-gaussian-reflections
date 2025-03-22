@@ -38,6 +38,7 @@ def loadCam(args, id, cam_info, resolution_scale):
         gt_image = downsize(cam_info.image.moveaxis(-1, 0))
         loaded_mask = None
     else:
+        resolution = (resolution, int(resolution*1.5))
         resized_image_rgb = PILtoTorch(cam_info.image, resolution)
         gt_image = resized_image_rgb[:3, ...]
         loaded_mask = None

@@ -160,13 +160,14 @@ def render_set(scene, model_params, model_path, split, iteration, views, gaussia
                 roughness_gt_image = view.roughness_image
                 F0_gt_image = view.F0_image
 
-                pred_image = torch.clamp(tonemap(untonemap(package.rgb).sum(dim=0)), 0.0, 1.0)
+                pred_image = torch.clamp(package.rgb[-1], 0.0, 1.0)
+                glossy_image = tonemap(untonemap(package.rgb[1:-1]).sum(dim=0))
                 
                 if not args.skip_save_frames and mode == "regular":
-                    torchvision.utils.save_image(package.rgb[1:].sum(dim=0, keepdim=True), os.path.join(glossy_render_path, '{0:05d}'.format(idx) + "_glossy.png"))
+                    torchvision.utils.save_image(glossy_image, os.path.join(glossy_render_path, '{0:05d}'.format(idx) + "_glossy.png"))
                     torchvision.utils.save_image(glossy_gt_image, os.path.join(glossy_gts_path, '{0:05d}'.format(idx) + "_glossy.png"))
                     
-                    torchvision.utils.save_image(package.rgb[0:1], os.path.join(diffuse_render_path, '{0:05d}'.format(idx) + "_diffuse.png"))
+                    torchvision.utils.save_image(package.rgb[0], os.path.join(diffuse_render_path, '{0:05d}'.format(idx) + "_diffuse.png"))
                     torchvision.utils.save_image(diffuse_gt_image, os.path.join(diffuse_gts_path, '{0:05d}'.format(idx) + "_diffuse.png"))
 
                     torchvision.utils.save_image(package.position[0], os.path.join(position_path, '{0:05d}'.format(idx) + "_position.png"))
@@ -195,7 +196,7 @@ def render_set(scene, model_params, model_path, split, iteration, views, gaussia
                 all_diffuse_renders.append(format_image(package.rgb[0]))
                 all_diffuse_gts.append(format_image(package.target_diffuse))
 
-                all_glossy_renders.append(format_image(package.rgb[1:].sum(dim=0)))
+                all_glossy_renders.append(format_image(glossy_image))
                 all_glossy_gts.append(format_image(package.target_glossy))
 
                 all_position_renders.append(format_image(package.position[0]))

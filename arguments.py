@@ -98,7 +98,7 @@ class ModelParams(ParamGroup):
         self.downsampling_mode = "area"
 
         self.linear_space = True
-        self.exposure = 5 if "NO_TONEMAPPING" in os.environ else 1.0
+        self.exposure = 3.5 if "NO_TONEMAPPING" in os.environ else 1.0
         self.raytrace_primal = False
 
         self.opacity_pruning_threshold = 0.005 # 0.051 # 
@@ -106,11 +106,11 @@ class ModelParams(ParamGroup):
 
         self.use_opacity_resets = False
 
-        self.init_scale_factor = 1.0 # 1.0 for 3dgs, 0.1 for mcmc 
+        self.init_scale_factor = 0.2 # 1.0 for 3dgs, 0.1 for mcmc 
         self.init_opacity = 0.1 # 0.1 for 3dgs, 0.5 for mcmc
 
         self.diffuse_loss_weight = 1.0
-        self.glossy_loss_weight = 0.001
+        self.glossy_loss_weight = 0.0001 # ! was 0.001
         self.normal_loss_weight = 1.0
         self.position_loss_weight = 1.0
         self.f0_loss_weight = 1.0
@@ -131,6 +131,9 @@ class ModelParams(ParamGroup):
 
         self.use_diffuse_target = False
         self.use_glossy_target = False
+
+        self.sparseness = -1
+        self.disable_glossy_until_iter = 5000
 
         super().__init__(parser, "Loading Parameters", sentinel)
 
@@ -194,7 +197,7 @@ class OptimizationParams(ParamGroup):
         self.densify_grad_threshold = 0.0002
 
         self.densif_use_top_k = True
-        self.densif_final_num_gaussians = 500_000
+        self.densif_final_num_gaussians = 1_000_000
         self.densif_size_ranking_weight = 0.0
         self.densif_opacity_ranking_weight = 0.0
         self.densif_lod_ranking_weight = 0.0

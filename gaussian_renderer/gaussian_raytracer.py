@@ -44,6 +44,9 @@ class GaussianRaytracer:
         os.environ["ALBEDO_LOSS_WEIGHT"] = str(pc.model_params.albedo_loss_weight)
         os.environ["METALNESS_LOSS_WEIGHT"] = str(pc.model_params.metalness_loss_weight)
 
+        if pc.model_params.disable_glossy_until_iter > 0:
+            os.environ["GLOSSY_LOSS_WEIGHT"] = "0.0"
+
         self.cuda_module.set_losses(True)
 
         self.pc = pc
