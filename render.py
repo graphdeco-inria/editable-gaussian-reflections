@@ -26,7 +26,8 @@ import shutil
 import math 
 import numpy as np 
 import torch.nn.functional as F
-from scene.tonemapping import * 
+from scene.tonemapping import *
+from utils.image_utils import psnr 
 
 @torch.no_grad()
 def render_set(scene, model_params, model_path, split, iteration, views, gaussians, pipeline, background, raytracer):
@@ -83,7 +84,17 @@ def render_set(scene, model_params, model_path, split, iteration, views, gaussia
             all_F0_renders = []
             all_F0_gts = []
             
-            # todo expected termination depth
+            #
+
+            l1_test = 0.0
+            psnr_test = 0.0
+            
+            glossy_l1_test = 0.0
+            glossy_psnr_test = 0.0
+            
+            diffuse_l1_test = 0.0
+            diffuse_psnr_test = 0.0
+            
             for idx, view in enumerate(tqdm(views, desc="Rendering progress")):
                 if mode == "lod":
                     view = views[0]
@@ -152,16 +163,26 @@ def render_set(scene, model_params, model_path, split, iteration, views, gaussia
                     blur_sigma = blur_sigma
                 package = render(view, raytracer, pipeline, background, blur_sigma=blur_sigma)
                 
-                diffuse_gt_image = torch.clamp(view.diffuse_image, 0.0, 1.0)
-                glossy_gt_image = torch.clamp(view.glossy_image, 0.0, 1.0)
-                gt_image = torch.clamp(view.original_image, 0.0, 1.0)
+                diffuse_gt_image = tonemap(view.diffuse_image).clamp(0.0, 1.0)
+                glossy_gt_image = tonemap(view.glossy_image).clamp(0.0, 1.0)
+                gt_image = tonemap(view.original_image).clamp(0.0, 1.0)
                 position_gt_image = view.position_image
                 normal_gt_image = view.normal_image
                 roughness_gt_image = view.roughness_image
                 F0_gt_image = view.F0_image
 
-                pred_image = torch.clamp(package.rgb[-1], 0.0, 1.0)
-                glossy_image = tonemap(untonemap(package.rgb[1:-1]).sum(dim=0))
+                diffuse_image = tonemap(package.rgb[0]).clamp(0, 1)
+                glossy_image = tonemap(package.rgb[1:-1]).sum(dim=0).clamp(0, 1)
+                pred_image = tonemap(package.rgb[-1]).clamp(0, 1)
+
+                psnr_test += psnr(pred_image, gt_image).mean() / len(views)
+                l1_test += F.l1_loss(pred_image, gt_image) / len(views)
+
+                glossy_psnr_test += psnr(glossy_image, glossy_gt_image).mean() / len(views)
+                glossy_l1_test += F.l1_loss(glossy_image, glossy_gt_image) / len(views)
+
+                diffuse_psnr_test += psnr(diffuse_image, diffuse_gt_image).mean() / len(views)
+                diffuse_l1_test += F.l1_loss(diffuse_image, diffuse_gt_image) / len(views)
                 
                 if not args.skip_save_frames and mode == "regular":
                     torchvision.utils.save_image(glossy_image, os.path.join(glossy_render_path, '{0:05d}'.format(idx) + "_glossy.png"))
@@ -188,7 +209,6 @@ def render_set(scene, model_params, model_path, split, iteration, views, gaussia
                 def format_image(image):
                     image = F.interpolate(image[None], (image.shape[-2] // 2 * 2, image.shape[-1] // 2 * 2), mode="bilinear")[0]
                     return (image.clamp(0, 1) * 255).to(torch.uint8).moveaxis(0, -1).cpu()
-
 
                 all_renders.append(format_image(pred_image))
                 all_gts.append(format_image(package.target))
@@ -260,6 +280,8 @@ def render_set(scene, model_params, model_path, split, iteration, views, gaussia
                         path.format(name=f"comparison_hq_{mode}{blur_suffix}", dir="")
                     )
 
+        print(f"PSNR: {psnr_test}")
+
 @torch.no_grad()
 def render_sets(model_params: ModelParams, iteration: int, pipeline: PipelineParams):
     gaussians = GaussianModel(model_params)
@@ -279,6 +301,7 @@ def render_sets(model_params: ModelParams, iteration: int, pipeline: PipelinePar
             gaussians._scaling.copy_(torch.log(gaussians.get_scaling.clamp(1e-3)))
 
     raytracer = GaussianRaytracer(gaussians, scene.getTrainCameras()[0])
+    raytracer.cuda_module.num_samples.fill_(model_params.num_samples)
 
     if args.train_views:
         render_set(scene, model_params, model_params.model_path, "train", scene.loaded_iter, scene.getTrainCameras(), gaussians, pipeline, background, raytracer)

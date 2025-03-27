@@ -69,14 +69,14 @@ class Scene:
             with open(os.path.join(self.model_path, "cameras.json"), 'w') as file:
                 json.dump(json_cams, file)
 
-        if shuffle:
-            random.shuffle(scene_info.train_cameras)  # Multi-res consistent random shuffling
-
-        if hasattr(model_params, "sparseness") and model_params.sparseness != -1:
+        if model_params.sparseness != -1:
             cameras = sorted(scene_info.train_cameras, key=lambda x: x.image_path)
             cameras = cameras[:50] + cameras[-50:]
             # take every kth cameras where k = args.sparseness
-            scene_info = scene_info._replace(train_cameras = cameras[::args.sparseness])
+            scene_info.train_cameras = cameras[::model_params.sparseness]
+
+        if shuffle:
+            random.shuffle(scene_info.train_cameras)  # Multi-res consistent random shuffling
         
         self.cameras_extent = scene_info.nerf_normalization["radius"]
 

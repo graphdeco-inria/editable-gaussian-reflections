@@ -130,6 +130,9 @@ class GaussianModel:
         self.denom = denom
         self.optimizer.load_state_dict(opt_dict)
 
+        self.init_empty_grads()
+
+    def init_empty_grads(self):
         self._xyz.grad = torch.zeros_like(self._xyz)
         self._normal.grad = torch.zeros_like(self._normal)
         self._position.grad = torch.zeros_like(self._position)
@@ -610,7 +613,12 @@ class GaussianModel:
         new_f0 = self._f0[selected_pts_mask].repeat(N,1)
         new_diffuse = self._diffuse[selected_pts_mask].repeat(N,1)
         new_opacity = self._opacity[selected_pts_mask].repeat(N,1)
-        new_scaling = self.scaling_inverse_activation(self.get_scaling[selected_pts_mask].repeat(N,1) / (0.8*N))
+        if "ON_SPLIT_DONT_SCALE" not in os.environ:
+            new_scaling = self.get_scaling[selected_pts_mask].repeat(N,1)
+        elif "ON_SPLIT_SCALE_HARD" in os.environ:
+            new_scaling = self.scaling_inverse_activation(self.get_scaling[selected_pts_mask].repeat(N,1) / 2)
+        else:
+            new_scaling = self.scaling_inverse_activation(self.get_scaling[selected_pts_mask].repeat(N,1) / (0.8*N))
         new_rotation = self._rotation[selected_pts_mask].repeat(N,1)
         new_lod_mean = self._lod_mean[selected_pts_mask].repeat(N,1) 
         if "ON_SPLIT_SKIP_DONT_TOUCH_LOD" not in os.environ:
@@ -672,6 +680,32 @@ class GaussianModel:
         self.prune_points(prune_mask)
     
     def densify_and_prune_top_k(self, scene, opt, min_opacity, extent):
+        if "CHECK_NAN" in os.environ:
+            if torch.isnan(self._xyz).any():
+                print("NaN in xyz")
+            if torch.isnan(self._scaling).any():
+                print("NaN in scaling")
+            if torch.isnan(self._rotation).any():
+                print("NaN in rotation")
+            if torch.isnan(self._opacity).any():
+                print("NaN in opacity")
+            if torch.isnan(self._lod_mean).any():
+                print("NaN in lod_mean")
+            if torch.isnan(self._lod_scale).any():
+                print("NaN in lod_scale")
+            if torch.isnan(self._diffuse).any():
+                print("NaN in diffuse")
+            if torch.isnan(self._roughness).any():
+                print("NaN in roughness")
+            if torch.isnan(self._f0).any():
+                print("NaN in f0")
+            if torch.isnan(self._position).any():
+                print("NaN in position")
+            if torch.isnan(self._normal).any():
+                print("NaN in normal")
+            if torch.isnan(self.xyz_gradient_accum).any():
+                print("NaN in xyz_gradient_accum")
+
         self.num_densification_steps += 1
         num_gaussians_before_pruning = self.get_xyz.shape[0]
         self.prune(scene, opt, min_opacity, extent)
@@ -703,7 +737,6 @@ class GaussianModel:
 
             if "DONT_DENSIFY_HIGH_LOD" in os.environ:
                 score[self.get_lod_mean.squeeze() > float(os.environ["DONT_DENSIFY_HIGH_LOD"])] = 0.0
-
                 # log(quantile(grad_score)) + w * log(quantile(-lod_score))
             
             target = self.schedule[self.num_densification_steps]
@@ -745,12 +778,14 @@ class GaussianModel:
             frame = inspect.currentframe().f_back
             iteration = frame.f_locals["iteration"]
             self.xyz_gradient_accum[update_filter] += (score[:, 1:2] )[update_filter] 
-        elif "NO_DENS_SCORE" in os.environ:
-            pass
-        elif "DENS_BOTH_EQUAL" in os.environ:
-            self.xyz_gradient_accum[update_filter] += (score[:, 0:1] + score[:, 1:2])[update_filter]
-        else:
+        elif "DIFFUSE_DENS_ONLY" in os.environ:
             self.xyz_gradient_accum[update_filter] += (score[:, 0:1] )[update_filter] 
+        elif "DENS_GLOSS" in os.environ:
+            self.xyz_gradient_accum[update_filter] += (score[:, 0:1] + float(os.environ["DENS_GLOSS"]) * score[:, 1:2])[update_filter]
+        elif "DBG_FALLBACK_DENS" in os.environ:
+            self.xyz_gradient_accum[update_filter] += self._xyz.grad[update_filter].norm(dim=-1, keepdim=True)
+        else:
+            self.xyz_gradient_accum[update_filter] += (score[:, 0:1] + score[:, 1:2])[update_filter]
         self.denom[update_filter] += 1
 
 def get_count_array(start_count, opt):

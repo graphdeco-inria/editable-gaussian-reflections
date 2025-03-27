@@ -86,17 +86,32 @@ def training_report(tb_writer, iteration):
 
                     os.makedirs(tb_writer.log_dir + "/" + f"{config['name']}_view", exist_ok=True)
 
-                    diffuse_image = torch.clamp(package.rgb[0], 0.0, 1.0)
-                    glossy_image = torch.clamp(tonemap(untonemap(package.rgb[1:-1]).sum(dim=0)), 0.0, 1.0)
-                    pred_image = package.rgb[-1]
-                    diffuse_gt_image = torch.clamp(viewpoint.diffuse_image, 0.0, 1.0)
-                    glossy_gt_image = torch.clamp(viewpoint.glossy_image, 0.0, 1.0)
-                    normal_gt_image = torch.clamp(viewpoint.normal_image / 2 + 0.5, 0.0, 1.0)
+                    if raytracer.config.TONEMAP:
+                        diffuse_image = package.rgb[0].clamp(0, 1)
+                        glossy_image = tonemap(untonemap(package.rgb[1:-1]).sum(dim=0)).clamp(0, 1)
+                        pred_image = package.rgb[-1].clamp(0, 1)
+                        diffuse_gt_image = torch.clamp(viewpoint.diffuse_image, 0.0, 1.0)
+                        glossy_gt_image = torch.clamp(viewpoint.glossy_image, 0.0, 1.0)
+                        gt_image = torch.clamp(viewpoint.original_image, 0.0, 1.0)
+                    else:
+                        diffuse_image = tonemap(package.rgb[0]).clamp(0, 1)
+                        glossy_image = tonemap(package.rgb[1:-1].sum(dim=0)).clamp(0, 1)
+                        pred_image = tonemap(package.rgb[-1]).clamp(0, 1)
+                        diffuse_gt_image = tonemap(viewpoint.diffuse_image).clamp(0, 1)
+                        glossy_gt_image = tonemap(viewpoint.glossy_image).clamp(0, 1)
+                        gt_image = tonemap(viewpoint.original_image).clamp(0, 1)
 
-                    gt_image = torch.clamp(viewpoint.original_image, 0.0, 1.0)
                     if tb_writer and (idx < 5): 
-                        save_image(torch.stack([diffuse_image, diffuse_gt_image, glossy_image, glossy_gt_image, pred_image, gt_image]).clamp(0, 1), tb_writer.log_dir + "/" + f"{config['name']}_view/iter_{iteration:09}_{idx}.png", nrow=2)
+                        error_diffuse = diffuse_image - diffuse_gt_image
+                        error_glossy = glossy_image - glossy_gt_image
+                        error_final = pred_image - gt_image
+                        save_image(torch.stack([
+                            diffuse_image, diffuse_gt_image, error_diffuse.abs() / error_diffuse.std() / 3,
+                            glossy_image, glossy_gt_image, error_glossy.abs() / error_glossy.std() / 3,
+                            pred_image, gt_image, error_final.abs() / error_final.std() / 3,
+                        ]).clamp(0, 1), tb_writer.log_dir + "/" + f"{config['name']}_view/iter_{iteration:09}_{idx}.png", nrow=3)
                     
+                    normal_gt_image = torch.clamp(viewpoint.normal_image / 2 + 0.5, 0.0, 1.0)
                     roughness_image = torch.clamp(package.roughness[0], 0.0, 1.0)
                     normal_image = torch.clamp(package.normal[0] / 2 + 0.5, 0.0, 1.0) 
                     position_image = torch.clamp(package.position[0], 0.0, 1.0)
@@ -120,12 +135,14 @@ def training_report(tb_writer, iteration):
 
                     if tb_writer and (idx < 5): 
                         if package.rgb.shape[0] > 2:
-                            for k, (rgb_img, normal_img, pos_image, F0_image, brdf_image) in enumerate(zip(package.rgb, package.normal, package.position, package.F0, package.brdf)):
-                                save_image(rgb_img.clamp(0, 1), tb_writer.log_dir + "/" + f"{config['name']}_view/iter_{iteration:09}_{idx}_rgb_bounce_{k}.png", padding=0)
-                                save_image(torch.clamp(normal_img / 2 + 0.5, 0.0, 1.0), tb_writer.log_dir + "/" + f"{config['name']}_view/iter_{iteration:09}_{idx}_normal_bounce_{k}.png", padding=0)
-                                save_image(torch.clamp(F0_image, 0.0, 1.0), tb_writer.log_dir + "/" + f"{config['name']}_view/iter_{iteration:09}_{idx}_F0_bounce_{k}.png", padding=0)
-                                save_image(torch.clamp(pos_image, 0.0, 1.0), tb_writer.log_dir + "/" + f"{config['name']}_view/iter_{iteration:09}_{idx}_pos_bounce_{k}.png", padding=0)
-                                save_image(torch.clamp(brdf_image, 0.0, 1.0), tb_writer.log_dir + "/" + f"{config['name']}_view/iter_{iteration:09}_{idx}_brdf_bounce_{k}.png", padding=0)
+                            for k, (_rgb_img, _normal_img, _pos_image, _F0_image, _brdf_image) in enumerate(zip(package.rgb, package.normal, package.position, package.F0, package.brdf)):
+                                if not raytracer.config.TONEMAP:
+                                    _rgb_img = tonemap(_rgb_img)
+                                save_image(_rgb_img.clamp(0, 1), tb_writer.log_dir + "/" + f"{config['name']}_view/iter_{iteration:09}_{idx}_rgb_bounce_{k}.png", padding=0)
+                                save_image(torch.clamp(_normal_img / 2 + 0.5, 0.0, 1.0), tb_writer.log_dir + "/" + f"{config['name']}_view/iter_{iteration:09}_{idx}_normal_bounce_{k}.png", padding=0)
+                                save_image(torch.clamp(_F0_image, 0.0, 1.0), tb_writer.log_dir + "/" + f"{config['name']}_view/iter_{iteration:09}_{idx}_F0_bounce_{k}.png", padding=0)
+                                save_image(torch.clamp(_pos_image, 0.0, 1.0), tb_writer.log_dir + "/" + f"{config['name']}_view/iter_{iteration:09}_{idx}_pos_bounce_{k}.png", padding=0)
+                                save_image(torch.clamp(_brdf_image, 0.0, 1.0), tb_writer.log_dir + "/" + f"{config['name']}_view/iter_{iteration:09}_{idx}_brdf_bounce_{k}.png", padding=0)
 
                                 if raytracer.cuda_module.output_incident_radiance is not None:
                                     save_image(raytracer.cuda_module.output_incident_radiance[k].clamp(0, 1).moveaxis(-1, 0), tb_writer.log_dir + "/" + f"{config['name']}_view/iter_{iteration:09}_{idx}_incident_radiance_{k}.png", padding=0)
@@ -167,10 +184,15 @@ def training_report(tb_writer, iteration):
                                 glossy_gt_image = package.target_glossy
                                 gt_image = package.target
                             
-                                diffuse_pred = package.rgb[0]
-                                glossy_pred = tonemap(untonemap(package.rgb[1:-1]).sum(dim=0))
-                                pred = package.rgb[-1]
-
+                                if raytracer.config.TONEMAP:
+                                    diffuse_image = tonemap(package.rgb[0]).clamp(0, 1)
+                                    glossy_image = tonemap(package.rgb[1:-1].sum(dim=0)).clamp(0, 1)
+                                    pred_image = tonemap(package.rgb[-1]).clamp(0, 1)
+                                else:
+                                    diffuse_image = package.rgb[0].clamp(0, 1)
+                                    glossy_image = package.rgb[1:-1].sum(dim=0).clamp(0, 1)
+                                    pred_image = package.rgb[-1].clamp(0, 1)
+                                    
                                 save_image(torch.stack([diffuse_pred, diffuse_gt_image, glossy_pred, glossy_gt_image, pred, gt_image]).clamp(0, 1), tb_writer.log_dir + "/" + f"{config['name']}_view/iter_{iteration:09}_{idx}_blurred_{k}÷3.png", nrow=2, padding=0)        
 
                 if model_params.brdf_mode == "static_lut":
@@ -216,10 +238,10 @@ parser.add_argument('--ip', type=str, default="127.0.0.1")
 parser.add_argument('--port', type=int, default=6009)
 parser.add_argument('--detect_anomaly', action='store_true', default=False)
 parser.add_argument('--flip_camera', action='store_true', default=False)
-# parser.add_argument("--test_iterations", nargs="+", type=int, default=[1, 100, 500, 1_000, 2_500, 5_000, 10_000, 20_000, 30_000, 60_000, 90_000])
-# parser.add_argument("--test_iterations", nargs="+", type=int, default=[1, 1_000, 2_000, 3_000, 5_000, 10_000, 20_000, 30_000, 60_000, 90_000])
-parser.add_argument("--test_iterations", nargs="+", type=int, default=[1, 1_000, 3_000, 7_000, 15_000, 30_000, 60_000, 90_000])
-parser.add_argument("--save_iterations", nargs="+", type=int, default=[1, 1_000, 3_000, 7_000, 15_000, 30_000, 60_000, 90_000])
+# parser.add_argument("--test_iterations", nargs="+", type=int, default=[100, 500, 1_000, 2_500, 5_000, 10_000, 20_000, 30_000, 60_000, 90_000])
+# parser.add_argument("--test_iterations", nargs="+", type=int, default=[1_000, 2_000, 3_000, 5_000, 10_000, 20_000, 30_000, 60_000, 90_000])
+parser.add_argument("--test_iterations", nargs="+", type=int, default=[1_000, 3_000, 7_000, 15_000, 22_500, 30_000, 60_000, 90_000])
+parser.add_argument("--save_iterations", nargs="+", type=int, default=[1_000, 3_000, 7_000, 15_000, 22_500, 30_000, 60_000, 90_000])
 parser.add_argument("--quiet", action="store_true")
 parser.add_argument("--viewer", action="store_true")
 parser.add_argument("--checkpoint_iterations", nargs="+", type=int, default=[])
@@ -268,17 +290,19 @@ iter_end = torch.cuda.Event(enable_timing=True)
 
 viewpoint_stack = scene.getTrainCameras().copy()
 raytracer = GaussianRaytracer(gaussians, viewpoint_stack[0])
+raytracer.cuda_module.num_samples.fill_(model_params.num_samples)
 
 ema_loss_for_log = 0.0
 first_iter += 1
 
 start = time.time()
 
-for iteration in tqdm(range(first_iter, opt_params.iterations + 1), desc="Training progress"):     
-    if iteration > 0 and iteration == model_params.disable_glossy_until_iter:
-        os.environ["GLOSSY_LOSS_WEIGHT"] = str(model_params.glossy_loss_weight)
-        raytracer.cuda_module.set_losses(True)
+if model_params.no_bounces_until_iter > 0:
+    raytracer.cuda_module.num_bounces.copy_(0)
+elif model_params.max_one_bounce_until_iter > 0:
+    raytracer.cuda_module.num_bounces.copy_(min(raytracer.config.MAX_BOUNCES, 1))
 
+for iteration in tqdm(range(first_iter, opt_params.iterations + 1), desc="Training progress"):     
     if network_gui.conn == None:
         network_gui.try_connect()
     while network_gui.conn != None:
@@ -437,7 +461,7 @@ for iteration in tqdm(range(first_iter, opt_params.iterations + 1), desc="Traini
             raytracer.rebuild_bvh()
 
         gaussians.optimizer.step()
-        gaussians.optimizer.zero_grad(set_to_none=False) # todo not sure if this set_to_none=False is still required
+        gaussians.optimizer.zero_grad(set_to_none=False)
         raytracer.zero_grad()
 
         if raytracer.config.USE_LEVEL_OF_DETAIL:
@@ -446,7 +470,6 @@ for iteration in tqdm(range(first_iter, opt_params.iterations + 1), desc="Traini
             
             if model_params.lod_clamp_minsize:
                 with torch.no_grad(): 
-                    # gaussians._scaling.data.clamp_(min=torch.log(torch.tensor(1e-8, device="cuda")))
                     gaussians._scaling.data.clamp_(min=torch.log(gaussians._lod_mean.clamp(min=float(os.getenv("LOD_CLAMP_EPS", 0.0))))) #!!!!!!!!!!!!!!! was 1e-8
                 if torch.isnan(gaussians._lod_mean).any() or torch.isnan(gaussians._scaling).any():
                     print("NANs in lod_mean or _scaling")
@@ -466,7 +489,8 @@ for iteration in tqdm(range(first_iter, opt_params.iterations + 1), desc="Traini
             def op_sigmoid(x, k=100, x0=0.995):
                 return 1 / (1 + torch.exp(-k * (x - x0)))
             
-            noise = torch.randn_like(gaussians._xyz) * (op_sigmoid(1- gaussians.get_opacity)) * opt_params.noise_lr * xyz_lr
+            print(opt_params.noise_lr * xyz_lr)
+            noise = torch.randn_like(gaussians._xyz) * (op_sigmoid(1- gaussians.get_opacity)) *  xyz_lr
             noise = torch.bmm(actual_covariance, noise.unsqueeze(-1)).squeeze(-1)
             gaussians._xyz.add_(noise)
 
@@ -475,6 +499,20 @@ for iteration in tqdm(range(first_iter, opt_params.iterations + 1), desc="Traini
                 print("\n[ITER {}] Saving Checkpoint".format(iteration))
                 torch.save((gaussians.capture(), iteration), scene.model_path + "/chkpnt" + str(iteration) + ".pth")
 
+    if iteration == model_params.no_bounces_until_iter:
+        raytracer.cuda_module.num_bounces.copy_(min(raytracer.config.MAX_BOUNCES, 1))
+
+    if iteration == model_params.max_one_bounce_until_iter:
+        raytracer.cuda_module.num_bounces.copy_(raytracer.config.MAX_BOUNCES)
+
+    if iteration == model_params.rebalance_losses_at_iter:
+        os.environ["GLOSSY_LOSS_WEIGHT"] = str(model_params.glossy_loss_weight_after_rebalance)
+        os.environ["DIFFUSE_LOSS_WEIGHT"] = str(model_params.diffuse_loss_weight_after_rebalance)
+        raytracer.cuda_module.set_losses(True)
+
+    if iteration == model_params.enable_regular_loss_at_iter:
+        os.environ["REGULAR_LOSS_WEIGHT"] = "1.0"
+        raytracer.cuda_module.set_losses(True)
 
 # All done
 print("\nTraining complete.")

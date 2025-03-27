@@ -83,7 +83,7 @@ class ModelParams(ParamGroup):
 
         self.keep_every_kth_view = 1
         self.max_images = 9999999
-        self.num_farfield_init_points = 10_000 # 100_000
+        self.num_farfield_init_points = 50_000 # 100_000
 
         self.min_opacity = 0.005
 
@@ -98,7 +98,7 @@ class ModelParams(ParamGroup):
         self.downsampling_mode = "area"
 
         self.linear_space = True
-        self.exposure = 3.5 if "NO_TONEMAPPING" in os.environ else 1.0
+        self.exposure = 1.0
         self.raytrace_primal = False
 
         self.opacity_pruning_threshold = 0.005 # 0.051 # 
@@ -106,7 +106,7 @@ class ModelParams(ParamGroup):
 
         self.use_opacity_resets = False
 
-        self.init_scale_factor = 0.2 # 1.0 for 3dgs, 0.1 for mcmc 
+        self.init_scale_factor = 0.1 # 1.0 for 3dgs, 0.1 for mcmc 
         self.init_opacity = 0.1 # 0.1 for 3dgs, 0.5 for mcmc
 
         self.diffuse_loss_weight = 1.0
@@ -133,7 +133,15 @@ class ModelParams(ParamGroup):
         self.use_glossy_target = False
 
         self.sparseness = -1
-        self.disable_glossy_until_iter = 5000
+        self.no_bounces_until_iter = 3_000
+        self.max_one_bounce_until_iter = 7_000
+        self.diffuse_loss_weight_after_rebalance = 1.0
+        self.glossy_loss_weight_after_rebalance = 1.0
+        self.rebalance_losses_at_iter = 15000
+        self.enable_regular_loss_at_iter = -1
+
+        self.num_samples = 1
+        
 
         super().__init__(parser, "Loading Parameters", sentinel)
 
@@ -192,7 +200,7 @@ class OptimizationParams(ParamGroup):
 
         self.densification_interval = 100 # # was 100 in 3dgs, 500 to fix LOD densification
         self.opacity_reset_interval = 3000
-        self.densify_from_iter = 1500 # was 500 in 3dgs
+        self.densify_from_iter = 500 # was 500 in 3dgs, 1500 when doing LOD
         self.densify_until_iter = 15_000 # was 25k in mcmc
         self.densify_grad_threshold = 0.0002
 
@@ -204,17 +212,17 @@ class OptimizationParams(ParamGroup):
         self.densif_no_pruning_large_radii = False
         self.densif_use_fixed_split_clone_ratio = True
         self.densif_split_clone_ratio = 0.2
-        self.densif_use_3d_gradients = False
 
         self.densif_no_pruning = False
         self.densif_no_cloning = False
-        self.densif_no_splitting = False
+        self.densif_no_splitting = False 
         self.densif_pruning_only = False
 
         self.densif_skip_big_points_ws = False
 
         self.sh_slowdown_factor = 20.0
         self.random_background = False
+
 
         super().__init__(parser, "Optimization Parameters")
 

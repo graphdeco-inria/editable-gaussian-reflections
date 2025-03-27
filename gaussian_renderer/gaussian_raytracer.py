@@ -44,9 +44,6 @@ class GaussianRaytracer:
         os.environ["ALBEDO_LOSS_WEIGHT"] = str(pc.model_params.albedo_loss_weight)
         os.environ["METALNESS_LOSS_WEIGHT"] = str(pc.model_params.metalness_loss_weight)
 
-        if pc.model_params.disable_glossy_until_iter > 0:
-            os.environ["GLOSSY_LOSS_WEIGHT"] = "0.0"
-
         self.cuda_module.set_losses(True)
 
         self.pc = pc
@@ -137,8 +134,7 @@ class GaussianRaytracer:
             self.cuda_module.gaussian_specular.grad.zero_()
         if self.cuda_module.gaussian_metalness is not None:
             self.cuda_module.gaussian_metalness.grad.zero_()
-        if hasattr(self.cuda_module, "densification_gradient_score"):
-            self.cuda_module.densification_gradient_score.zero_()
+        self.cuda_module.densification_gradient_score.zero_()
 
     def __call__(self, viewpoint_camera,  pipe_params: PipelineParams, bg_color: torch.Tensor, blur_sigma, target = None, target_diffuse = None, target_glossy = None, target_position=None, target_normal=None, target_roughness=None, target_f0=None, target_brdf=None):
         """
@@ -212,27 +208,9 @@ class GaussianRaytracer:
                 else:
                     self.cuda_module.target_brdf.zero_()
 
-        if "CHECK_NAN" in os.environ:
-            if self.camera_c2w_rot_buffer.isnan().any() or self.camera_position_buffer.isnan().any() or self.vertical_fov_radians_buffer.isnan().any() or self.gaussian_scales_buffer.isnan().any() or self.gaussian_rotations_buffer.isnan().any() or self.gaussian_xyz_buffer.isnan().any() or self.gaussian_opacity_buffer.isnan().any() or self.gaussian_rgb_buffer.isnan().any():
-                raise Exception("NaNs in input buffers!")
-            if self.output_rgbt_buffer.isnan().any():
-                raise Exception("NaNs in output buffers!")
-
         if torch.is_grad_enabled():
             self.cuda_module.update_bvh()
         self.cuda_module.raytrace()
-
-        if "CHECK_NAN" in os.environ:
-            if self.gaussian_scales_buffer_grad.isnan().any():
-                raise Exception("NaNs in scale gradients!")
-            if self.gaussian_rotations_buffer_grad.isnan().any():
-                raise Exception("NaNs in rotation gradients!")
-            if self.gaussian_xyz_buffer_grad.isnan().any():
-                raise Exception("NaNs in xyz gradients!")
-            if self.gaussian_opacity_buffer_grad.isnan().any():
-                raise Exception("NaNs in opacity gradients!")
-            if self.gaussian_rgb_buffer_grad.isnan().any():
-                raise Exception("NaNs in color gradients!")
 
         if torch.is_grad_enabled():
             self._import_param_gradients()
