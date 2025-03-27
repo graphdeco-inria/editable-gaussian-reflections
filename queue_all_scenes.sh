@@ -34,8 +34,12 @@
 #     done
 # done
 
-for scene in shiny_bedroom shiny_kitchen shiny_livingroom shiny_office; do 
-    for m in 1 2 4 8 16; do
-        q a40 -n halfres_${m}m_${scene} <<< "bash run.sh --raytracer_version /home/ypoirier/optix/gausstracer/build/v30 -s colmap/$scene -m output_num_gaussians_halfres/${m}m_$scene -r 768 --densif_final_num_gaussians ${m}000000"
-    done
+# for scene in shiny_bedroom shiny_kitchen shiny_livingroom shiny_office; do 
+#     for m in 1 2 4 8 16; do
+#         q a40 -n halfres_${m}m_${scene} <<< "bash run.sh --raytracer_version /home/ypoirier/optix/gausstracer/build/v30 -s colmap/$scene -m output_num_gaussians_halfres/${m}m_$scene -r 768 --densif_final_num_gaussians ${m}000000"
+#     done
+# done
+
+for scene in shiny_kitchen shiny_office shiny_livingroom shiny_bedroom; do 
+    q a6000 <<< "bash run.sh -s colmap/$scene -m output_v45/$scene -r 768 --raytracer_version /home/ypoirier/optix/gausstracer/build/v45"
 done

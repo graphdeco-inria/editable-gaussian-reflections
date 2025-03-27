@@ -141,7 +141,6 @@ class ModelParams(ParamGroup):
         self.enable_regular_loss_at_iter = -1
 
         self.num_samples = 1
-        
 
         super().__init__(parser, "Loading Parameters", sentinel)
 
@@ -215,7 +214,7 @@ class OptimizationParams(ParamGroup):
 
         self.densif_no_pruning = False
         self.densif_no_cloning = False
-        self.densif_no_splitting = False 
+        self.densif_no_splitting = True 
         self.densif_pruning_only = False
 
         self.densif_skip_big_points_ws = False
