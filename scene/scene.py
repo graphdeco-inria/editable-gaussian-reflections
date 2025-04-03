@@ -9,17 +9,18 @@
 # For inquiries contact  george.drettakis@inria.fr
 #
 
+import json
+import math
 import os
 import random
-import json
-from utils.system_utils import searchForMaxIteration
-from scene.dataset_readers import *
-from scene.gaussian_model import GaussianModel
-import math
+
+import torch
 
 from arguments import ModelParams
-from utils.camera_utils import cameraList_from_camInfos, camera_to_JSON
-import torch
+from scene.dataset_readers import *
+from scene.gaussian_model import GaussianModel
+from utils.camera_utils import camera_to_JSON, cameraList_from_camInfos
+from utils.system_utils import searchForMaxIteration
 
 
 class Scene:
