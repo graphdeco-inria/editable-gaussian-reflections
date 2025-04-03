@@ -58,8 +58,14 @@ class Camera(nn.Module):
 
         image_holding_device = os.getenv("IMAGE_HOLDING_DEVICE", "cuda")
 
-        # *** optimized as tonemapped values, will need to be inverse the tonemapping before adding both passes
-        if "TONEMAP_IMAGES_AT_INPUT" in os.environ:
+        if "SKIP_TONEMAPPING" in os.environ:
+            self._original_image = (
+                (diffuse_image + glossy_image).half().to(image_holding_device)
+            )
+            self._diffuse_image = diffuse_image.half().to(image_holding_device)
+            self._glossy_image = glossy_image.half().to(image_holding_device)
+        else:
+            # *** optimized as tonemapped values, will need to be inverse the tonemapping before adding both passes
             self._original_image = (
                 (tonemap(diffuse_image + glossy_image)).half().to(image_holding_device)
             )
@@ -71,12 +77,6 @@ class Camera(nn.Module):
                 self._original_image = torch.clamp(self._original_image, 0.0, 1.0)
                 self._diffuse_image = torch.clamp(self._diffuse_image, 0.0, 1.0)
                 self._glossy_image = torch.clamp(self._glossy_image, 0.0, 1.0)
-        else:
-            self._original_image = (
-                (diffuse_image + glossy_image).half().to(image_holding_device)
-            )
-            self._diffuse_image = diffuse_image.half().to(image_holding_device)
-            self._glossy_image = glossy_image.half().to(image_holding_device)
 
         if "DIFFUSE_IS_RENDER" in os.environ:
             self._diffuse_image = self._original_image

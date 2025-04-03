@@ -601,10 +601,10 @@ parser.add_argument("--flip_camera", action="store_true", default=False)
 # parser.add_argument("--test_iterations", nargs="+", type=int, default=[1_000, 3_000, 7_000, 15_000, 22_500, 30_000, 60_000, 90_000])
 # parser.add_argument("--save_iterations", nargs="+", type=int, default=[1_000, 3_000, 7_000, 15_000, 22_500, 30_000, 60_000, 90_000])
 parser.add_argument(
-    "--test_iterations", nargs="+", type=int, default=[7_000, 15_000, 30_000]
+    "--test_iterations", nargs="+", type=int, default=[1_000, 7_000, 15_000, 30_000]
 )
 parser.add_argument(
-    "--save_iterations", nargs="+", type=int, default=[7_000, 15_000, 30_000]
+    "--save_iterations", nargs="+", type=int, default=[1_000, 7_000, 15_000, 30_000]
 )
 # parser.add_argument("--test_iterations", nargs="+", type=int, default=[30_000])
 # parser.add_argument("--save_iterations", nargs="+", type=int, default=[30_000])

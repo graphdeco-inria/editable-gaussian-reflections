@@ -61,6 +61,7 @@ class CameraInfo:
 @dataclass
 class SceneInfo:
     point_cloud: BasicPointCloud
+    extra_point_cloud: BasicPointCloud
     train_cameras: list
     test_cameras: list
     nerf_normalization: dict
@@ -416,24 +417,28 @@ def readNerfSyntheticInfo(model_params, path, white_background, eval, extension=
     except:
         xyz, rgb, _ = read_points3D_text(txt_path)
     rgb = rgb / 255.0
+    pcd = BasicPointCloud(
+        points=xyz,
+        colors=rgb,
+        normals=np.zeros_like(xyz),
+    )
 
     # We create random points inside the bounds of the synthetic Blender scenes
     num_rand_pts = model_params.num_farfield_init_points
     print(f"Generating random point cloud ({num_rand_pts})...")
     rand_xyz = (
         np.random.random((num_rand_pts, 3)) * 2.6 - 1.3
-    ) * model_params.glossy_bbox_size_mult  #!!! todo only if glossy
+    ) * model_params.glossy_bbox_size_mult 
     rand_rgb = np.random.random((num_rand_pts, 3))
-    points = np.concatenate([xyz, rand_xyz], axis=0)
-    colors = np.concatenate([rgb, rand_rgb], axis=0)
-
-    pcd = BasicPointCloud(
-        points=points,
-        colors=colors,
-        normals=np.zeros_like(points),
+    extra_pcd = BasicPointCloud(
+        points=rand_xyz,
+        colors=rand_rgb,
+        normals=np.zeros_like(rand_xyz),
     )
+
     scene_info = SceneInfo(
         point_cloud=pcd,
+        extra_point_cloud=extra_pcd,
         train_cameras=train_cam_infos,
         test_cameras=test_cam_infos,
         nerf_normalization=nerf_normalization,
