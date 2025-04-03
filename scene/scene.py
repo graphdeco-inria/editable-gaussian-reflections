@@ -106,7 +106,6 @@ class Scene:
             extra_normals = scene_info_synthetic.point_cloud.normals
 
         self.autoadjust_zplanes()
-            
         import sys
         sys.path.append(gaussians.model_params.raytracer_version)
         import raytracer_config

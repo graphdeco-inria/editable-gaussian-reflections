@@ -134,7 +134,8 @@ class GaussianRaytracer:
             self.cuda_module.gaussian_specular.grad.zero_()
         if self.cuda_module.gaussian_metalness is not None:
             self.cuda_module.gaussian_metalness.grad.zero_()
-        self.cuda_module.densification_gradient_score.zero_()
+        self.cuda_module.densification_gradient_diffuse.zero_()
+        self.cuda_module.densification_gradient_glossy.zero_()
 
     def __call__(self, viewpoint_camera,  pipe_params: PipelineParams, bg_color: torch.Tensor, blur_sigma, target = None, target_diffuse = None, target_glossy = None, target_position=None, target_normal=None, target_roughness=None, target_f0=None, target_brdf=None):
         """

@@ -106,7 +106,7 @@ class ModelParams(ParamGroup):
 
         self.use_opacity_resets = False
 
-        self.init_scale_factor = 0.1 # 1.0 for 3dgs, 0.1 for mcmc 
+        self.init_scale_factor = 1.0 # 1.0 for 3dgs, 0.1 for mcmc 
         self.init_opacity = 0.1 # 0.1 for 3dgs, 0.5 for mcmc
 
         self.diffuse_loss_weight = 1.0
@@ -118,6 +118,17 @@ class ModelParams(ParamGroup):
         self.specular_loss_weight = 1.0
         self.albedo_loss_weight = 1.0
         self.metalness_loss_weight = 1.0
+
+        if "DIFFUSE_IS_RENDER" in os.environ:
+            self.diffuse_loss_weight = 1.0
+            self.glossy_loss_weight = 0.0
+            self.normal_loss_weight = 0.0
+            self.position_loss_weight = 0.0
+            self.f0_loss_weight = 0.0
+            self.roughness_loss_weight = 0.0
+            self.specular_loss_weight = 0.0
+            self.albedo_loss_weight = 0.0
+            self.metalness_loss_weight = 0.0
 
         # level of detail args below
         self.lod_prob_blur_targets = 1.0
@@ -175,7 +186,7 @@ class OptimizationParams(ParamGroup):
         self.lod_mean_lr = 0.005 / 100
         self.lod_scale_lr = 0.005 / 100 * 5
 
-        self.opacity_lr = 0.05
+        self.opacity_lr = 0.025 #! was 0.05 which does not match 3dgs
         self.scaling_lr = 0.005
         self.rotation_lr = 0.001
         self._brdf_lut_lr = 0.001
@@ -204,13 +215,13 @@ class OptimizationParams(ParamGroup):
         self.densify_grad_threshold = 0.0002
 
         self.densif_use_top_k = True
-        self.densif_final_num_gaussians = 1_000_000
+        self.densif_final_num_gaussians = 500_000 #! 1M
         self.densif_size_ranking_weight = 0.0
         self.densif_opacity_ranking_weight = 0.0
         self.densif_lod_ranking_weight = 0.0
         self.densif_no_pruning_large_radii = False
         self.densif_use_fixed_split_clone_ratio = True
-        self.densif_split_clone_ratio = 0.2
+        self.densif_split_clone_ratio = 0.5
 
         self.densif_no_pruning = False
         self.densif_no_cloning = False
@@ -221,7 +232,6 @@ class OptimizationParams(ParamGroup):
 
         self.sh_slowdown_factor = 20.0
         self.random_background = False
-
 
         super().__init__(parser, "Optimization Parameters")
 

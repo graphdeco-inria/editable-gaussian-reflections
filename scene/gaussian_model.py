@@ -245,7 +245,10 @@ class GaussianModel:
         self._normal = nn.Parameter(fused_normal.clone())
         self._roughness = nn.Parameter(torch.zeros((fused_point_cloud.shape[0], 1), device="cuda"))
         self._f0 = nn.Parameter(torch.zeros((fused_point_cloud.shape[0], 3), device="cuda"))
-        self._diffuse = nn.Parameter(torch.log(torch.exp(untonemap(fused_color.clone())) - 1))
+        if "DIRECT_DIFFUSE" in os.environ:
+            self._diffuse = nn.Parameter(fused_color.clone())
+        else:
+            self._diffuse = nn.Parameter(torch.log(torch.exp(untonemap(fused_color.clone())) - 1))
         self._scaling = nn.Parameter(scales.requires_grad_(True))
         self._rotation = nn.Parameter(rots.requires_grad_(True))
         self._opacity = nn.Parameter(opacities.requires_grad_(True))
@@ -550,7 +553,6 @@ class GaussianModel:
         "lod_scale": new_lod_scale
         }
 
-
         optimizable_tensors = self.cat_tensors_to_optimizer(d)
 
         optimizable_tensors["xyz"].grad = torch.zeros_like(optimizable_tensors["xyz"])
@@ -596,6 +598,9 @@ class GaussianModel:
 # ---------------- below: our top kdensification
 
     def densify_and_split_top_k(self, opt, indices_to_split, N=2):
+        if indices_to_split.sum().item() == 0:
+            return
+
         n_init_points = self.get_xyz.shape[0]
 
         selected_pts_mask = torch.zeros(n_init_points, device="cuda").bool()
@@ -613,12 +618,7 @@ class GaussianModel:
         new_f0 = self._f0[selected_pts_mask].repeat(N,1)
         new_diffuse = self._diffuse[selected_pts_mask].repeat(N,1)
         new_opacity = self._opacity[selected_pts_mask].repeat(N,1)
-        if "ON_SPLIT_DONT_SCALE" not in os.environ:
-            new_scaling = self.get_scaling[selected_pts_mask].repeat(N,1)
-        elif "ON_SPLIT_SCALE_HARD" in os.environ:
-            new_scaling = self.scaling_inverse_activation(self.get_scaling[selected_pts_mask].repeat(N,1) / 2)
-        else:
-            new_scaling = self.scaling_inverse_activation(self.get_scaling[selected_pts_mask].repeat(N,1) / (0.8*N))
+        new_scaling = self.scaling_inverse_activation(self.get_scaling[selected_pts_mask].repeat(N,1) / (0.8*N))
         new_rotation = self._rotation[selected_pts_mask].repeat(N,1)
         new_lod_mean = self._lod_mean[selected_pts_mask].repeat(N,1) 
         if "ON_SPLIT_SKIP_DONT_TOUCH_LOD" not in os.environ:
@@ -631,9 +631,12 @@ class GaussianModel:
         prune_filter = torch.cat((selected_pts_mask, torch.zeros(N * selected_pts_mask.sum(), device="cuda", dtype=bool)))
         self.prune_points(prune_filter)
 
-    def densify_and_clone_top_k(self, opt, indicies_to_clone):
+    def densify_and_clone_top_k(self, opt, indices_to_clone):
+        if indices_to_clone.sum().item() == 0:
+            return
+
         selected_pts_mask = torch.zeros(len(self.get_xyz), device=self.get_xyz.device).bool()
-        selected_pts_mask[indicies_to_clone] = True
+        selected_pts_mask[indices_to_clone] = True
 
         if opt.densif_jitter_clones:
             stds = self.get_scaling[selected_pts_mask]
@@ -729,7 +732,11 @@ class GaussianModel:
             size_ranking = torch.argsort(torch.argsort(largest_axis_size)) / num_gaussians_before_densification
             opacity_ranking = torch.argsort(torch.argsort(self.get_opacity.squeeze())) / num_gaussians_before_densification
             lod_ranking = torch.argsort(torch.argsort(-self.get_lod_mean.squeeze())) / num_gaussians_before_densification
+            
             score = grad_ranking + size_ranking*opt.densif_size_ranking_weight + opacity_ranking*opt.densif_opacity_ranking_weight + opacity_ranking*opt.densif_opacity_ranking_weight + lod_ranking * opt.densif_lod_ranking_weight
+
+            if "GRAD_RANKING_ONLY" in os.environ:
+                score = grad_ranking
 
             if opt.densif_lod_ranking_weight != 0.0: #!!!! tmp
                 print("lod ranking is enabled")
@@ -771,21 +778,31 @@ class GaussianModel:
         
         return trace
 
-    def add_densification_stats_3d(self, score):
-        update_filter = self._opacity[:, 0].grad != 0
+    def add_densification_stats_3d(self, gradient_diffuse, gradient_glossy):
+        update_filter = self._opacity.grad[:, 0] != 0
+        
         if "GLOSS_DENS_ONLY" in os.environ:
             import inspect
+
             frame = inspect.currentframe().f_back
             iteration = frame.f_locals["iteration"]
-            self.xyz_gradient_accum[update_filter] += (score[:, 1:2] )[update_filter] 
+            if iteration > 500:
+                self.xyz_gradient_accum[update_filter, 0] += score_glossy
         elif "DIFFUSE_DENS_ONLY" in os.environ:
-            self.xyz_gradient_accum[update_filter] += (score[:, 0:1] )[update_filter] 
+            self.xyz_gradient_accum[update_filter, 0] += score_diffuse
         elif "DENS_GLOSS" in os.environ:
-            self.xyz_gradient_accum[update_filter] += (score[:, 0:1] + float(os.environ["DENS_GLOSS"]) * score[:, 1:2])[update_filter]
+            self.xyz_gradient_accum[update_filter, 0] += (score_diffuse + float(os.environ["DENS_GLOSS"]) * score_glossy)
         elif "DBG_FALLBACK_DENS" in os.environ:
             self.xyz_gradient_accum[update_filter] += self._xyz.grad[update_filter].norm(dim=-1, keepdim=True)
         else:
-            self.xyz_gradient_accum[update_filter] += (score[:, 0:1] + score[:, 1:2])[update_filter]
+            gradient_diffuse = gradient_diffuse[update_filter]
+            gradient_glossy = gradient_glossy[update_filter]
+            normalize_grad_diffuse = (gradient_diffuse - gradient_diffuse.mean()) / gradient_diffuse.std()
+            normalize_grad_glossy = (gradient_glossy - gradient_glossy.mean()) / gradient_glossy.std()
+            normalize_score_diffuse = normalize_grad_diffuse.norm(dim=-1, keepdim=True)
+            normalize_score_glossy = normalize_grad_glossy.norm(dim=-1, keepdim=True).nan_to_num(0.0) 
+            self.xyz_gradient_accum[update_filter] += normalize_score_diffuse + normalize_score_glossy
+
         self.denom[update_filter] += 1
 
 def get_count_array(start_count, opt):

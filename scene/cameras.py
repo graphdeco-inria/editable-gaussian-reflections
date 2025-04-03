@@ -59,11 +59,14 @@ class Camera(nn.Module):
             self._diffuse_image = diffuse_image.half().to(image_holding_device)
             self._glossy_image = glossy_image.half().to(image_holding_device)
 
+        if "DIFFUSE_IS_RENDER" in os.environ:
+            self._diffuse_image = self._original_image
+
         self._normal_image = normal_image.half().to(image_holding_device)
         self._position_image = position_image.half().to(image_holding_device)
         self._roughness_image = (roughness_image).half().to(image_holding_device)
         self._brdf_image = brdf_image.half().to(image_holding_device) 
-        self._F0_image = (((1.0 - metalness_image) * 0.08 * specular_image + metalness_image * base_color_image)).half().to(image_holding_device)
+        self._F0_image = (((1.0 - metalness_image) * float(os.getenv("DIELECTIC_REFL", 0.08)) * specular_image + metalness_image * base_color_image)).half().to(image_holding_device)
 
         try:
             self.data_device = torch.device(data_device)

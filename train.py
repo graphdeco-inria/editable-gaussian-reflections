@@ -86,7 +86,14 @@ def training_report(tb_writer, iteration):
 
                     os.makedirs(tb_writer.log_dir + "/" + f"{config['name']}_view", exist_ok=True)
 
-                    if raytracer.config.TONEMAP:
+                    if "TONEMAP_IMAGES_AT_INPUT" in os.environ:
+                        diffuse_image = package.rgb[0].clamp(0, 1)
+                        glossy_image = package.rgb[1:-1].sum(dim=0)
+                        pred_image = package.rgb[-1].clamp(0, 1)
+                        diffuse_gt_image = torch.clamp(viewpoint.diffuse_image, 0.0, 1.0)
+                        glossy_gt_image = torch.clamp(viewpoint.glossy_image, 0.0, 1.0)
+                        gt_image = torch.clamp(viewpoint.original_image, 0.0, 1.0)
+                    elif raytracer.config.TONEMAP:
                         diffuse_image = package.rgb[0].clamp(0, 1)
                         glossy_image = tonemap(untonemap(package.rgb[1:-1]).sum(dim=0)).clamp(0, 1)
                         pred_image = package.rgb[-1].clamp(0, 1)
@@ -240,8 +247,12 @@ parser.add_argument('--detect_anomaly', action='store_true', default=False)
 parser.add_argument('--flip_camera', action='store_true', default=False)
 # parser.add_argument("--test_iterations", nargs="+", type=int, default=[100, 500, 1_000, 2_500, 5_000, 10_000, 20_000, 30_000, 60_000, 90_000])
 # parser.add_argument("--test_iterations", nargs="+", type=int, default=[1_000, 2_000, 3_000, 5_000, 10_000, 20_000, 30_000, 60_000, 90_000])
-parser.add_argument("--test_iterations", nargs="+", type=int, default=[1_000, 3_000, 7_000, 15_000, 22_500, 30_000, 60_000, 90_000])
-parser.add_argument("--save_iterations", nargs="+", type=int, default=[1_000, 3_000, 7_000, 15_000, 22_500, 30_000, 60_000, 90_000])
+# parser.add_argument("--test_iterations", nargs="+", type=int, default=[1_000, 3_000, 7_000, 15_000, 22_500, 30_000, 60_000, 90_000])
+# parser.add_argument("--save_iterations", nargs="+", type=int, default=[1_000, 3_000, 7_000, 15_000, 22_500, 30_000, 60_000, 90_000])
+parser.add_argument("--test_iterations", nargs="+", type=int, default=[7_000, 15_000, 30_000])
+parser.add_argument("--save_iterations", nargs="+", type=int, default=[7_000, 15_000, 30_000])
+# parser.add_argument("--test_iterations", nargs="+", type=int, default=[30_000])
+# parser.add_argument("--save_iterations", nargs="+", type=int, default=[30_000])
 parser.add_argument("--quiet", action="store_true")
 parser.add_argument("--viewer", action="store_true")
 parser.add_argument("--checkpoint_iterations", nargs="+", type=int, default=[])
@@ -442,7 +453,7 @@ for iteration in tqdm(range(first_iter, opt_params.iterations + 1), desc="Traini
                 gaussians.reset_opacity()
 
         if opt_params.densif_use_top_k and iteration <= opt_params.densify_until_iter:
-            gaussians.add_densification_stats_3d(raytracer.cuda_module.densification_gradient_score)
+            gaussians.add_densification_stats_3d(raytracer.cuda_module.densification_gradient_diffuse, raytracer.cuda_module.densification_gradient_glossy)
 
         if opt_params.densif_use_top_k and (iteration % opt_params.densification_interval == 0 or iteration == 1):
             max_ws_size = scene.cameras_extent * model_params.glossy_bbox_size_mult * model_params.scene_extent_multiplier
@@ -459,6 +470,9 @@ for iteration in tqdm(range(first_iter, opt_params.iterations + 1), desc="Traini
             else:
                 gaussians.prune(*densif_args)
             raytracer.rebuild_bvh()
+        elif iteration % opt_params.densification_interval == 0:
+            if "NO_REBUILD" not in os.environ:
+                raytracer.rebuild_bvh()
 
         gaussians.optimizer.step()
         gaussians.optimizer.zero_grad(set_to_none=False)
@@ -476,11 +490,13 @@ for iteration in tqdm(range(first_iter, opt_params.iterations + 1), desc="Traini
                     quit()
 
         # Clamp the gaussian scales to min 1% of the longest axis for numerical stability
-        if "SKIP_CLAMP_MINSIZE" not in os.environ:
-            with torch.no_grad():
-                scaling = gaussians.get_scaling
-                max_scaling = scaling.amax(dim=1)
-                gaussians._scaling.data.clamp_(min=torch.log(max_scaling * 0.01).unsqueeze(-1))
+        # if "SKIP_CLAMP_MINSIZE" not in os.environ:
+        #     with torch.no_grad():
+        #         scaling = gaussians.get_scaling
+        #         max_scaling = scaling.amax(dim=1)
+        #         gaussians._scaling.data.clamp_(
+        #             min=torch.log(max_scaling * float(os.getenv("MIN_RELATIVE_SCALING", 0.01))).unsqueeze(-1)
+        #         )
 
         if model_params.add_mcmc_noise:
             L = build_scaling_rotation(gaussians.get_scaling, gaussians.get_rotation)
@@ -502,7 +518,7 @@ for iteration in tqdm(range(first_iter, opt_params.iterations + 1), desc="Traini
     if iteration == model_params.no_bounces_until_iter:
         raytracer.cuda_module.num_bounces.copy_(min(raytracer.config.MAX_BOUNCES, 1))
 
-    if iteration == model_params.max_one_bounce_until_iter:
+    if iteration == model_params.max_one_bounce_until_iter and iteration > model_params.no_bounces_until_iter:
         raytracer.cuda_module.num_bounces.copy_(raytracer.config.MAX_BOUNCES)
 
     if iteration == model_params.rebalance_losses_at_iter:
