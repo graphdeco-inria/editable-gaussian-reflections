@@ -1,5 +1,0 @@
-Metadata-Version: 2.1
-Name: bvh-tracing
-Version: 0.0.0
-Summary: CUDA RayTracer with BVH acceleration for 3DGS
-License-File: LICENCE
