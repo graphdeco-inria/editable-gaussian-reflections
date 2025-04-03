@@ -9,13 +9,15 @@
 # For inquiries contact  george.drettakis@inria.fr
 #
 
-import torch
-from torch import nn
-import numpy as np
-from utils.graphics_utils import getWorld2View2, getProjectionMatrix
 import os
 
+import numpy as np
+import torch
+from torch import nn
+
 from scene.tonemapping import *
+from utils.graphics_utils import getProjectionMatrix, getWorld2View2
+
 
 
 class Camera(nn.Module):
