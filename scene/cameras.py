@@ -3,7 +3,7 @@
 # GRAPHDECO research group, https://team.inria.fr/graphdeco
 # All rights reserved.
 #
-# This software is free for non-commercial, research and evaluation use 
+# This software is free for non-commercial, research and evaluation use
 # under the terms of the LICENSE.md file.
 #
 # For inquiries contact  george.drettakis@inria.fr
@@ -13,24 +13,36 @@ import torch
 from torch import nn
 import numpy as np
 from utils.graphics_utils import getWorld2View2, getProjectionMatrix
-import os 
+import os
 
 from scene.tonemapping import *
 
+
 class Camera(nn.Module):
-    def __init__(self, colmap_id, R, T, FoVx, FoVy, image, gt_alpha_mask,
-                 image_name, uid,
-                 diffuse_image,
-                 glossy_image,
-                 position_image,
-                 normal_image,
-                 roughness_image,
-                 metalness_image,
-                 base_color_image,
-                 brdf_image,
-                 specular_image,
-                 trans=np.array([0.0, 0.0, 0.0]), scale=1.0, data_device = "cuda"
-                 ):
+    def __init__(
+        self,
+        colmap_id,
+        R,
+        T,
+        FoVx,
+        FoVy,
+        image,
+        gt_alpha_mask,
+        image_name,
+        uid,
+        diffuse_image,
+        glossy_image,
+        position_image,
+        normal_image,
+        roughness_image,
+        metalness_image,
+        base_color_image,
+        brdf_image,
+        specular_image,
+        trans=np.array([0.0, 0.0, 0.0]),
+        scale=1.0,
+        data_device="cuda",
+    ):
         super(Camera, self).__init__()
         self.uid = uid
         self.colmap_id = colmap_id
@@ -45,17 +57,23 @@ class Camera(nn.Module):
 
         image_holding_device = os.getenv("IMAGE_HOLDING_DEVICE", "cuda")
 
-        #*** optimized as tonemapped values, will need to be inverse the tonemapping before adding both passes
+        # *** optimized as tonemapped values, will need to be inverse the tonemapping before adding both passes
         if "TONEMAP_IMAGES_AT_INPUT" in os.environ:
-            self._original_image = (tonemap(diffuse_image + glossy_image)).half().to(image_holding_device)
-            self._diffuse_image = (tonemap(diffuse_image)).half().to(image_holding_device)
+            self._original_image = (
+                (tonemap(diffuse_image + glossy_image)).half().to(image_holding_device)
+            )
+            self._diffuse_image = (
+                (tonemap(diffuse_image)).half().to(image_holding_device)
+            )
             self._glossy_image = (tonemap(glossy_image)).half().to(image_holding_device)
             if "DONT_CLAMP_TARGETS" not in os.environ:
                 self._original_image = torch.clamp(self._original_image, 0.0, 1.0)
                 self._diffuse_image = torch.clamp(self._diffuse_image, 0.0, 1.0)
                 self._glossy_image = torch.clamp(self._glossy_image, 0.0, 1.0)
         else:
-            self._original_image = (diffuse_image + glossy_image).half().to(image_holding_device)
+            self._original_image = (
+                (diffuse_image + glossy_image).half().to(image_holding_device)
+            )
             self._diffuse_image = diffuse_image.half().to(image_holding_device)
             self._glossy_image = glossy_image.half().to(image_holding_device)
 
@@ -65,14 +83,25 @@ class Camera(nn.Module):
         self._normal_image = normal_image.half().to(image_holding_device)
         self._position_image = position_image.half().to(image_holding_device)
         self._roughness_image = (roughness_image).half().to(image_holding_device)
-        self._brdf_image = brdf_image.half().to(image_holding_device) 
-        self._F0_image = (((1.0 - metalness_image) * float(os.getenv("DIELECTIC_REFL", 0.08)) * specular_image + metalness_image * base_color_image)).half().to(image_holding_device)
+        self._brdf_image = brdf_image.half().to(image_holding_device)
+        self._F0_image = (
+            (
+                (1.0 - metalness_image)
+                * float(os.getenv("DIELECTIC_REFL", 0.08))
+                * specular_image
+                + metalness_image * base_color_image
+            )
+            .half()
+            .to(image_holding_device)
+        )
 
         try:
             self.data_device = torch.device(data_device)
         except Exception as e:
             print(e)
-            print(f"[Warning] Custom device {data_device} failed, fallback to default cuda device")
+            print(
+                f"[Warning] Custom device {data_device} failed, fallback to default cuda device"
+            )
             self.data_device = torch.device("cuda")
 
         self.trans = trans
@@ -85,15 +114,15 @@ class Camera(nn.Module):
 
     @property
     def original_image(self):
-        return self._original_image.float().cuda() 
+        return self._original_image.float().cuda()
 
     @property
     def diffuse_image(self):
-        return self._diffuse_image.float().cuda() 
+        return self._diffuse_image.float().cuda()
 
     @property
     def glossy_image(self):
-        return self._glossy_image.float().cuda() 
+        return self._glossy_image.float().cuda()
 
     @property
     def normal_image(self):
@@ -105,7 +134,7 @@ class Camera(nn.Module):
 
     @property
     def roughness_image(self):
-        return self._roughness_image.float().cuda() 
+        return self._roughness_image.float().cuda()
 
     @property
     def brdf_image(self):
@@ -113,19 +142,41 @@ class Camera(nn.Module):
 
     @property
     def F0_image(self):
-        return self._F0_image.float().cuda() 
+        return self._F0_image.float().cuda()
 
     def update(self):
-        self.world_view_transform = torch.tensor(getWorld2View2(self.R, self.T, self.trans, self.scale)).transpose(0, 1).cuda()
-        self.projection_matrix = getProjectionMatrix(znear=0.01, zfar=100.0, fovX=self.FoVx, fovY=self.FoVy).transpose(0,1).cuda()
-        self.full_proj_transform = (self.world_view_transform.unsqueeze(0).bmm(self.projection_matrix.unsqueeze(0))).squeeze(0)
+        self.world_view_transform = (
+            torch.tensor(getWorld2View2(self.R, self.T, self.trans, self.scale))
+            .transpose(0, 1)
+            .cuda()
+        )
+        self.projection_matrix = (
+            getProjectionMatrix(znear=0.01, zfar=100.0, fovX=self.FoVx, fovY=self.FoVy)
+            .transpose(0, 1)
+            .cuda()
+        )
+        self.full_proj_transform = (
+            self.world_view_transform.unsqueeze(0).bmm(
+                self.projection_matrix.unsqueeze(0)
+            )
+        ).squeeze(0)
         self.camera_center = self.world_view_transform.cpu().inverse().cuda()[3, :3]
 
 
 class MiniCam:
-    def __init__(self, width, height, fovy, fovx, znear, zfar, world_view_transform, full_proj_transform):
+    def __init__(
+        self,
+        width,
+        height,
+        fovy,
+        fovx,
+        znear,
+        zfar,
+        world_view_transform,
+        full_proj_transform,
+    ):
         self.image_width = width
-        self.image_height = height    
+        self.image_height = height
         self.FoVy = fovy
         self.FoVx = fovx
         self.znear = znear
@@ -135,4 +186,3 @@ class MiniCam:
         view_inv = torch.inverse(self.world_view_transform)
         self.camera_center = view_inv[3][:3]
         self.R = world_view_transform[:3, :3]
-
