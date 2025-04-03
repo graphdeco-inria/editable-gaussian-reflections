@@ -44,15 +44,9 @@ class Scene:
         self.train_cameras = {}
         self.test_cameras = {}
 
-        source_path_synthetic = model_params.source_path.replace("colmap/", "renders/").replace("/train", "")
-        assert os.path.exists(os.path.join(source_path_synthetic, "transforms_train.json")), source_path_synthetic
-        scene_info_synthetic = readNerfSyntheticInfo(model_params, source_path_synthetic, model_params.white_background, model_params.eval)
+        assert os.path.exists(os.path.join(model_params.source_path, "transforms_train.json")), "Cannot find transforms file"
+        scene_info = readNerfSyntheticInfo(model_params, model_params.source_path, model_params.white_background, model_params.eval)
         
-        source_path_colmap = model_params.source_path + "/train"
-        assert os.path.exists(os.path.join(source_path_colmap, "sparse")), source_path_colmap
-        scene_info = readColmapSceneInfo(model_params, source_path_colmap, model_params.images, model_params.eval)
-
-        self.scene_info = scene_info
         scene_info.train_cameras = scene_info.train_cameras[::model_params.keep_every_kth_view]
 
         if not self.loaded_iter:
@@ -61,7 +55,7 @@ class Scene:
             json_cams = []
             camlist = []
             if scene_info.test_cameras:
-                camlist.extend(scene_info_synthetic.test_cameras)
+                camlist.extend(scene_info.test_cameras)
             if scene_info.train_cameras:
                 camlist.extend(scene_info.train_cameras)
             for id, cam in enumerate(camlist):
@@ -84,7 +78,7 @@ class Scene:
             print("Loading Training Cameras")
             self.train_cameras[resolution_scale] = cameraList_from_camInfos(scene_info.train_cameras, resolution_scale, model_params)
             print("Loading Test Cameras")
-            self.test_cameras[resolution_scale] = cameraList_from_camInfos(scene_info_synthetic.test_cameras, resolution_scale, model_params)
+            self.test_cameras[resolution_scale] = cameraList_from_camInfos(scene_info.test_cameras, resolution_scale, model_params)
 
         print(f"I have {len(self.train_cameras)} cameras")
 
@@ -93,29 +87,20 @@ class Scene:
             self.autoadjust_zplanes()
         
         if gaussians.model_params.znear_init_pruning:
-            points = torch.from_numpy(scene_info_synthetic.point_cloud.points).cuda().float()
-            points_to_prune = self.select_points_to_prune_near_cameras(points)
-            
-            print(f"Pruned {points_to_prune.float().mean() * 100:.2f}% of the extra init points since they are too close to the cameras.")
-            extra_points = scene_info_synthetic.point_cloud.points[(~points_to_prune).cpu().numpy()]
-            extra_colors = scene_info_synthetic.point_cloud.colors[(~points_to_prune).cpu().numpy()]
-            extra_normals = scene_info_synthetic.point_cloud.normals[(~points_to_prune).cpu().numpy()]
-        else:
-            extra_points = scene_info_synthetic.point_cloud.points
-            extra_colors = scene_info_synthetic.point_cloud.colors
-            extra_normals = scene_info_synthetic.point_cloud.normals
+            points = torch.from_numpy(scene_info.point_cloud.points).cuda().float()
+            points_to_prune = self.select_points_to_prune_near_cameras(points).cpu().numpy()
+            print(f"Pruned {points_to_prune.mean() * 100:.2f}% of the init points since they are too close to the cameras.")
+            scene_info.point_cloud = BasicPointCloud(
+                points=scene_info.point_cloud.points[~points_to_prune],
+                colors=scene_info.point_cloud.colors[~points_to_prune],
+                normals=scene_info.point_cloud.normals[~points_to_prune],
+            )
 
         self.autoadjust_zplanes()
             
         import sys
         sys.path.append(gaussians.model_params.raytracer_version)
         import raytracer_config
-        if raytracer_config.MAX_BOUNCES > 0 and "SKIP_EXTRA_POINTS" not in os.environ:
-            scene_info.point_cloud = BasicPointCloud(
-                np.concatenate([scene_info.point_cloud.points, extra_points]),
-                np.concatenate([scene_info.point_cloud.colors, extra_colors]),
-                np.concatenate([scene_info.point_cloud.normals, extra_normals])
-            )
 
         if self.loaded_iter:
             self.gaussians.load_ply(os.path.join(self.model_path,

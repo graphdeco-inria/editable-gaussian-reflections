@@ -18,3 +18,4 @@ renders
 /raytracer_builds/
 /dump/
 *.ignore.*
+/data

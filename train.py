@@ -43,7 +43,7 @@ except ImportError:
 
 def prepare_output_and_logger(args: ModelParams, opt_params):    
     if not args.model_path:
-        args.model_path = os.path.join("./output/", datetime.isoformat(timespec="seconds"))
+        args.model_path = os.path.join("./output/", datetime.now().isoformat(timespec="seconds"))
 
     # Set up output folder
     print("Output folder: {}".format(args.model_path))
