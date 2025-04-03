@@ -3,7 +3,7 @@
 # GRAPHDECO research group, https://team.inria.fr/graphdeco
 # All rights reserved.
 #
-# This software is free for non-commercial, research and evaluation use 
+# This software is free for non-commercial, research and evaluation use
 # under the terms of the LICENSE.md file.
 #
 # For inquiries contact  george.drettakis@inria.fr
@@ -15,8 +15,10 @@ from datetime import datetime
 import numpy as np
 import random
 
+
 def inverse_sigmoid(x):
-    return torch.log(x/(1-x))
+    return torch.log(x / (1 - x))
+
 
 def PILtoTorch(pil_image, resolution):
     resized_image_PIL = pil_image.resize(resolution)
@@ -25,6 +27,7 @@ def PILtoTorch(pil_image, resolution):
         return resized_image.permute(2, 0, 1)
     else:
         return resized_image.unsqueeze(dim=-1).permute(2, 0, 1)
+
 
 def get_expon_lr_func(
     lr_init, lr_final, lr_delay_steps=0, lr_delay_mult=1.0, max_steps=1000000
@@ -61,6 +64,7 @@ def get_expon_lr_func(
 
     return helper
 
+
 def strip_lowerdiag(L):
     uncertainty = torch.zeros((L.shape[0], 6), dtype=torch.float, device="cuda")
 
@@ -72,42 +76,48 @@ def strip_lowerdiag(L):
     uncertainty[:, 5] = L[:, 2, 2]
     return uncertainty
 
+
 def strip_symmetric(sym):
     return strip_lowerdiag(sym)
 
+
 def build_rotation(r):
-    norm = torch.sqrt(r[:,0]*r[:,0] + r[:,1]*r[:,1] + r[:,2]*r[:,2] + r[:,3]*r[:,3])
+    norm = torch.sqrt(
+        r[:, 0] * r[:, 0] + r[:, 1] * r[:, 1] + r[:, 2] * r[:, 2] + r[:, 3] * r[:, 3]
+    )
 
     q = r / norm[:, None]
 
-    R = torch.zeros((q.size(0), 3, 3), device='cuda')
+    R = torch.zeros((q.size(0), 3, 3), device="cuda")
 
     r = q[:, 0]
     x = q[:, 1]
     y = q[:, 2]
     z = q[:, 3]
 
-    R[:, 0, 0] = 1 - 2 * (y*y + z*z)
-    R[:, 0, 1] = 2 * (x*y - r*z)
-    R[:, 0, 2] = 2 * (x*z + r*y)
-    R[:, 1, 0] = 2 * (x*y + r*z)
-    R[:, 1, 1] = 1 - 2 * (x*x + z*z)
-    R[:, 1, 2] = 2 * (y*z - r*x)
-    R[:, 2, 0] = 2 * (x*z - r*y)
-    R[:, 2, 1] = 2 * (y*z + r*x)
-    R[:, 2, 2] = 1 - 2 * (x*x + y*y)
+    R[:, 0, 0] = 1 - 2 * (y * y + z * z)
+    R[:, 0, 1] = 2 * (x * y - r * z)
+    R[:, 0, 2] = 2 * (x * z + r * y)
+    R[:, 1, 0] = 2 * (x * y + r * z)
+    R[:, 1, 1] = 1 - 2 * (x * x + z * z)
+    R[:, 1, 2] = 2 * (y * z - r * x)
+    R[:, 2, 0] = 2 * (x * z - r * y)
+    R[:, 2, 1] = 2 * (y * z + r * x)
+    R[:, 2, 2] = 1 - 2 * (x * x + y * y)
     return R
+
 
 def build_scaling_rotation(s, r):
     L = torch.zeros((s.shape[0], 3, 3), dtype=torch.float, device="cuda")
     R = build_rotation(r)
 
-    L[:,0,0] = s[:,0]
-    L[:,1,1] = s[:,1]
-    L[:,2,2] = s[:,2]
+    L[:, 0, 0] = s[:, 0]
+    L[:, 1, 1] = s[:, 1]
+    L[:, 2, 2] = s[:, 2]
 
     L = R @ L
     return L
+
 
 def safe_state(silent):
     # old_f = sys.stdout
@@ -133,15 +143,22 @@ def safe_state(silent):
     torch.cuda.set_device(torch.device("cuda:0"))
 
 
-
-
 def create_rotation_matrix_from_direction_vector_batch(direction_vectors):
     # Normalize the batch of direction vectors
-    direction_vectors = direction_vectors / torch.norm(direction_vectors, dim=-1, keepdim=True)
+    direction_vectors = direction_vectors / torch.norm(
+        direction_vectors, dim=-1, keepdim=True
+    )
     # Create a batch of arbitrary vectors that are not collinear with the direction vectors
-    v1 = torch.tensor([1.0, 0.0, 0.0], dtype=torch.float32).to(direction_vectors.device).expand(direction_vectors.shape[0], -1).clone()
+    v1 = (
+        torch.tensor([1.0, 0.0, 0.0], dtype=torch.float32)
+        .to(direction_vectors.device)
+        .expand(direction_vectors.shape[0], -1)
+        .clone()
+    )
     is_collinear = torch.all(torch.abs(direction_vectors - v1) < 1e-5, dim=-1)
-    v1[is_collinear] = torch.tensor([0.0, 1.0, 0.0], dtype=torch.float32).to(direction_vectors.device)
+    v1[is_collinear] = torch.tensor([0.0, 1.0, 0.0], dtype=torch.float32).to(
+        direction_vectors.device
+    )
 
     # Calculate the first orthogonal vectors
     v1 = torch.cross(direction_vectors, v1)
@@ -153,6 +170,7 @@ def create_rotation_matrix_from_direction_vector_batch(direction_vectors):
     rotation_matrices = torch.stack((v1, v2, direction_vectors), dim=-1)
     return rotation_matrices
 
+
 # from kornia.geometry import conversions
 # def normal_to_rotation(normals):
 #     rotations = create_rotation_matrix_from_direction_vector_batch(normals)
@@ -160,20 +178,21 @@ def create_rotation_matrix_from_direction_vector_batch(direction_vectors):
 #     return rotations
 
 
-def colormap(img, cmap='jet'):
+def colormap(img, cmap="jet"):
     import matplotlib.pyplot as plt
+
     W, H = img.shape[:2]
     dpi = 300
-    fig, ax = plt.subplots(1, figsize=(H/dpi, W/dpi), dpi=dpi)
+    fig, ax = plt.subplots(1, figsize=(H / dpi, W / dpi), dpi=dpi)
     im = ax.imshow(img, cmap=cmap)
     ax.set_axis_off()
     fig.colorbar(im, ax=ax)
-    # 
+    #
 
     fig.tight_layout()
     fig.canvas.draw()
     data = np.frombuffer(fig.canvas.tostring_rgb(), dtype=np.uint8)
     data = data.reshape(fig.canvas.get_width_height()[::-1] + (3,))
-    img = torch.from_numpy(data / 255.).float().permute(2,0,1)
+    img = torch.from_numpy(data / 255.0).float().permute(2, 0, 1)
     plt.close()
     return img
