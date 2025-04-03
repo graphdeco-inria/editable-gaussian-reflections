@@ -212,35 +212,35 @@ def training_report(tb_writer, iteration):
                                     _rgb_img.clamp(0, 1),
                                     tb_writer.log_dir
                                     + "/"
-                                    + f"{config['name']}_view/iter_{iteration:09}_{idx}_rgb_bounce_{k}.png",
+                                    + f"{config['name']}_view/iter_{iteration:09}_{idx}_rgb_ray_{k}.png",
                                     padding=0,
                                 )
                                 save_image(
                                     torch.clamp(_normal_img / 2 + 0.5, 0.0, 1.0),
                                     tb_writer.log_dir
                                     + "/"
-                                    + f"{config['name']}_view/iter_{iteration:09}_{idx}_normal_bounce_{k}.png",
+                                    + f"{config['name']}_view/iter_{iteration:09}_{idx}_normal_ray_{k}.png",
                                     padding=0,
                                 )
                                 save_image(
                                     torch.clamp(_F0_image, 0.0, 1.0),
                                     tb_writer.log_dir
                                     + "/"
-                                    + f"{config['name']}_view/iter_{iteration:09}_{idx}_F0_bounce_{k}.png",
+                                    + f"{config['name']}_view/iter_{iteration:09}_{idx}_F0_ray_{k}.png",
                                     padding=0,
                                 )
                                 save_image(
                                     torch.clamp(_pos_image, 0.0, 1.0),
                                     tb_writer.log_dir
                                     + "/"
-                                    + f"{config['name']}_view/iter_{iteration:09}_{idx}_pos_bounce_{k}.png",
+                                    + f"{config['name']}_view/iter_{iteration:09}_{idx}_pos_ray_{k}.png",
                                     padding=0,
                                 )
                                 save_image(
                                     torch.clamp(_brdf_image, 0.0, 1.0),
                                     tb_writer.log_dir
                                     + "/"
-                                    + f"{config['name']}_view/iter_{iteration:09}_{idx}_brdf_bounce_{k}.png",
+                                    + f"{config['name']}_view/iter_{iteration:09}_{idx}_brdf_ray_{k}.png",
                                     padding=0,
                                 )
 
