@@ -1,0 +1,13 @@
+imageio
+kornia
+matplotlib
+opencv-python
+pandas
+plotly
+plyfile
+pytest
+ruff
+tensorboard
+tqdm
+submodules/diff-gaussian-rasterization
+submodules/simple-knn
