@@ -3,16 +3,19 @@
 # GRAPHDECO research group, https://team.inria.fr/graphdeco
 # All rights reserved.
 #
-# This software is free for non-commercial, research and evaluation use 
+# This software is free for non-commercial, research and evaluation use
 # under the terms of the LICENSE.md file.
 #
 # For inquiries contact  george.drettakis@inria.fr
 #
 
-import os 
+import os
 import torch
 import math
-from diff_gaussian_rasterization import GaussianRasterizationSettings, GaussianRasterizer
+from diff_gaussian_rasterization import (
+    GaussianRasterizationSettings,
+    GaussianRasterizer,
+)
 from scene.gaussian_model import GaussianModel
 from utils.sh_utils import eval_sh
 from torchvision.utils import save_image
@@ -21,17 +24,20 @@ import numpy as np
 
 LOADED = False
 
+
 class GaussianRaytracer:
     def __init__(self, pc: GaussianModel, example_camera):
         global LOADED
         if not LOADED:
-            torch.classes.load_library(f"{pc.model_params.raytracer_version}/libgausstracer.so")
+            torch.classes.load_library(
+                f"{pc.model_params.raytracer_version}/libgausstracer.so"
+            )
             LOADED = True
 
         self.cuda_module = torch.classes.gausstracer.Raytracer(
             example_camera.image_width,
             example_camera.image_height,
-            pc.get_scaling.shape[0]
+            pc.get_scaling.shape[0],
         )
 
         os.environ["DIFFUSE_LOSS_WEIGHT"] = str(pc.model_params.diffuse_loss_weight)
@@ -49,13 +55,15 @@ class GaussianRaytracer:
         self.pc = pc
 
         self._export_param_values()
-        torch.cuda.synchronize() #!!! remove
+        torch.cuda.synchronize()  #!!! remove
         self.cuda_module.rebuild_bvh()
-        torch.cuda.synchronize() #!!! remove
+        torch.cuda.synchronize()  #!!! remove
 
         import sys
+
         sys.path.append(f"{pc.model_params.raytracer_version}")
         import raytracer_config
+
         self.config = raytracer_config
         torch.cuda.synchronize()
 
@@ -63,13 +71,13 @@ class GaussianRaytracer:
     def rebuild_bvh(self):
         new_size = self.pc._xyz.shape[0]
 
-        torch.cuda.synchronize() #!!! remove
+        torch.cuda.synchronize()  #!!! remove
         self.cuda_module.resize(new_size)
-        torch.cuda.synchronize() #!!! remove
+        torch.cuda.synchronize()  #!!! remove
         self._export_param_values()
-        torch.cuda.synchronize() #!!! remove
-        self.cuda_module.rebuild_bvh()  
-        torch.cuda.synchronize() #!!! remove
+        torch.cuda.synchronize()  #!!! remove
+        self.cuda_module.rebuild_bvh()
+        torch.cuda.synchronize()  #!!! remove
 
     @torch.no_grad()
     def _export_param_values(self):
@@ -117,7 +125,7 @@ class GaussianRaytracer:
         self.cuda_module.gaussian_scales.grad.zero_()
         self.cuda_module.gaussian_rotations.grad.zero_()
         self.cuda_module.gaussian_means.grad.zero_()
-        # 
+        #
         if self.cuda_module.gaussian_lod_mean is not None:
             self.cuda_module.gaussian_lod_mean.grad.zero_()
         if self.cuda_module.gaussian_lod_scale is not None:
@@ -137,27 +145,45 @@ class GaussianRaytracer:
         self.cuda_module.densification_gradient_diffuse.zero_()
         self.cuda_module.densification_gradient_glossy.zero_()
 
-    def __call__(self, viewpoint_camera,  pipe_params: PipelineParams, bg_color: torch.Tensor, blur_sigma, target = None, target_diffuse = None, target_glossy = None, target_position=None, target_normal=None, target_roughness=None, target_f0=None, target_brdf=None):
+    def __call__(
+        self,
+        viewpoint_camera,
+        pipe_params: PipelineParams,
+        bg_color: torch.Tensor,
+        blur_sigma,
+        target=None,
+        target_diffuse=None,
+        target_glossy=None,
+        target_position=None,
+        target_normal=None,
+        target_roughness=None,
+        target_f0=None,
+        target_brdf=None,
+    ):
         """
-        Render the scene. 
-        
+        Render the scene.
+
         Background tensor (bg_color) must be on GPU!
         """
 
         # *** time lost due to copies: 30s for 30000k iterations (~260k gaussians)
 
         with torch.no_grad():
-            R = torch.from_numpy(viewpoint_camera.R).cuda().float() if isinstance(viewpoint_camera.R, np.ndarray) else viewpoint_camera.R.cuda()
-            R_c2w_blender = -R 
-            R_c2w_blender[:, 0] = -R_c2w_blender[:, 0] 
+            R = (
+                torch.from_numpy(viewpoint_camera.R).cuda().float()
+                if isinstance(viewpoint_camera.R, np.ndarray)
+                else viewpoint_camera.R.cuda()
+            )
+            R_c2w_blender = -R
+            R_c2w_blender[:, 0] = -R_c2w_blender[:, 0]
 
             self.cuda_module.set_camera(
-                R_c2w_blender.contiguous(), 
-                viewpoint_camera.camera_center.contiguous(), 
+                R_c2w_blender.contiguous(),
+                viewpoint_camera.camera_center.contiguous(),
                 viewpoint_camera.FoVy,
                 viewpoint_camera.znear,
                 viewpoint_camera.zfar,
-                self.pc.model_params.lod_max_world_size_blur
+                self.pc.model_params.lod_max_world_size_blur,
             )
 
             self._export_param_values()
@@ -169,10 +195,12 @@ class GaussianRaytracer:
 
             if self.cuda_module.target_diffuse is not None:
                 if target_diffuse is not None:
-                    self.cuda_module.target_diffuse.copy_(target_diffuse.moveaxis(0, -1))
+                    self.cuda_module.target_diffuse.copy_(
+                        target_diffuse.moveaxis(0, -1)
+                    )
                 else:
                     self.cuda_module.target_diffuse.zero_()
-            
+
             if self.cuda_module.target_glossy is not None:
                 if target_glossy is not None:
                     self.cuda_module.target_glossy.copy_(target_glossy.moveaxis(0, -1))
@@ -181,31 +209,35 @@ class GaussianRaytracer:
 
             if self.cuda_module.target_position is not None:
                 if target_position is not None:
-                    self.cuda_module.target_position.copy_(target_position.moveaxis(0, -1)) 
+                    self.cuda_module.target_position.copy_(
+                        target_position.moveaxis(0, -1)
+                    )
                 else:
                     self.cuda_module.target_position.zero_()
-            
+
             if self.cuda_module.target_normal is not None:
                 if target_normal is not None:
-                    self.cuda_module.target_normal.copy_(target_normal.moveaxis(0, -1)) 
+                    self.cuda_module.target_normal.copy_(target_normal.moveaxis(0, -1))
                 else:
                     self.cuda_module.target_normal.zero_()
 
             if self.cuda_module.target_roughness is not None:
                 if target_roughness is not None:
-                    self.cuda_module.target_roughness.copy_(target_roughness.moveaxis(0, -1)) 
+                    self.cuda_module.target_roughness.copy_(
+                        target_roughness.moveaxis(0, -1)
+                    )
                 else:
                     self.cuda_module.target_roughness.zero_()
 
             if self.cuda_module.target_f0 is not None:
                 if target_f0 is not None:
-                    self.cuda_module.target_f0.copy_(target_f0.moveaxis(0, -1)) 
+                    self.cuda_module.target_f0.copy_(target_f0.moveaxis(0, -1))
                 else:
                     self.cuda_module.target_f0.zero_()
 
             if self.cuda_module.target_brdf is not None:
                 if target_brdf is not None:
-                    self.cuda_module.target_brdf.copy_(target_brdf.moveaxis(0, -1)) 
+                    self.cuda_module.target_brdf.copy_(target_brdf.moveaxis(0, -1))
                 else:
                     self.cuda_module.target_brdf.zero_()
 
@@ -219,4 +251,3 @@ class GaussianRaytracer:
         return {
             "render": self.cuda_module.output_rgb.clone(),
         }
-        

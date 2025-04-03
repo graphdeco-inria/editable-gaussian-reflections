@@ -19,7 +19,6 @@ from scene.tonemapping import *
 from utils.graphics_utils import getProjectionMatrix, getWorld2View2
 
 
-
 class Camera(nn.Module):
     def __init__(
         self,

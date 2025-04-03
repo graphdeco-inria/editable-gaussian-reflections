@@ -34,7 +34,6 @@ from scene.gaussian_model import BasicPointCloud
 from utils.graphics_utils import focal2fov, fov2focal, getWorld2View2
 
 
-
 @dataclass
 class CameraInfo:
     uid: int
