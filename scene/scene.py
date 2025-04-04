@@ -133,13 +133,24 @@ class Scene:
 
         self.autoadjust_zplanes()
         import sys
+
         sys.path.append(gaussians.model_params.raytracer_version)
         import raytracer_config
+
         if raytracer_config.MAX_BOUNCES > 0:
             scene_info.point_cloud = BasicPointCloud(
-                np.concatenate([scene_info.point_cloud.points, scene_info.extra_point_cloud.points]),
-                np.concatenate([scene_info.point_cloud.colors, scene_info.extra_point_cloud.colors]),
-                np.concatenate([scene_info.point_cloud.normals, scene_info.extra_point_cloud.normals])
+                np.concatenate(
+                    [scene_info.point_cloud.points, scene_info.extra_point_cloud.points]
+                ),
+                np.concatenate(
+                    [scene_info.point_cloud.colors, scene_info.extra_point_cloud.colors]
+                ),
+                np.concatenate(
+                    [
+                        scene_info.point_cloud.normals,
+                        scene_info.extra_point_cloud.normals,
+                    ]
+                ),
             )
 
         if self.loaded_iter:

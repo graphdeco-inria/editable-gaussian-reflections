@@ -13,6 +13,7 @@ import concurrent
 import json
 import os
 import sys
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -283,9 +284,6 @@ def readColmapSceneInfo(model_params, path, images, eval, llffhold=8):
     return scene_info
 
 
-from concurrent.futures import ThreadPoolExecutor
-
-
 def readCamerasFromTransforms(
     model_params, path, transformsfile, white_background, extension=".png"
 ):
@@ -428,7 +426,7 @@ def readNerfSyntheticInfo(model_params, path, white_background, eval, extension=
     print(f"Generating random point cloud ({num_rand_pts})...")
     rand_xyz = (
         np.random.random((num_rand_pts, 3)) * 2.6 - 1.3
-    ) * model_params.glossy_bbox_size_mult 
+    ) * model_params.glossy_bbox_size_mult
     rand_rgb = np.random.random((num_rand_pts, 3))
     extra_pcd = BasicPointCloud(
         points=rand_xyz,
