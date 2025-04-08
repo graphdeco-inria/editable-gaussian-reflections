@@ -26,7 +26,7 @@ from torchvision.utils import save_image
 from tqdm import tqdm
 
 from arguments import ModelParams, OptimizationParams, PipelineParams
-from gaussian_renderer import GaussianRaytracer, network_gui, render
+from gaussian_renderer import GaussianRaytracer, render
 from scene import GaussianModel, Scene
 from scene.gaussian_model import build_scaling_rotation
 from scene.tonemapping import *
@@ -40,6 +40,9 @@ from utils.general_utils import (
 from utils.graphics_utils import BasicPointCloud
 from utils.image_utils import psnr
 from utils.loss_utils import l1_loss, ssim
+from gaussianviewer import GaussianViewer
+from viewer.types import ViewerMode
+from threading import Thread
 
 try:
     from torch.utils.tensorboard import SummaryWriter
@@ -599,7 +602,9 @@ lp = ModelParams(parser)
 op = OptimizationParams(parser)
 pp = PipelineParams(parser)
 parser.add_argument("--ip", type=str, default="127.0.0.1")
-parser.add_argument("--port", type=int, default=6009)
+parser.add_argument("--port", type=int, default=8000)
+parser.add_argument("--viewer", action="store_true")
+parser.add_argument("--viewer_mode", type=str, default="local")
 parser.add_argument("--detect_anomaly", action="store_true", default=False)
 parser.add_argument("--flip_camera", action="store_true", default=False)
 # parser.add_argument("--test_iterations", nargs="+", type=int, default=[100, 500, 1_000, 2_500, 5_000, 10_000, 20_000, 30_000, 60_000, 90_000])
@@ -615,15 +620,18 @@ parser.add_argument(
 # parser.add_argument("--test_iterations", nargs="+", type=int, default=[30_000])
 # parser.add_argument("--save_iterations", nargs="+", type=int, default=[30_000])
 parser.add_argument("--quiet", action="store_true")
-parser.add_argument("--viewer", action="store_true")
 parser.add_argument("--checkpoint_iterations", nargs="+", type=int, default=[])
 parser.add_argument("--start_checkpoint", type=str, default=None)
 args = parser.parse_args(sys.argv[1:])
 args.save_iterations.append(args.iterations)
+
 torch.autograd.set_detect_anomaly(args.detect_anomaly)
 model_params = lp.extract(args)
 opt_params = op.extract(args)
 pipe_params = pp.extract(args)
+
+if args.viewer:
+    args.test_iterations.clear()
 
 if opt_params.slowdown != 1:
     opt_params.iterations = int(opt_params.slowdown * opt_params.iterations)
@@ -645,9 +653,7 @@ print("Optimizing " + args.model_path)
 # Initialize system state (RNG)
 safe_state(args.quiet)
 
-# Start GUI server, configure and run training
-if args.viewer:
-    network_gui.init(args.ip, args.port)
+
 
 first_iter = 0
 tb_writer = prepare_output_and_logger(model_params, opt_params)
@@ -672,6 +678,14 @@ viewpoint_stack = scene.getTrainCameras().copy()
 raytracer = GaussianRaytracer(gaussians, viewpoint_stack[0].image_width, viewpoint_stack[0].image_height)
 raytracer.cuda_module.num_samples.fill_(model_params.num_samples)
 
+if args.viewer:
+    mode = ViewerMode.LOCAL if args.viewer_mode == "local" else ViewerMode.SERVER
+    SPARSE_ADAM_AVAILABLE = False
+    viewer = GaussianViewer.from_gaussians(raytracer, model_params, opt_params, gaussians, SPARSE_ADAM_AVAILABLE, mode)
+    if args.viewer_mode != "none":
+        viewer_thd = Thread(target=viewer.run, daemon=True)
+        viewer_thd.start()
+
 ema_loss_for_log = 0.0
 first_iter += 1
 
@@ -685,39 +699,13 @@ elif model_params.max_one_bounce_until_iter > 0:
 for iteration in tqdm(
     range(first_iter, opt_params.iterations + 1), desc="Training progress"
 ):
-    if network_gui.conn == None:
-        network_gui.try_connect()
-    while network_gui.conn != None:
-        try:
-            net_image_bytes = None
-            (
-                custom_cam,
-                do_training,
-                pipe_params.convert_SHs_python,
-                pipe_params.compute_cov3D_python,
-                keep_alive,
-                scaling_modifer,
-            ) = network_gui.receive()
-            if custom_cam != None:
-                package = render(viewpoint_cam, raytracer, pipe_params, bg)
-                render = package.rgb[-1]
-                net_image_bytes = memoryview(
-                    (torch.clamp(net_image, min=0, max=1.0) * 255)
-                    .byte()
-                    .permute(1, 2, 0)
-                    .contiguous()
-                    .cpu()
-                    .numpy()
-                )
-            network_gui.send(net_image_bytes, model_params.source_path)
-            if do_training and (
-                (iteration < int(opt_params.iterations)) or not keep_alive
-            ):
-                break
-        except Exception as e:
-            network_gui.conn = None
+
 
     iter_start.record()
+
+    if args.viewer:
+        viewer.gaussian_lock.acquire()
+
     xyz_lr = gaussians.update_learning_rate(iteration)
     if not viewpoint_stack:
         viewpoint_stack = scene.getTrainCameras().copy()
@@ -997,6 +985,10 @@ for iteration in tqdm(
             )
             noise = torch.bmm(actual_covariance, noise.unsqueeze(-1)).squeeze(-1)
             gaussians._xyz.add_(noise)
+
+        if args.viewer:
+            viewer.gaussian_lock.release()
+
 
         if False:
             if iteration in args.checkpoint_iterations:

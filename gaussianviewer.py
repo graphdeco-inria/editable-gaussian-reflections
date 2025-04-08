@@ -114,6 +114,17 @@ class GaussianViewer(Viewer):
         # Render settings
         self.exposure = 1.0
         self.scaling_modifier = 1.0
+        
+        # Editing
+        self.metalness = 0.0
+        self.roughness = 0.0
+        self.hue = 0.0
+        self.saturation = 0.0
+        self.brightness = 0.0
+        self.spec_hue = 0.0
+        self.spec_saturation = 0.0
+        self.spec_brightness = 0.0
+
 
     def step(self):
         camera = self.camera
@@ -170,7 +181,6 @@ class GaussianViewer(Viewer):
 
         self.monitor.step([render_time])
 
-    
     def show_gui(self):
         with imgui_ctx.begin(f"Point View Settings"):
             _, self.render_mode = imgui.list_box("Render Mode", self.render_mode, self.render_modes)
@@ -186,8 +196,21 @@ class GaussianViewer(Viewer):
                 _, self.scaling_modifier = imgui.drag_float("Scaling Factor", self.scaling_modifier, v_min=0, v_max=10, v_speed=0.01)
                 _, self.exposure = imgui.drag_float("Exposure", self.exposure, v_min=0, v_max=3, v_speed=0.01)
 
+            imgui.separator_text("Editing")
+            _, self.metalness = imgui.drag_float("Metalness", self.metalness, v_min=0, v_max=1, v_speed=0.01)
+            _, self.roughness = imgui.drag_float("Roughness", self.roughness, v_min=0, v_max=1, v_speed=0.01)
+            _, self.hue = imgui.drag_float("Hue", self.hue, v_min=-1, v_max=1, v_speed=0.01)
+            _, self.saturation = imgui.drag_float("Saturation", self.saturation, v_min=-1, v_max=1, v_speed=0.01)
+            _, self.brightness = imgui.drag_float("Brightness", self.brightness, v_min=-1, v_max=1, v_speed=0.01)
+            _, self.spec_hue = imgui.drag_float("Specular Hue", self.spec_hue, v_min=-1, v_max=1, v_speed=0.01)
+            _, self.spec_saturation = imgui.drag_float("Specular Saturation", self.spec_saturation, v_min=-1, v_max=1, v_speed=0.01)
+            _, self.spec_brightness = imgui.drag_float("Specular Brightness", self.spec_brightness, v_min=-1, v_max=1, v_speed=0.01)
+            
             imgui.separator_text("Camera Settings")
             self.camera.show_gui()
+
+            imgui.separator_text("Editing")
+            _, self.ray_choice = imgui.list_box("Rays", self.ray_choice, self.ray_choices)
 
         with imgui_ctx.begin("Point View"):
             if self.render_modes[self.render_mode] == "Ellipsoids":
