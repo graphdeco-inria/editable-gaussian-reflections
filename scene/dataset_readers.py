@@ -66,11 +66,12 @@ def getNerfppNorm(cam_info):
 
 
 def read_dataset(dataset, num_workers=16):
+    max_workers = min(num_workers, os.cpu_count() or 1)
     dataloader = torch.utils.data.DataLoader(
         dataset,
         batch_size=1,
         shuffle=False,
-        num_workers=num_workers,
+        num_workers=max_workers,
         collate_fn=lambda x: x,
         persistent_workers=True,
     )
