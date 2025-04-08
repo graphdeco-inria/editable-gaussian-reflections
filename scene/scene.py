@@ -14,11 +14,16 @@ import math
 import os
 import random
 
+import numpy as np
 import torch
 
 from arguments import ModelParams
-from scene.dataset_readers import *
-from scene.gaussian_model import GaussianModel
+from scene.dataset_readers import (
+    readBlenderPriorSceneInfo,
+    readBlenderSceneInfo,
+    readColmapSceneInfo,
+)
+from scene.gaussian_model import BasicPointCloud, GaussianModel
 from utils.camera_utils import camera_to_JSON, cameraList_from_camInfos
 from utils.system_utils import searchForMaxIteration
 
@@ -57,15 +62,14 @@ class Scene:
         self.train_cameras = {}
         self.test_cameras = {}
 
-        assert os.path.exists(
-            os.path.join(model_params.source_path, "transforms_train.json")
-        ), "Cannot find transforms file"
-        scene_info = readNerfSyntheticInfo(
-            model_params,
-            model_params.source_path,
-            model_params.white_background,
-            model_params.eval,
-        )
+        data_dir = model_params.source_path
+        if os.path.exists(os.path.join(data_dir, "transforms_train.json")):
+            if os.path.isdir(os.path.join(data_dir, "train", "preview")):
+                scene_info = readBlenderPriorSceneInfo(model_params, data_dir)
+            else:
+                scene_info = readBlenderSceneInfo(model_params, data_dir)
+        else:
+            scene_info = readColmapSceneInfo(model_params, data_dir)
 
         scene_info.train_cameras = scene_info.train_cameras[
             :: model_params.keep_every_kth_view

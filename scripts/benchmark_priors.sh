@@ -1,14 +1,18 @@
 #!/bin/bash
 set -xe
 
-export LOAD_FROM_IMAGE_FILES=1
+# Used to load fallback exr files
 export OPENCV_IO_ENABLE_OPENEXR=1
 
 RAYTRACER_VERSION="../optix-gaussian-raytracing/build/v52/"
 
-SCENE_DIR="data/renders"
+# SCENE_DIR="data/shiny_dataset"
+# SCENE_LIST="shiny_kitchen shiny_livingroom shiny_office shiny_bedroom"
+# OUTPUT_DIR="output/benchmark_shiny_dataset"
+
+SCENE_DIR="data/shiny_dataset_priors"
 SCENE_LIST="shiny_kitchen shiny_livingroom shiny_office shiny_bedroom"
-OUTPUT_DIR="output/benchmark_v52"
+OUTPUT_DIR="output/benchmark_shiny_dataset_priors"
 
 for SCENE in $SCENE_LIST;
 do
