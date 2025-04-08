@@ -95,7 +95,7 @@ class GaussianViewer(Viewer):
         viewer.gaussians = gaussians
         viewer.separate_sh = separate_sh
         viewer.background = torch.tensor([0,0,0], dtype=torch.float32, device="cuda")
-        viewer.camera_poses = json.load(open(os.path.join(model_path, "cameras.json"), "r")) # todo fix
+        # viewer.camera_poses = json.load(open(os.path.join(model_path, "cameras.json"), "r")) # todo fix
         return viewer
 
     def create_widgets(self):
@@ -146,7 +146,7 @@ class GaussianViewer(Viewer):
                     nth_ray = self.ray_choice - 1
                     if mode_name == "RGB":
                         if nth_ray == -1:
-                            net_image = torch.randn_like(package.rgb[0])# tonemap(untonemap(package.rgb[:-1]).sum())
+                            net_image = package.rgb[-1]
                         else:
                             net_image = package.rgb[nth_ray]
                     elif mode_name == "Diffuse":
@@ -158,12 +158,11 @@ class GaussianViewer(Viewer):
                     elif mode_name == "Position":
                         net_image = package.position[max(nth_ray, 0)]
                     elif mode_name == "Illumination":
-                        net_image = torch.randn_like(package.rgb[0])#package.incident_radiance[max(nth_ray, 0)]
+                        net_image = self.raytracer.cuda_module.output_incident_radiance[max(nth_ray, 0)].moveaxis(-1, 0)
                     elif mode_name == "Roughness":
                         net_image = package.roughness[max(nth_ray, 0)]
 
-
-                net_image = tonemap(untonemap(net_image.permute(1, 2, 0))*self.exposure)
+                net_image = tonemap(untonemap(net_image.permute(1, 2, 0))*self.exposure) # todo only expose rgb
             end.record()
             end.synchronize()
             self.point_view.step(net_image)

@@ -42,13 +42,7 @@ def render(
     blur_sigma=None,
 ):
     
-
-    if iteration is not None:
-        do_backprop = (
-            torch.is_grad_enabled() and iteration > raytracer.pc.model_params.warmup
-        )
-    else:
-        do_backprop = torch.is_grad_enabled()
+    do_backprop = torch.is_grad_enabled()
 
     if do_backprop:
         target = camera.original_image
