@@ -522,9 +522,9 @@ class GaussianModel:
         opacities = np.asarray(plydata.elements[0]["opacity"])[..., np.newaxis]
 
         diffuse = np.zeros((xyz.shape[0], 3))
-        diffuse[:, 0] = np.asarray(plydata.elements[0][f"f_dc_0"])
-        diffuse[:, 1] = np.asarray(plydata.elements[0][f"f_dc_1"])
-        diffuse[:, 2] = np.asarray(plydata.elements[0][f"f_dc_2"])
+        diffuse[:, 0] = np.asarray(plydata.elements[0]["f_dc_0"])
+        diffuse[:, 1] = np.asarray(plydata.elements[0]["f_dc_1"])
+        diffuse[:, 2] = np.asarray(plydata.elements[0]["f_dc_2"])
 
         scale_names = [
             p.name
