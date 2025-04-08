@@ -21,6 +21,7 @@ from utils.sh_utils import eval_sh
 from torchvision.utils import save_image
 from arguments import ModelParams, PipelineParams, OptimizationParams
 import numpy as np
+import kornia
 
 LOADED = False
 
@@ -35,6 +36,8 @@ class GaussianRaytracer:
             )
             LOADED = True
 
+        self.image_width: int = image_width
+        self.image_height: int = image_height
         self.cuda_module = torch.classes.gausstracer.Raytracer(
             image_width,
             image_height,
@@ -81,7 +84,7 @@ class GaussianRaytracer:
         torch.cuda.synchronize()  #!!! remove
 
     @torch.no_grad()
-    def _export_param_values(self):
+    def _export_param_values(self, edits=None):
         self.cuda_module.gaussian_scales.copy_(self.pc._scaling)
         self.cuda_module.gaussian_rotations.copy_(self.pc._rotation)
         self.cuda_module.gaussian_means.copy_(self.pc._xyz)
@@ -90,15 +93,27 @@ class GaussianRaytracer:
             self.cuda_module.gaussian_lod_mean.copy_(self.pc._lod_mean)
         if self.cuda_module.gaussian_lod_scale is not None:
             self.cuda_module.gaussian_lod_scale.copy_(self.pc._lod_scale)
-        self.cuda_module.gaussian_rgb.copy_(self.pc._diffuse)
+        
+        if edits is not None:
+            #!!! softplus + weird clamping
+            hsv = kornia.color.rgb_to_hsv(self.pc._diffuse.T[None, :, :, None].nan_to_num(0.0).clamp(-1000, 1000))[0, :, :, 0].T
+            #hsv[:, 0] = (hsv[:, 0] + edits["hue"]) + 1
+            #hsv[:, 1] = torch.clamp(hsv[:,840 2] + edits["value"], 0, 1)
+            rgb = kornia.color.hsv_to_rgb(hsv.T[None, :, :, None])[0, :, :, 0].T
+            #rgb = torch.log(1 + torch.exp(rgb))
+        else:
+            rgb = self.pc._diffuse
+        self.cuda_module.gaussian_rgb.copy_(rgb)
         if self.cuda_module.gaussian_position is not None:
             self.cuda_module.gaussian_position.copy_(self.pc._position)
         if self.cuda_module.gaussian_normal is not None:
             self.cuda_module.gaussian_normal.copy_(self.pc._normal)
         if self.cuda_module.gaussian_roughness is not None:
-            self.cuda_module.gaussian_roughness.copy_(self.pc._roughness)
+            roughness = self.pc._roughness#.clamp(0) + (edits["roughness"] if edits is not None else 0)
+            self.cuda_module.gaussian_roughness.copy_(roughness)
         if self.cuda_module.gaussian_f0 is not None:
-            self.cuda_module.gaussian_f0.copy_(self.pc._f0)
+            f0 = self.pc._f0 + (edits["metalness"] if edits is not None else 0)
+            self.cuda_module.gaussian_f0.copy_(f0)
 
     @torch.no_grad()
     def _import_param_gradients(self):
@@ -160,6 +175,7 @@ class GaussianRaytracer:
         target_roughness=None,
         target_f0=None,
         target_brdf=None,
+        edits=None
     ):
         """
         Render the scene.
@@ -187,7 +203,7 @@ class GaussianRaytracer:
                 self.pc.model_params.lod_max_world_size_blur,
             )
 
-            self._export_param_values()
+            self._export_param_values(edits)
 
             if target is not None:
                 self.cuda_module.target_rgb.copy_(target.moveaxis(0, -1))
@@ -238,7 +254,7 @@ class GaussianRaytracer:
 
             if self.cuda_module.target_brdf is not None:
                 if target_brdf is not None:
-                    self.cuda_module.target_brdf.copy_(target_brdf.moveaxis(0, -1))
+                    self.cuda_module.target_brdr.copy_(target_brdf.moveaxis(0, -1))
                 else:
                     self.cuda_module.target_brdf.zero_()
 

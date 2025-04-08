@@ -40,7 +40,7 @@ def render(
     bg_color: torch.Tensor,
     iteration=None,
     blur_sigma=None,
-    **kwargs
+    edits=None
 ):
     
     do_backprop = torch.is_grad_enabled()
@@ -128,7 +128,7 @@ def render(
             target_roughness=_target_roughness,
             target_f0=_target_f0,
             target_brdf=_target_brdf,
-            **kwargs
+            edits=edits
         )
         # if blur_sigma is not None:
         raytracer.cuda_module.init_blur_sigma.fill_(0.0)

@@ -115,9 +115,9 @@ void main() {
     worldPos = ellipsoidRotation * (ellipsoidScale * boxVertices[vertexIndex]);
     worldPos += ellipsoidCenter;
 
-	float r = colors[boxID * 48 + 0] * 0.2 + 0.5;
-	float g = colors[boxID * 48 + 1] * 0.2 + 0.5;
-	float b = colors[boxID * 48 + 2] * 0.2 + 0.5;
+	float r = colors[boxID * 3 + 0];// + 0.5;
+	float g = colors[boxID * 3 + 1];// + 0.5;
+	float b = colors[boxID * 3 + 2];// + 0.5;
 
 	colorVert = vec3(r, g, b);
 	
@@ -190,7 +190,6 @@ vec3 closestEllipsoidIntersection(vec3 rayDirection, out vec3 normal) {
   
   // Convert normal vector to world space
   normal = normalize(ellipsoidRotation * localNormal);
-  
   // Convert intersection point back to world space
   vec3 intersection = ellipsoidRotation * localIntersection + ellipsoidCenter;
   
@@ -202,7 +201,7 @@ void main(void) {
 
 	vec3 normal;
 	vec3 intersection = closestEllipsoidIntersection(dir, normal);
-	float align = max(0.4, dot(-dir, normal));
+	float align = max(0.5, dot(-dir, normal));
 	
 	out_color = vec4(1, 0, 0, 1);
 	
@@ -216,7 +215,7 @@ void main(void) {
 
 	float a = stage == 0 ? 1.0 : 0.05f;
 
-	out_color = vec4(align * colorVert, a);
+	out_color = vec4(align * (colorVert + 0.05) * 3.0, a); 
 // 	out_id = boxID;
 }
 """

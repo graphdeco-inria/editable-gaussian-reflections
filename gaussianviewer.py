@@ -99,7 +99,7 @@ class GaussianViewer(Viewer):
         return viewer
 
     def create_widgets(self):
-        self.camera = FPSCamera(self.mode, 1297, 840, 47, 0.001, 100)
+        self.camera = FPSCamera(self.mode, self.raytracer.image_width, self.raytracer.image_height, 47, 0.001, 100)
         self.point_view = TorchImage(self.mode)
         self.ellipsoid_viewer = EllipsoidViewer(self.mode)
         self.monitor = PerformanceMonitor(self.mode, ["Render"], add_other=False)
@@ -120,10 +120,10 @@ class GaussianViewer(Viewer):
         self.roughness = 0.0
         self.hue = 0.0
         self.saturation = 0.0
-        self.brightness = 0.0
+        self.value = 0.0
         self.spec_hue = 0.0
         self.spec_saturation = 0.0
-        self.spec_brightness = 0.0
+        self.spec_value = 0.0
 
 
     def step(self):
@@ -153,7 +153,16 @@ class GaussianViewer(Viewer):
                 with self.gaussian_lock:
                     self.raytracer.cuda_module.global_scale_factor.copy_(self.scaling_modifier)
                     self.raytracer.cuda_module.update_bvh()
-                    package = render(camera, self.raytracer, self.pipe, self.background, blur_sigma=None)
+                    package = render(camera, self.raytracer, self.pipe, self.background, blur_sigma=None, edits=dict(
+                        metalness = self.metalness,
+                        roughness = self.roughness,
+                        hue = self.hue,
+                        saturation = self.saturation,
+                        value = self.value,
+                        spec_hue = self.spec_hue,
+                        spec_saturation = self.spec_saturation,
+                        spec_value = self.spec_value
+                    ))
                     self.raytracer.cuda_module.global_scale_factor.copy_(1.0)
 
                     mode_name = self.render_modes[self.render_mode]
@@ -210,13 +219,13 @@ class GaussianViewer(Viewer):
             _, self.metalness = imgui.drag_float("Metalness", self.metalness, v_min=0, v_max=1, v_speed=0.01)
             _, self.roughness = imgui.drag_float("Roughness", self.roughness, v_min=0, v_max=1, v_speed=0.01)
             imgui.separator_text("Diffuse Color")
-            _, self.hue = imgui.drag_float("Hue", self.hue, v_min=-1, v_max=1, v_speed=0.01)
-            _, self.saturation = imgui.drag_float("Saturation", self.saturation, v_min=-1, v_max=1, v_speed=0.01)
-            _, self.brightness = imgui.drag_float("Brightness", self.brightness, v_min=-1, v_max=1, v_speed=0.01)
+            _, self.hue = imgui.drag_float("Hue Shift", self.hue, v_min=-1, v_max=1, v_speed=0.01)
+            _, self.saturation = imgui.drag_float("Saturation Shift", self.saturation, v_min=-1, v_max=1, v_speed=0.01)
+            _, self.value = imgui.drag_float("Value Shift", self.value, v_min=-1, v_max=1, v_speed=0.01)
             imgui.separator_text("Specular Color")
-            _, self.spec_hue = imgui.drag_float("Specular Hue", self.spec_hue, v_min=-1, v_max=1, v_speed=0.01)
-            _, self.spec_saturation = imgui.drag_float("Specular Saturation", self.spec_saturation, v_min=-1, v_max=1, v_speed=0.01)
-            _, self.spec_brightness = imgui.drag_float("Specular Brightness", self.spec_brightness, v_min=-1, v_max=1, v_speed=0.01)
+            _, self.spec_hue = imgui.drag_float("Hue Shift", self.spec_hue, v_min=-1, v_max=1, v_speed=0.01)
+            _, self.spec_saturation = imgui.drag_float("Saturation Shift", self.spec_saturation, v_min=-1, v_max=1, v_speed=0.01)
+            _, self.spec_value = imgui.drag_float("Value Shift", self.spec_value, v_min=-1, v_max=1, v_speed=0.01)
             
 
         with imgui_ctx.begin("Point View"):
