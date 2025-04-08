@@ -294,6 +294,9 @@ if __name__ == "__main__":
     else:
         viewer = GaussianViewer.from_ply(args.model_path, args.iter, mode)
 
-    viewer.run(args.ip, args.port)
+    if args.mode == "server":
+        viewer.run(args.ip, args.port)
+    else:
+        viewer.run()
 
     #  xvfb-run -s "-screen 0 1400x900x24" python gaussianviewer.py server output/tmp2 7000 --ip 0.0.0.0
