@@ -12,10 +12,10 @@
 import os
 import torch
 import math
-from diff_gaussian_rasterization import (
-    GaussianRasterizationSettings,
-    GaussianRasterizer,
-)
+# from diff_gaussian_rasterization import (
+#     GaussianRasterizationSettings,
+#     GaussianRasterizer,
+# )
 from scene.gaussian_model import GaussianModel
 from utils.sh_utils import eval_sh
 from torchvision.utils import save_image
@@ -26,7 +26,8 @@ LOADED = False
 
 
 class GaussianRaytracer:
-    def __init__(self, pc: GaussianModel, example_camera):
+    
+    def __init__(self, pc: GaussianModel, image_width: int, image_height: int):
         global LOADED
         if not LOADED:
             torch.classes.load_library(
@@ -35,8 +36,8 @@ class GaussianRaytracer:
             LOADED = True
 
         self.cuda_module = torch.classes.gausstracer.Raytracer(
-            example_camera.image_width,
-            example_camera.image_height,
+            image_width,
+            image_height,
             pc.get_scaling.shape[0],
         )
 

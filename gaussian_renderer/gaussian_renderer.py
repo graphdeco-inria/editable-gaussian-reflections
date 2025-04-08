@@ -11,10 +11,10 @@
 
 import torch
 import math
-from diff_gaussian_rasterization import (
-    GaussianRasterizationSettings,
-    GaussianRasterizer,
-)
+# from diff_gaussian_rasterization import (
+#     GaussianRasterizationSettings,
+#     GaussianRasterizer,
+# )
 from scene.gaussian_model import GaussianModel
 from utils.sh_utils import eval_sh
 import contextlib
@@ -41,14 +41,7 @@ def render(
     iteration=None,
     blur_sigma=None,
 ):
-    target = camera.original_image
-    target_diffuse = camera.diffuse_image
-    target_glossy = camera.glossy_image
-    target_position = camera.position_image
-    target_normal = camera.normal_image
-    target_f0 = camera.F0_image
-    target_roughness = camera.roughness_image.mean(dim=0, keepdim=True)
-    target_brdf = camera.brdf_image
+    
 
     if iteration is not None:
         do_backprop = (
@@ -57,6 +50,25 @@ def render(
     else:
         do_backprop = torch.is_grad_enabled()
 
+    if do_backprop:
+        target = camera.original_image
+        target_diffuse = camera.diffuse_image
+        target_glossy = camera.glossy_image
+        target_position = camera.position_image
+        target_normal = camera.normal_image
+        target_f0 = camera.F0_image
+        target_roughness = camera.roughness_image.mean(dim=0, keepdim=True)
+        target_brdf = camera.brdf_image
+    else:
+        target = None
+        target_diffuse = None
+        target_glossy = None
+        target_position = None
+        target_normal = None
+        target_roughness = None
+        target_f0 = None
+        target_brdf = None
+        
     if blur_sigma is not None:
         if not isinstance(blur_sigma, torch.Tensor):
             blur_sigma = torch.tensor(blur_sigma)
