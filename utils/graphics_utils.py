@@ -82,3 +82,18 @@ def fov2focal(fov, pixels):
 
 def focal2fov(focal, pixels):
     return 2 * math.atan(pixels / (2 * focal))
+
+def transform_normals_to_world(normals_camera, view_matrix):
+    # Extract the rotation part of the view matrix (3x3 upper-left submatrix)
+    # rotation_inv = np.linalg.inv(view_matrix[:3, :3])
+    normals_camera = -1 * normals_camera
+    rotation_inv = view_matrix
+
+    # # Normalize input normals (optional but recommended)
+    normals_camera = normals_camera / np.linalg.norm(
+        normals_camera, axis=-1, keepdims=True
+    )
+
+    # Transform normals from camera to world space
+    normals_world = np.einsum("ij,...j->...i", rotation_inv, normals_camera)
+    return normals_world
