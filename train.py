@@ -669,7 +669,9 @@ iter_start = torch.cuda.Event(enable_timing=True)
 iter_end = torch.cuda.Event(enable_timing=True)
 
 viewpoint_stack = scene.getTrainCameras().copy()
-raytracer = GaussianRaytracer(gaussians, viewpoint_stack[0])
+raytracer = GaussianRaytracer(
+    gaussians, viewpoint_stack[0].image_width, viewpoint_stack[0].image_height
+)
 raytracer.cuda_module.num_samples.fill_(model_params.num_samples)
 
 ema_loss_for_log = 0.0
