@@ -26,7 +26,6 @@ class ColmapDataset:
         self.do_eval = model_params.eval
         self.images_folder = os.path.join(self.data_dir, "images")
         self.priors_folder = os.path.join(self.data_dir, "priors")
-        assert model_params.linear_space
 
         try:
             cameras_extrinsic_file = os.path.join(data_dir, "sparse/0", "images.bin")

@@ -18,7 +18,6 @@ class BlenderDataset:
         self.data_dir = data_dir
         self.split = split
         self.cache_dir = data_dir.replace("/renders/", "/cache/")
-        assert model_params.linear_space
 
         transform_path = os.path.join(data_dir, f"transforms_{split}.json")
         with open(transform_path) as json_file:
@@ -58,10 +57,10 @@ class BlenderDataset:
                 normal_image,
                 position_image,
                 roughness_image,
+                specular_image,
                 metalness_image,
                 base_color_image,
                 brdf_image,
-                specular_image,
             ) = torch.unbind(image_tensor, dim=0)
             height, width = image.shape[0], image.shape[1]
         else:
