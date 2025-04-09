@@ -113,7 +113,6 @@ class ModelParams(ParamGroup):
 
         self.downsampling_mode = "area"
 
-        self.linear_space = True
         self.exposure = 1.0
         self.raytrace_primal = False
 
@@ -121,9 +120,10 @@ class ModelParams(ParamGroup):
         self.cap_max = -1  # for mcmc
 
         self.use_opacity_resets = False
-
         self.init_scale_factor = 1.0  # 1.0 for 3dgs, 0.1 for mcmc
         self.init_opacity = 0.1  # 0.1 for 3dgs, 0.5 for mcmc
+        self.init_roughness = 0.1
+        self.init_f0 = 0.04
 
         self.diffuse_loss_weight = 1.0
         self.glossy_loss_weight = 0.0001  # ! was 0.001
@@ -135,7 +135,7 @@ class ModelParams(ParamGroup):
         self.albedo_loss_weight = 1.0
         self.metalness_loss_weight = 1.0
 
-        if "DIFFUSE_IS_RENDER" in os.environ:
+        if "ONLY_DIFFUSE_LOSS" in os.environ:
             self.diffuse_loss_weight = 1.0
             self.glossy_loss_weight = 0.0
             self.normal_loss_weight = 0.0
@@ -168,6 +168,7 @@ class ModelParams(ParamGroup):
         self.enable_regular_loss_at_iter = -1
 
         self.num_samples = 1
+        self.skip_n_images = 0
 
         super().__init__(parser, "Loading Parameters", sentinel)
 
@@ -229,7 +230,7 @@ class OptimizationParams(ParamGroup):
         self.densification_interval = (
             100  # # was 100 in 3dgs, 500 to fix LOD densification
         )
-        self.opacity_reset_interval = 3000
+        self.opacity_reset_interval = 999999999999 # Doesn't change metrics in 3dgs, may cause issues
         self.densify_from_iter = 500  # was 500 in 3dgs, 1500 when doing LOD
         self.densify_until_iter = 15_000  # was 25k in mcmc
         self.densify_grad_threshold = 0.0002
@@ -252,6 +253,8 @@ class OptimizationParams(ParamGroup):
 
         self.sh_slowdown_factor = 20.0
         self.random_background = False
+
+        
 
         super().__init__(parser, "Optimization Parameters")
 

@@ -49,10 +49,7 @@ class GaussianModel:
 
         self.rotation_activation = torch.nn.functional.normalize
 
-        if self.model_params.linear_space:
-            self.diffuse_activation = torch.nn.functional.softplus
-        else:
-            self.diffuse_activation = torch.sigmoid
+        self.diffuse_activation = lambda x: x
 
     def __init__(self, model_params: ModelParams):
         self.model_params = model_params
@@ -280,17 +277,12 @@ class GaussianModel:
         self._position = nn.Parameter(fused_point_cloud.clone())
         self._normal = nn.Parameter(fused_normal.clone())
         self._roughness = nn.Parameter(
-            torch.zeros((fused_point_cloud.shape[0], 1), device="cuda")
+            torch.ones((fused_point_cloud.shape[0], 1), device="cuda") * self.model_params.init_roughness
         )
         self._f0 = nn.Parameter(
-            torch.zeros((fused_point_cloud.shape[0], 3), device="cuda")
+            torch.ones((fused_point_cloud.shape[0], 3), device="cuda") * self.model_params.init_f0
         )
-        if "DIRECT_DIFFUSE" in os.environ:
-            self._diffuse = nn.Parameter(fused_color.clone())
-        else:
-            self._diffuse = nn.Parameter(
-                torch.log(torch.exp(untonemap(fused_color.clone())) - 1)
-            )
+        self._diffuse = nn.Parameter(fused_color.clone())
         self._scaling = nn.Parameter(scales.requires_grad_(True))
         self._rotation = nn.Parameter(rots.requires_grad_(True))
         self._opacity = nn.Parameter(opacities.requires_grad_(True))
