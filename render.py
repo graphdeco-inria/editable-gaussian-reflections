@@ -367,27 +367,27 @@ def render_set(
                     )
 
                 all_renders.append(format_image(pred_image))
-                all_gts.append(format_image(package.target))
+                # all_gts.append(format_image(package.target))
 
                 all_diffuse_renders.append(format_image(package.rgb[0]))
-                all_diffuse_gts.append(format_image(package.target_diffuse))
+                # all_diffuse_gts.append(format_image(package.target_diffuse))
 
                 all_glossy_renders.append(format_image(glossy_image))
-                all_glossy_gts.append(format_image(package.target_glossy))
+                # all_glossy_gts.append(format_image(package.target_glossy))
 
                 all_position_renders.append(format_image(package.position[0]))
-                all_position_gts.append(format_image(package.target_position))
+                # all_position_gts.append(format_image(package.target_position))
 
                 all_normal_renders.append(format_image(package.normal[0] / 2 + 0.5))
-                all_normal_gts.append(format_image(package.target_normal / 2 + 0.5))
+                # all_normal_gts.append(format_image(package.target_normal / 2 + 0.5))
 
                 all_roughness_renders.append(format_image(package.roughness[0]))
-                all_roughness_gts.append(
-                    format_image(package.target_roughness.repeat(3, 1, 1))
-                )
+                # all_roughness_gts.append(
+                #     format_image(package.target_roughness.repeat(3, 1, 1))
+                # )
 
                 all_F0_renders.append(format_image(package.F0[0]))
-                all_F0_gts.append(format_image(package.target_f0))
+                # all_F0_gts.append(format_image(package.target_f0))
 
             blur_suffix = f"_blur_{blur_sigma}" if blur_sigma is not None else ""
             video_dir = f"videos_{mode}{blur_suffix}/".replace("_normal", "")
@@ -588,7 +588,10 @@ def render_sets(model_params: ModelParams, iteration: int, pipeline: PipelinePar
         with torch.no_grad():
             gaussians._scaling.copy_(torch.log(gaussians.get_scaling.clamp(1e-3)))
 
-    raytracer = GaussianRaytracer(gaussians, scene.getTrainCameras()[0])
+    viewpoint_stack = scene.getTrainCameras().copy()
+    raytracer = GaussianRaytracer(
+        gaussians, viewpoint_stack[0].image_width, viewpoint_stack[0].image_height
+    )
     raytracer.cuda_module.num_samples.fill_(model_params.num_samples)
 
     if args.train_views:
@@ -686,8 +689,8 @@ if __name__ == "__main__":
     args = get_combined_args(parser)
     print("Rendering " + args.model_path)
 
-    if not args.train_views:
-        args.max_images = min(100, args.max_images)
+    # if not args.train_views:
+    #     args.max_images = min(100, args.max_images)
 
     # Initialize system state (RNG)
     safe_state(args.quiet)

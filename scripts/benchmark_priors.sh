@@ -4,6 +4,7 @@ set -xe
 # Used to load fallback exr files
 export OPENCV_IO_ENABLE_OPENEXR=1
 
+RESOLUTION=512
 RAYTRACER_VERSION="../optix-gaussian-raytracing/build/v52/"
 
 SCENE_DIR="data/shiny_dataset_priors"
@@ -23,13 +24,13 @@ do
     python train.py \
         -s $SCENE_DIR/$SCENE \
         -m $OUTPUT_DIR/$SCENE \
-        -r 768 \
+        -r $RESOLUTION \
         --eval \
         --raytracer_version $RAYTRACER_VERSION
 
     python render.py \
         -s $SCENE_DIR/$SCENE \
         -m $OUTPUT_DIR/$SCENE \
-        -r 768 \
+        -r $RESOLUTION \
         --raytracer_version $RAYTRACER_VERSION
 done
