@@ -5,7 +5,9 @@ import torch
 from PIL import Image
 
 from arguments import ModelParams
-from utils.graphics_utils import focal2fov, fov2focal, transform_normals_to_world
+from scene.gaussian_model import BasicPointCloud
+from utils.depth_utils import transform_normals_to_world
+from utils.graphics_utils import focal2fov, fov2focal
 
 from .camera_info import CameraInfo
 from .colmap_loader import (
@@ -14,6 +16,8 @@ from .colmap_loader import (
     read_extrinsics_text,
     read_intrinsics_binary,
     read_intrinsics_text,
+    read_points3D_binary,
+    read_points3D_text,
 )
 
 
@@ -87,16 +91,19 @@ class ColmapDataset:
         image = self._get_buffer(frame_name, "image")
         albedo_image = self._get_buffer(frame_name, "albedo")
         irradiance_image = self._get_buffer(frame_name, "irradiance")
+        normal_image = self._get_buffer(frame_name, "normal")
         diffuse_image = (albedo_image * irradiance_image).clip(0.0, 1.0)
         glossy_image = (image - diffuse_image).clip(0.0, 1.0)
-        normal_image = self._get_buffer(frame_name, "normal", R=R)
-
         position_image = torch.zeros_like(image)
         roughness_image = torch.zeros_like(image)
         specular_image = torch.zeros_like(image)
         metalness_image = torch.zeros_like(image)
         brdf_image = torch.zeros_like(image)
 
+        # Postprocess buffers
+        normal_image = transform_normals_to_world(
+            normal_image, torch.tensor(R, dtype=torch.float32)
+        )
         diffuse_image = diffuse_image * self.model_params.exposure
         glossy_image = glossy_image * self.model_params.exposure
 
@@ -144,3 +151,17 @@ class ColmapDataset:
             return torch.tensor(irradiance)
         else:
             raise ValueError(f"Buffer name not recognized: {buffer_name}")
+
+    def get_point_cloud(self) -> BasicPointCloud:
+        bin_path = os.path.join(self.data_dir, "sparse/0/points3D.bin")
+        txt_path = os.path.join(self.data_dir, "sparse/0/points3D.txt")
+        try:
+            xyz, rgb, _ = read_points3D_binary(bin_path)
+        except:
+            xyz, rgb, _ = read_points3D_text(txt_path)
+        pcd = BasicPointCloud(
+            points=xyz,
+            colors=rgb / 255.0,
+            normals=np.zeros_like(xyz),
+        )
+        return pcd

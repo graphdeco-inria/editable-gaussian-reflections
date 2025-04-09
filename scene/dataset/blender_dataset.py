@@ -7,9 +7,14 @@ import numpy as np
 import torch
 
 from arguments import ModelParams
+from scene.gaussian_model import BasicPointCloud
 from utils.graphics_utils import focal2fov, fov2focal
 
 from .camera_info import CameraInfo
+from .colmap_loader import (
+    read_points3D_binary,
+    read_points3D_text,
+)
 
 
 class BlenderDataset:
@@ -113,3 +118,17 @@ class BlenderDataset:
         image = cv2.imread(buffer_path, cv2.IMREAD_UNCHANGED)
         image = torch.tensor(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
         return image
+
+    def get_point_cloud(self) -> BasicPointCloud:
+        bin_path = os.path.join(self.data_dir, "sparse/0/points3D.bin")
+        txt_path = os.path.join(self.data_dir, "sparse/0/points3D.txt")
+        try:
+            xyz, rgb, _ = read_points3D_binary(bin_path)
+        except:
+            xyz, rgb, _ = read_points3D_text(txt_path)
+        pcd = BasicPointCloud(
+            points=xyz,
+            colors=rgb / 255.0,
+            normals=np.zeros_like(xyz),
+        )
+        return pcd
