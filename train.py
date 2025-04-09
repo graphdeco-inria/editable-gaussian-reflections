@@ -612,7 +612,7 @@ parser.add_argument("--flip_camera", action="store_true", default=False)
 # parser.add_argument("--test_iterations", nargs="+", type=int, default=[1_000, 3_000, 7_000, 15_000, 22_500, 30_000, 60_000, 90_000])
 # parser.add_argument("--save_iterations", nargs="+", type=int, default=[1_000, 3_000, 7_000, 15_000, 22_500, 30_000, 60_000, 90_000])
 parser.add_argument(
-    "--test_iterations", nargs="+", type=int, default=[1_000, 7_000, 15_000, 30_000]
+    "--test_iterations", nargs="+", type=int, default=[1, 1_000, 3_000, 7_000, 15_000, 30_000]
 )
 parser.add_argument(
     "--save_iterations", nargs="+", type=int, default=[1_000, 7_000, 15_000, 30_000]
@@ -653,8 +653,6 @@ print("Optimizing " + args.model_path)
 # Initialize system state (RNG)
 safe_state(args.quiet)
 
-
-
 first_iter = 0
 tb_writer = prepare_output_and_logger(model_params, opt_params)
 
@@ -665,8 +663,8 @@ scene = Scene(model_params, gaussians)
 gaussians.training_setup(opt_params)
 
 if args.start_checkpoint:
-    (model_params, first_iter) = torch.load(args.start_checkpoint)
-    gaussians.restore(model_params, opt_params)
+    (capture_data, first_iter) = torch.load(args.start_checkpoint, weights_only=False) #!!! Cant release like this, security risk
+    gaussians.restore(capture_data, opt_params)
 
 bg_color = [1, 1, 1] if model_params.white_background else [0, 0, 0]
 background = torch.tensor(bg_color, dtype=torch.float32, device="cuda")
@@ -696,11 +694,15 @@ if model_params.no_bounces_until_iter > 0:
 elif model_params.max_one_bounce_until_iter > 0:
     raytracer.cuda_module.num_bounces.copy_(min(raytracer.config.MAX_BOUNCES, 1))
 
+if model_params.warmup_until_iter > 0:
+    os.environ["DIFFUSE_LOSS_WEIGHT"] = str(model_params.warmup_diffuse_loss_weight)
+    raytracer.cuda_module.set_losses(True)
+
 for iteration in tqdm(
-    range(first_iter, opt_params.iterations + 1), desc="Training progress"
+    range(first_iter, opt_params.iterations + 1), desc="Training progress",
+    total=opt_params.iterations,
+    initial=first_iter
 ):
-
-
     iter_start.record()
 
     if args.viewer:
@@ -941,6 +943,11 @@ for iteration in tqdm(
         gaussians.optimizer.zero_grad(set_to_none=False)
         raytracer.zero_grad()
 
+        with torch.no_grad():
+            gaussians._diffuse.data.clamp_(min=0.0)
+            gaussians._roughness.data.clamp_(min=0.0, max=1.0)
+            gaussians._f0.data.clamp_(min=0.0, max=1.0)
+
         if raytracer.config.USE_LEVEL_OF_DETAIL:
             with torch.no_grad():
                 gaussians._lod_mean.data.clamp_(min=0)
@@ -989,15 +996,17 @@ for iteration in tqdm(
         if args.viewer:
             viewer.gaussian_lock.release()
 
+        if iteration in args.checkpoint_iterations:
+            print("\n[ITER {}] Saving Checkpoint".format(iteration))
+            torch.save(
+                (gaussians.capture(), iteration),
+                scene.model_path + "/chkpnt" + str(iteration) + ".pth",
+            )
 
-        if False:
-            if iteration in args.checkpoint_iterations:
-                print("\n[ITER {}] Saving Checkpoint".format(iteration))
-                torch.save(
-                    (gaussians.capture(), iteration),
-                    scene.model_path + "/chkpnt" + str(iteration) + ".pth",
-                )
-
+    if iteration == model_params.warmup_until_iter:
+        os.environ["DIFFUSE_LOSS_WEIGHT"] = str(model_params.diffuse_loss_weight)
+        raytracer.cuda_module.set_losses(True)
+        
     if iteration == model_params.no_bounces_until_iter:
         raytracer.cuda_module.num_bounces.copy_(min(raytracer.config.MAX_BOUNCES, 1))
 
@@ -1008,7 +1017,7 @@ for iteration in tqdm(
         raytracer.cuda_module.num_bounces.copy_(raytracer.config.MAX_BOUNCES)
 
     if iteration == model_params.rebalance_losses_at_iter:
-        os.environ["GLOSSY_LOSS_WEIGHT"] = str(
+        os.environ["GLOSSY_LOSS_WEIGHT"] = str( 
             model_params.glossy_loss_weight_after_rebalance
         )
         os.environ["DIFFUSE_LOSS_WEIGHT"] = str(

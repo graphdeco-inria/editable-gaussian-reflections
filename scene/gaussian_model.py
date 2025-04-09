@@ -1069,24 +1069,20 @@ class GaussianModel:
     def add_densification_stats_3d(self, gradient_diffuse, gradient_glossy):
         update_filter = self._opacity.grad[:, 0] != 0
 
-        if "GLOSS_DENS_ONLY" in os.environ:
-            import inspect
-
-            frame = inspect.currentframe().f_back
-            iteration = frame.f_locals["iteration"]
-            if iteration > 500:
-                self.xyz_gradient_accum[update_filter, 0] += score_glossy
-        elif "DIFFUSE_DENS_ONLY" in os.environ:
-            self.xyz_gradient_accum[update_filter, 0] += score_diffuse
-        elif "DENS_GLOSS" in os.environ:
-            self.xyz_gradient_accum[update_filter, 0] += (
-                score_diffuse + float(os.environ["DENS_GLOSS"]) * score_glossy
-            )
+        if "DIFFUSE_DENS_ONLY" in os.environ:
+            gradient_diffuse = gradient_diffuse[update_filter]
+            score_diffuse = gradient_diffuse.norm(dim=-1, keepdim=True)
+            self.xyz_gradient_accum[update_filter] += score_diffuse
+        elif "GLOSSY_DENS_ONLY" in os.environ:
+            gradient_glossy = gradient_glossy[update_filter]
+            score_glossy = gradient_glossy.norm(dim=-1, keepdim=True)
+            self.xyz_gradient_accum[update_filter] += score_glossy
         elif "DBG_FALLBACK_DENS" in os.environ:
             self.xyz_gradient_accum[update_filter] += self._xyz.grad[
                 update_filter
             ].norm(dim=-1, keepdim=True)
-        else:
+        else: 
+            # todo disable glossy if the total gradient is zero
             gradient_diffuse = gradient_diffuse[update_filter]
             gradient_glossy = gradient_glossy[update_filter]
             normalize_grad_diffuse = (

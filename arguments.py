@@ -125,7 +125,8 @@ class ModelParams(ParamGroup):
         self.init_roughness = 0.1
         self.init_f0 = 0.04
 
-        self.diffuse_loss_weight = 1.0
+        self.warmup_diffuse_loss_weight = 10000.0
+        self.diffuse_loss_weight = 5.0
         self.glossy_loss_weight = 0.0001  # ! was 0.001
         self.normal_loss_weight = 1.0
         self.position_loss_weight = 1.0
@@ -136,7 +137,7 @@ class ModelParams(ParamGroup):
         self.metalness_loss_weight = 1.0
 
         if "ONLY_DIFFUSE_LOSS" in os.environ:
-            self.diffuse_loss_weight = 1.0
+            self.diffuse_loss_weight = 5.0
             self.glossy_loss_weight = 0.0
             self.normal_loss_weight = 0.0
             self.position_loss_weight = 0.0
@@ -160,11 +161,12 @@ class ModelParams(ParamGroup):
         self.use_glossy_target = False
 
         self.sparseness = -1
+        self.warmup_until_iter = 0
         self.no_bounces_until_iter = 3_000
-        self.max_one_bounce_until_iter = 7_000
+        self.max_one_bounce_until_iter = 15_000
         self.diffuse_loss_weight_after_rebalance = 1.0
         self.glossy_loss_weight_after_rebalance = 1.0
-        self.rebalance_losses_at_iter = 15000
+        self.rebalance_losses_at_iter = 22500
         self.enable_regular_loss_at_iter = -1
 
         self.num_samples = 1
