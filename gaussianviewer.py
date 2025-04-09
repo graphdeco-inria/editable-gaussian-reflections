@@ -12,6 +12,20 @@ from viewer.widgets.ellipsoid_viewer import EllipsoidViewer
 from scene.tonemapping import *
 import json 
 from argparse import ArgumentParser, Namespace
+from imgui_bundle import imgui_ctx, imgui, imguizmo
+
+
+gizmo = imguizmo.im_guizmo
+
+Matrix3 = gizmo.Matrix3
+Matrix6 = gizmo.Matrix6
+Matrix16 = gizmo.Matrix16
+
+from viewer.widgets.ellipsoid_viewer import EllipsoidViewer
+
+class Dummy(object):
+    pass
+
 
 class Dummy(object):
     pass
@@ -110,14 +124,19 @@ class GaussianViewer(Viewer):
         
         self.ray_choices = ["All/Default"] + ["Ray " + str(i) for i in range(self.ray_count)] 
         self.ray_choice = 0
+
+        self.brdf_selection_choice = 0
+        self.brdf_selection_options = ["None", "Cup", "Table", "Shelf", "All"]
         
         # Render settings
         self.exposure = 1.0
         self.scaling_modifier = 1.0
         
         # Editing
-        self.metalness = 0.0
-        self.roughness = 0.0
+        self.reflectivity_shift = 0.0
+        self.reflectivity_mult = 0.0
+        self.roughness_shift = 0.0
+        self.roughness_mult = 0.0
         self.hue = 0.0
         self.saturation = 0.0
         self.value = 0.0
@@ -152,16 +171,20 @@ class GaussianViewer(Viewer):
             with torch.no_grad():
                 with self.gaussian_lock:
                     self.raytracer.cuda_module.global_scale_factor.copy_(self.scaling_modifier)
-                    self.raytracer.cuda_module.update_bvh()
+                    if self.scaling_modifier != 1.0:
+                        self.raytracer.cuda_module.update_bvh()
                     package = render(camera, self.raytracer, self.pipe, self.background, blur_sigma=None, edits=dict(
-                        metalness = self.metalness,
-                        roughness = self.roughness,
+                        reflectivity_shift = self.reflectivity_shift,
+                        reflectivity_mult = self.reflectivity_mult,
+                        roughness_shift = self.roughness_shift,
+                        roughness_mult = self.roughness_mult,
                         hue = self.hue,
                         saturation = self.saturation,
                         value = self.value,
                         spec_hue = self.spec_hue,
                         spec_saturation = self.spec_saturation,
-                        spec_value = self.spec_value
+                        spec_value = self.spec_value,
+                        # selection= put the selection mask here
                     ))
                     self.raytracer.cuda_module.global_scale_factor.copy_(1.0)
 
@@ -197,11 +220,13 @@ class GaussianViewer(Viewer):
         self.monitor.step([render_time])
 
     def show_gui(self):
+        gizmo.begin_frame()
         with imgui_ctx.begin(f"Point View Settings"):
             _, self.render_mode = imgui.list_box("Render Mode", self.render_mode, self.render_modes)
-            _, self.ray_choice = imgui.list_box("Rays", self.ray_choice, self.ray_choices)
+            _, self.ray_choice = imgui.list_box("Displayed Rays", self.ray_choice, self.ray_choices)
 
             imgui.separator_text("Render Settings")
+
             if self.render_modes[self.render_mode] == "Ellipsoids":
                 _, self.ellipsoid_viewer.scaling_modifier = imgui.drag_float("Scaling Factor", self.ellipsoid_viewer.scaling_modifier, v_min=0, v_max=10, v_speed=0.01)
                 
@@ -209,26 +234,50 @@ class GaussianViewer(Viewer):
                 _, self.ellipsoid_viewer.limit = imgui.drag_float("Alpha Threshold", self.ellipsoid_viewer.limit, v_min=0, v_max=1, v_speed=0.01)
             else:
                 _, self.scaling_modifier = imgui.drag_float("Scaling Factor", self.scaling_modifier, v_min=0, v_max=10, v_speed=0.01)
+                
                 _, self.exposure = imgui.drag_float("Exposure", self.exposure, v_min=0, v_max=6, v_speed=0.01)
 
-          
             imgui.separator_text("Camera Settings")
             self.camera.show_gui()
 
-            imgui.separator_text("BRDF Increment/Decrement")
-            _, self.metalness = imgui.drag_float("Metalness", self.metalness, v_min=0, v_max=1, v_speed=0.01)
-            _, self.roughness = imgui.drag_float("Roughness", self.roughness, v_min=0, v_max=1, v_speed=0.01)
-            imgui.separator_text("Diffuse Color")
+            imgui.separator_text("BRDF Editing")
+
+            clicked, selected_index = imgui.combo("Selection", self.brdf_selection_choice, self.brdf_selection_options)
+
+            imgui.text("Surface")
+            _, self.roughness_shift = imgui.drag_float("Roughness Shift", self.roughness_shift, v_min=-1, v_max=1, v_speed=0.01)
+            _, self.roughness_mult = imgui.drag_float("Roughness Mult", self.roughness_mult, v_min=0, v_max=1, v_speed=0.01)
+            _, self.reflectivity_shift = imgui.drag_float("Reflectivity Shift", self.reflectivity_shift, v_min=-1, v_max=1, v_speed=0.01)
+            _, self.reflectivity_mult = imgui.drag_float("Reflectivity Mult", self.reflectivity_mult, v_min=0, v_max=1, v_speed=0.01)
+            imgui.text("Diffuse Color")
             _, self.hue = imgui.drag_float("Hue Shift", self.hue, v_min=-1, v_max=1, v_speed=0.01)
             _, self.saturation = imgui.drag_float("Saturation Shift", self.saturation, v_min=-1, v_max=1, v_speed=0.01)
             _, self.value = imgui.drag_float("Value Shift", self.value, v_min=-1, v_max=1, v_speed=0.01)
-            imgui.separator_text("Specular Color")
-            _, self.spec_hue = imgui.drag_float("Hue Shift", self.spec_hue, v_min=-1, v_max=1, v_speed=0.01)
-            _, self.spec_saturation = imgui.drag_float("Saturation Shift", self.spec_saturation, v_min=-1, v_max=1, v_speed=0.01)
-            _, self.spec_value = imgui.drag_float("Value Shift", self.spec_value, v_min=-1, v_max=1, v_speed=0.01)
+            imgui.text("Specular Color")
+            _, self.spec_hue = imgui.drag_float("Spec Hue Shift", self.spec_hue, v_min=-1, v_max=1, v_speed=0.01)
+            _, self.spec_saturation = imgui.drag_float("Spec Saturation Shift", self.spec_saturation, v_min=-1, v_max=1, v_speed=0.01)
+            _, self.spec_value = imgui.drag_float("Spec Value Shift", self.spec_value, v_min=-1, v_max=1, v_speed=0.01)
+
+            imgui.separator_text("Geometric Editing")
+
+            imgui.checkbox("Show Gizmo", False)    
+            imgui.button("Duplicate")
             
 
         with imgui_ctx.begin("Point View"):
+            gizmo.set_drawlist()
+            pos = imgui.get_cursor_screen_pos()
+            print(pos)
+            gizmo.set_drawlist()
+            
+            gizmo.set_rect(pos.x, pos.y, self.camera.res_x, self.camera.res_y)
+
+            if imgui.is_item_hovered() and not gizmo.is_using():
+                self.camera.process_mouse_input()
+            
+            if imgui.is_item_focused() or imgui.is_item_hovered():
+                self.camera.process_keyboard_input()
+
             if self.render_modes[self.render_mode] == "Ellipsoids":
                self.ellipsoid_viewer.show_gui()
             else:
@@ -278,7 +327,6 @@ class GaussianViewer(Viewer):
                 np.array([ 0.00221941, -0.49231448,  0.29137429])[:, None] # todo clean this up
             
             ]))
-
             # [ 0.00221941 -0.49231448  0.29137429]
     
 if __name__ == "__main__":

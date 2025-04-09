@@ -112,7 +112,7 @@ class GaussianRaytracer:
             roughness = self.pc._roughness#.clamp(0) + (edits["roughness"] if edits is not None else 0)
             self.cuda_module.gaussian_roughness.copy_(roughness)
         if self.cuda_module.gaussian_f0 is not None:
-            f0 = self.pc._f0 + (edits["metalness"] if edits is not None else 0)
+            f0 = self.pc._f0 + (edits["reflectivity_shift"] if edits is not None else 0)
             self.cuda_module.gaussian_f0.copy_(f0)
 
     @torch.no_grad()
