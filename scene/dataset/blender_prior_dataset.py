@@ -33,6 +33,7 @@ class BlenderPriorDataset:
         self.split = split
         self.do_fallback = True
         self.fallback_dir = f"./data/renders/{self.data_dir.split('/')[-1]}"
+        self._point_cloud = self.get_point_cloud()
 
         transform_path = os.path.join(data_dir, f"transforms_{split}.json")
         with open(transform_path) as json_file:
@@ -46,9 +47,6 @@ class BlenderPriorDataset:
         self.height, self.width = first_image.shape[:2]
         self.fovx = contents["camera_angle_x"]
         self.fovy = focal2fov(fov2focal(self.fovx, self.width), self.height)
-
-        # Read point cloud
-        self._point_cloud = self.get_point_cloud()
 
     def __len__(self) -> int:
         return len(self.frames)
@@ -83,8 +81,8 @@ class BlenderPriorDataset:
             brdf_image = self._get_buffer_fallback(frame_name, "glossy_brdf")
         else:
             roughness_image = torch.zeros_like(image)
-            specular_image = torch.zeros_like(image)
             metalness_image = torch.zeros_like(image)
+            specular_image = torch.zeros_like(image)
             brdf_image = torch.zeros_like(image)
 
         # Postprocess buffers
