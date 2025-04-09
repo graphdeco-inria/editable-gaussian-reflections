@@ -25,11 +25,6 @@ from scene.dataset import BlenderDataset, BlenderPriorDataset, CameraInfo, Colma
 from scene.gaussian_model import BasicPointCloud
 from utils.graphics_utils import focal2fov, fov2focal, getWorld2View2
 
-from .dataset.colmap_loader import (
-    read_points3D_binary,
-    read_points3D_text,
-)
-
 
 @dataclass
 class SceneInfo:
@@ -83,21 +78,6 @@ def read_dataset(dataset, num_workers=16):
     return cam_infos
 
 
-def read_pcd(data_dir: str) -> BasicPointCloud:
-    bin_path = os.path.join(data_dir, "sparse/0/points3D.bin")
-    txt_path = os.path.join(data_dir, "sparse/0/points3D.txt")
-    try:
-        xyz, rgb, _ = read_points3D_binary(bin_path)
-    except:
-        xyz, rgb, _ = read_points3D_text(txt_path)
-    pcd = BasicPointCloud(
-        points=xyz,
-        colors=rgb / 255.0,
-        normals=np.zeros_like(xyz),
-    )
-    return pcd
-
-
 def make_random_pcd(model_params: ModelParams) -> BasicPointCloud:
     num_rand_pts = model_params.num_farfield_init_points
     print(f"Generating random point cloud ({num_rand_pts})...")
@@ -128,15 +108,11 @@ def readColmapSceneInfo(model_params: ModelParams, data_dir: str) -> SceneInfo:
     train_cam_infos = read_dataset(train_dataset)
     print("Reading Test Transforms")
     test_cam_infos = read_dataset(test_dataset)
-
     nerf_normalization = getNerfppNorm(train_cam_infos)
-    pcd = read_pcd(data_dir)
-    # We create random points inside the bounds of the scene
-    extra_pcd = make_random_pcd(model_params)
 
     scene_info = SceneInfo(
-        point_cloud=pcd,
-        extra_point_cloud=extra_pcd,
+        point_cloud=train_dataset.get_point_cloud(),
+        extra_point_cloud=make_random_pcd(model_params),
         train_cameras=train_cam_infos,
         test_cameras=test_cam_infos,
         nerf_normalization=nerf_normalization,
@@ -162,13 +138,10 @@ def readBlenderSceneInfo(model_params: ModelParams, data_dir: str) -> SceneInfo:
     test_cam_infos = read_dataset(test_dataset)
 
     nerf_normalization = getNerfppNorm(train_cam_infos)
-    pcd = read_pcd(data_dir)
-    # We create random points inside the bounds of the scene
-    extra_pcd = make_random_pcd(model_params)
 
     scene_info = SceneInfo(
-        point_cloud=pcd,
-        extra_point_cloud=extra_pcd,
+        point_cloud=train_dataset.get_point_cloud(),
+        extra_point_cloud=make_random_pcd(model_params),
         train_cameras=train_cam_infos,
         test_cameras=test_cam_infos,
         nerf_normalization=nerf_normalization,
@@ -194,13 +167,10 @@ def readBlenderPriorSceneInfo(model_params: ModelParams, data_dir: str) -> Scene
     test_cam_infos = read_dataset(test_dataset)
 
     nerf_normalization = getNerfppNorm(train_cam_infos)
-    pcd = read_pcd(data_dir)
-    # We create random points inside the bounds of the scene
-    extra_pcd = make_random_pcd(model_params)
 
     scene_info = SceneInfo(
-        point_cloud=pcd,
-        extra_point_cloud=extra_pcd,
+        point_cloud=train_dataset.get_point_cloud(),
+        extra_point_cloud=make_random_pcd(model_params),
         train_cameras=train_cam_infos,
         test_cameras=test_cam_infos,
         nerf_normalization=nerf_normalization,

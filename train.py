@@ -18,6 +18,7 @@ import uuid
 from argparse import ArgumentParser, Namespace
 from datetime import datetime
 from random import randint
+from threading import Thread
 
 import pandas as pd
 import plotly.express as px
@@ -40,9 +41,6 @@ from utils.general_utils import (
 from utils.graphics_utils import BasicPointCloud
 from utils.image_utils import psnr
 from utils.loss_utils import l1_loss, ssim
-from gaussianviewer import GaussianViewer
-from viewer.types import ViewerMode
-from threading import Thread
 
 try:
     from torch.utils.tensorboard import SummaryWriter
@@ -654,7 +652,6 @@ print("Optimizing " + args.model_path)
 safe_state(args.quiet)
 
 
-
 first_iter = 0
 tb_writer = prepare_output_and_logger(model_params, opt_params)
 
@@ -675,13 +672,20 @@ iter_start = torch.cuda.Event(enable_timing=True)
 iter_end = torch.cuda.Event(enable_timing=True)
 
 viewpoint_stack = scene.getTrainCameras().copy()
-raytracer = GaussianRaytracer(gaussians, viewpoint_stack[0].image_width, viewpoint_stack[0].image_height)
+raytracer = GaussianRaytracer(
+    gaussians, viewpoint_stack[0].image_width, viewpoint_stack[0].image_height
+)
 raytracer.cuda_module.num_samples.fill_(model_params.num_samples)
 
 if args.viewer:
+    from gaussianviewer import GaussianViewer
+    from viewer.types import ViewerMode
+
     mode = ViewerMode.LOCAL if args.viewer_mode == "local" else ViewerMode.SERVER
     SPARSE_ADAM_AVAILABLE = False
-    viewer = GaussianViewer.from_gaussians(raytracer, model_params, opt_params, gaussians, SPARSE_ADAM_AVAILABLE, mode)
+    viewer = GaussianViewer.from_gaussians(
+        raytracer, model_params, opt_params, gaussians, SPARSE_ADAM_AVAILABLE, mode
+    )
     if args.viewer_mode != "none":
         viewer_thd = Thread(target=viewer.run, daemon=True)
         viewer_thd.start()
@@ -699,8 +703,6 @@ elif model_params.max_one_bounce_until_iter > 0:
 for iteration in tqdm(
     range(first_iter, opt_params.iterations + 1), desc="Training progress"
 ):
-
-
     iter_start.record()
 
     if args.viewer:
@@ -988,7 +990,6 @@ for iteration in tqdm(
 
         if args.viewer:
             viewer.gaussian_lock.release()
-
 
         if False:
             if iteration in args.checkpoint_iterations:
