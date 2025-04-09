@@ -6,7 +6,13 @@ from PIL import Image
 
 from arguments import ModelParams
 from scene.gaussian_model import BasicPointCloud
-from utils.depth_utils import transform_normals_to_world
+from utils.depth_utils import (
+    linear_least_squares_1d,
+    project_pointcloud_to_depth_map,
+    transform_depth_to_position_image,
+    transform_normals_to_world,
+    transform_points,
+)
 from utils.graphics_utils import focal2fov, fov2focal
 
 from .camera_info import CameraInfo
@@ -28,8 +34,7 @@ class ColmapDataset:
         self.split = split
         self.llffhold = 8
         self.do_eval = model_params.eval
-        self.images_folder = os.path.join(self.data_dir, "images")
-        self.priors_folder = os.path.join(self.data_dir, "priors")
+        self._point_cloud = self.get_point_cloud()
         assert model_params.linear_space
 
         try:
@@ -69,10 +74,17 @@ class ColmapDataset:
         height = intr.height
         width = intr.width
 
-        frame_name = extr.name
+        frame_name = os.path.splitext(extr.name)[0]
         uid = intr.id
-        R = np.transpose(qvec2rotmat(extr.qvec))
-        T = np.array(extr.tvec)
+
+        w2c = np.eye(4)
+        w2c[:3, :3] = qvec2rotmat(extr.qvec)
+        w2c[:3, 3] = extr.tvec
+        c2w = np.linalg.inv(w2c)
+
+        # R is stored transposed due to 'glm' in CUDA code
+        R = np.transpose(w2c[:3, :3])
+        T = w2c[:3, 3]
 
         if intr.model == "SIMPLE_PINHOLE":
             focal_length_x = intr.params[0]
@@ -92,20 +104,37 @@ class ColmapDataset:
         albedo_image = self._get_buffer(frame_name, "albedo")
         irradiance_image = self._get_buffer(frame_name, "irradiance")
         normal_image = self._get_buffer(frame_name, "normal")
+        depth_image = self._get_buffer(frame_name, "depth")
         diffuse_image = (albedo_image * irradiance_image).clip(0.0, 1.0)
         glossy_image = (image - diffuse_image).clip(0.0, 1.0)
-        position_image = torch.zeros_like(image)
         roughness_image = torch.zeros_like(image)
-        specular_image = torch.zeros_like(image)
         metalness_image = torch.zeros_like(image)
+        specular_image = torch.zeros_like(image)
         brdf_image = torch.zeros_like(image)
 
         # Postprocess buffers
-        normal_image = transform_normals_to_world(
-            normal_image, torch.tensor(R, dtype=torch.float32)
+        R_tensor = torch.tensor(R, dtype=torch.float32)
+        c2w_tensor = torch.tensor(c2w, dtype=torch.float32)
+        w2c_tensor = torch.tensor(w2c, dtype=torch.float32)
+        normal_image = transform_normals_to_world(normal_image, R_tensor)
+
+        points_tensor = torch.tensor(self._point_cloud.points, dtype=torch.float32)
+        points_tensor = transform_points(points_tensor, w2c_tensor)
+        points_image = project_pointcloud_to_depth_map(
+            points_tensor, FovX, FovY, depth_image.shape
         )
-        diffuse_image = diffuse_image * self.model_params.exposure
-        glossy_image = glossy_image * self.model_params.exposure
+        valid_mask = points_image != 0
+        xs = depth_image[valid_mask]
+        ys = points_image[valid_mask]
+        a, b = linear_least_squares_1d(xs, ys)
+        depth_image = depth_image * a + b
+        position_image = transform_depth_to_position_image(depth_image, FovX, FovY)
+        position_image = transform_points(position_image, c2w_tensor)
+
+        # Manually adjust exposure
+        image *= 0.5
+        diffuse_image *= 0.5
+        glossy_image *= 0.5
 
         cam_info = CameraInfo(
             uid=uid,
@@ -114,7 +143,7 @@ class ColmapDataset:
             FovY=FovY,
             FovX=FovX,
             image=image,
-            image_path=os.path.join(self.images_folder, frame_name),
+            image_path=os.path.join(self.data_dir, "images", frame_name + ".jpg"),
             image_name=frame_name,
             width=width,
             height=height,
@@ -130,27 +159,27 @@ class ColmapDataset:
         )
         return cam_info
 
-    def _get_buffer(self, frame_name: str, buffer_name: str, R=None):
-        buffer_file_name = os.path.splitext(frame_name.split("/")[-1])[0]
+    def _get_buffer(self, frame_name: str, buffer_name: str):
+        buffer_file_name = frame_name.split("/")[-1]
         buffer_path = os.path.join(
-            self.priors_folder, buffer_name, buffer_file_name + ".png"
+            self.data_dir, "priors", buffer_name, buffer_file_name + ".png"
         )
         buffer = np.array(Image.open(buffer_path), dtype=np.float32) / 255.0
+        buffer = torch.tensor(buffer)
 
         if buffer_name in ["image", "albedo"]:
             buffer = buffer**2.2
-            return torch.tensor(buffer)
         elif buffer_name in ["roughness", "metalness"]:
-            return torch.tensor(buffer)
+            pass
+        elif buffer_name == "depth":
+            buffer /= 255.0
         elif buffer_name == "normal":
-            normal = 2.0 * buffer - 1.0
-            normal = transform_normals_to_world(normal, R)
-            return torch.tensor(normal)
+            buffer = 2.0 * buffer - 1.0
         elif buffer_name == "irradiance":
-            irradiance = 1.0 / (1.0 - buffer + 1e-6) - 1.0
-            return torch.tensor(irradiance)
+            buffer = 1.0 / (1.0 - buffer + 1e-6) - 1.0
         else:
             raise ValueError(f"Buffer name not recognized: {buffer_name}")
+        return buffer
 
     def get_point_cloud(self) -> BasicPointCloud:
         bin_path = os.path.join(self.data_dir, "sparse/0/points3D.bin")
