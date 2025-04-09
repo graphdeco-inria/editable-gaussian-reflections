@@ -95,6 +95,8 @@ class Scene:
             # take every kth cameras where k = args.sparseness
             scene_info.train_cameras = cameras[:: model_params.sparseness]
 
+        scene_info.train_cameras = scene_info.train_cameras[model_params.skip_n_images:]
+
         if shuffle:
             random.shuffle(
                 scene_info.train_cameras
@@ -141,7 +143,7 @@ class Scene:
         sys.path.append(gaussians.model_params.raytracer_version)
         import raytracer_config
 
-        if raytracer_config.MAX_BOUNCES > 0:
+        if raytracer_config.MAX_BOUNCES > 0 and "SKIP_EXTRA_INIT" not in os.environ:
             scene_info.point_cloud = BasicPointCloud(
                 np.concatenate(
                     [scene_info.point_cloud.points, scene_info.extra_point_cloud.points]
