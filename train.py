@@ -145,19 +145,36 @@ def training_report(tb_writer, iteration):
                                 [
                                     diffuse_image,
                                     diffuse_gt_image,
+                                    glossy_image,
+                                    glossy_gt_image,
+                                    pred_image,
+                                    gt_image,
+                                ]
+                            ).clamp(0, 1),
+                            tb_writer.log_dir
+                            + "/"
+                            + f"{config['name']}_view/iter_{iteration:09}_view_{viewpoint.uid}.png",
+                            nrow=2,
+                            padding=0
+                        )
+                        save_image(
+                            torch.stack(
+                                [
+                                    diffuse_image,
+                                    diffuse_gt_image,
                                     error_diffuse.abs() / error_diffuse.std() / 3,
                                     glossy_image,
                                     glossy_gt_image,
                                     error_glossy.abs() / error_glossy.std() / 3,
-                                    pred_image,
                                     gt_image,
                                     error_final.abs() / error_final.std() / 3,
                                 ]
                             ).clamp(0, 1),
                             tb_writer.log_dir
                             + "/"
-                            + f"{config['name']}_view/iter_{iteration:09}_view_{viewpoint.uid}.png",
+                            + f"{config['name']}_view/iter_{iteration:09}_view_{viewpoint.uid}_error_maps.png",
                             nrow=3,
+                            padding=0
                         )
 
                     normal_gt_image = torch.clamp(
@@ -198,74 +215,53 @@ def training_report(tb_writer, iteration):
 
                     if tb_writer and (idx < len(args.val_views)):
                         if package.rgb.shape[0] > 2:
-                            for k, (
-                                _rgb_img,
-                                _normal_img,
-                                _pos_image,
-                                _F0_image,
-                                _brdf_image,
-                            ) in enumerate(
-                                zip(
-                                    package.rgb,
-                                    package.normal,
-                                    package.position,
-                                    package.F0,
-                                    package.brdf,
-                                )
+                            save_image(
+                                package.rgb[:-1].clamp(0, 1),
+                                tb_writer.log_dir
+                                + "/"
+                                + f"{config['name']}_view/iter_{iteration:09}_view_{viewpoint.uid}_rgb_all_rays.png",
+                                padding=0,
+                            )
+                            save_image(
+                                torch.clamp(package.normal / 2 + 0.5, 0.0, 1.0),
+                                tb_writer.log_dir
+                                + "/"
+                                + f"{config['name']}_view/iter_{iteration:09}_view_{viewpoint.uid}_normal_all_rays.png",
+                                padding=0,
+                            )
+                            save_image(
+                                torch.clamp(package.F0, 0.0, 1.0),
+                                tb_writer.log_dir
+                                + "/"
+                                + f"{config['name']}_view/iter_{iteration:09}_view_{viewpoint.uid}_F0_all_rays.png",
+                                padding=0,
+                            )
+                            save_image(
+                                torch.clamp(package.position, 0.0, 1.0),
+                                tb_writer.log_dir
+                                + "/"
+                                + f"{config['name']}_view/iter_{iteration:09}_view_{viewpoint.uid}_pos_all_rays.png",
+                                padding=0,
+                            )
+                            save_image(
+                                torch.clamp(package.brdf, 0.0, 1.0),
+                                tb_writer.log_dir
+                                + "/"
+                                + f"{config['name']}_view/iter_{iteration:09}_view_{viewpoint.uid}_brdf_all_rays.png",
+                                padding=0,
+                            )
+                            if (
+                                raytracer.cuda_module.output_incident_radiance
+                                is not None
                             ):
-                                if not raytracer.config.TONEMAP:
-                                    _rgb_img = tonemap(_rgb_img)
                                 save_image(
-                                    _rgb_img.clamp(0, 1),
+                                    raytracer.cuda_module.output_incident_radiance.moveaxis(-1, 1)
+                                    .clamp(0, 1),
                                     tb_writer.log_dir
                                     + "/"
-                                    + f"{config['name']}_view/iter_{iteration:09}_view_{viewpoint.uid}_rgb_ray_{k}.png",
+                                    + f"{config['name']}_view/iter_{iteration:09}_view_{viewpoint.uid}_incident_radiance_all_rays.png",
                                     padding=0,
                                 )
-                                save_image(
-                                    torch.clamp(_normal_img / 2 + 0.5, 0.0, 1.0),
-                                    tb_writer.log_dir
-                                    + "/"
-                                    + f"{config['name']}_view/iter_{iteration:09}_view_{viewpoint.uid}_normal_ray_{k}.png",
-                                    padding=0,
-                                )
-                                save_image(
-                                    torch.clamp(_F0_image, 0.0, 1.0),
-                                    tb_writer.log_dir
-                                    + "/"
-                                    + f"{config['name']}_view/iter_{iteration:09}_view_{viewpoint.uid}_F0_ray_{k}.png",
-                                    padding=0,
-                                )
-                                save_image(
-                                    torch.clamp(_pos_image, 0.0, 1.0),
-                                    tb_writer.log_dir
-                                    + "/"
-                                    + f"{config['name']}_view/iter_{iteration:09}_view_{viewpoint.uid}_pos_ray_{k}.png",
-                                    padding=0,
-                                )
-                                save_image(
-                                    torch.clamp(_brdf_image, 0.0, 1.0),
-                                    tb_writer.log_dir
-                                    + "/"
-                                    + f"{config['name']}_view/iter_{iteration:09}_view_{viewpoint.uid}_brdf_ray_{k}.png",
-                                    padding=0,
-                                )
-
-                                if (
-                                    raytracer.cuda_module.output_incident_radiance
-                                    is not None
-                                ):
-                                    save_image(
-                                        raytracer.cuda_module.output_incident_radiance[
-                                            k
-                                        ]
-                                        .clamp(0, 1)
-                                        .moveaxis(-1, 0),
-                                        tb_writer.log_dir
-                                        + "/"
-                                        + f"{config['name']}_view/iter_{iteration:09}_view_{viewpoint.uid}_incident_radiance_{k}.png",
-                                        padding=0,
-                                    )
                         if raytracer.config.SAVE_RAY_IMAGES:
                             save_image(raytracer.cuda_module.output_ray_origin[0].moveaxis(-1, 0), 
                                       tb_writer.log_dir
@@ -279,34 +275,27 @@ def training_report(tb_writer, iteration):
                                       padding=0)
 
                         if raytracer.config.SAVE_LOD_IMAGES:
-                            for k, (lod_mean, lod_scale, ray_lod) in enumerate(
-                                zip(
-                                    raytracer.cuda_module.output_lod_mean,
-                                    raytracer.cuda_module.output_lod_scale,
-                                    raytracer.cuda_module.output_ray_lod,
-                                )
-                            ):
-                                save_image(
-                                    lod_mean.moveaxis(-1, 0),
-                                    tb_writer.log_dir
-                                    + "/"
-                                    + f"{config['name']}_view/iter_{iteration:09}_view_{viewpoint.uid}_lod_mean_{k}.png",
-                                    padding=0,
-                                )
-                                save_image(
-                                    lod_scale.moveaxis(-1, 0),
-                                    tb_writer.log_dir
-                                    + "/"
-                                    + f"{config['name']}_view/iter_{iteration:09}_view_{viewpoint.uid}_lod_scale_{k}.png",
-                                    padding=0,
-                                )
-                                save_image(
-                                    lod_mean.moveaxis(-1, 0),
-                                    tb_writer.log_dir
-                                    + "/"
-                                    + f"{config['name']}_view/iter_{iteration:09}_view_{viewpoint.uid}_ray_lod_{k}.png",
-                                    padding=0,
-                                )
+                            save_image(
+                                raytracer.cuda_module.output_lod_mean, #!
+                                tb_writer.log_dir
+                                + "/"
+                                + f"{config['name']}_view/iter_{iteration:09}_view_{viewpoint.uid}_lod_mean_all_rays.png",
+                                padding=0,
+                            )
+                            save_image(
+                                raytracer.cuda_module.output_lod_scale,
+                                tb_writer.log_dir
+                                + "/"
+                                + f"{config['name']}_view/iter_{iteration:09}_view_{viewpoint.uid}_lod_scale_all_rays.png",
+                                padding=0,
+                            )
+                            save_image(
+                                raytracer.cuda_module.output_ray_lod,
+                                tb_writer.log_dir
+                                + "/"
+                                + f"{config['name']}_view/iter_{iteration:09}_view_{viewpoint.uid}_ray_lod_all_rays.png",
+                                padding=0,
+                            )
 
                         if raytracer.config.SAVE_HIT_STATS:
                             torch.save(
@@ -349,7 +338,7 @@ def training_report(tb_writer, iteration):
                             ).clamp(0, 1),
                             tb_writer.log_dir
                             + "/"
-                            + f"{config['name']}_view/iter_{iteration:09}_view_{viewpoint.uid}_roughness.png",
+                            + f"{config['name']}_view/iter_{iteration:09}_view_{viewpoint.uid}_roughness_vs_target.png",
                             nrow=2,
                             padding=0,
                         )
@@ -357,7 +346,7 @@ def training_report(tb_writer, iteration):
                             torch.stack([F0_image.cuda(), F0_gt_image]).clamp(0, 1),
                             tb_writer.log_dir
                             + "/"
-                            + f"{config['name']}_view/iter_{iteration:09}_view_{viewpoint.uid}_F0.png",
+                            + f"{config['name']}_view/iter_{iteration:09}_view_{viewpoint.uid}_F0_vs_target.png",
                             nrow=2,
                             padding=0,
                         )
@@ -365,7 +354,7 @@ def training_report(tb_writer, iteration):
                             torch.stack([pred_image, gt_image]).clamp(0, 1),
                             tb_writer.log_dir
                             + "/"
-                            + f"{config['name']}_view/iter_{iteration:09}_view_{viewpoint.uid}_final.png",
+                            + f"{config['name']}_view/iter_{iteration:09}_view_{viewpoint.uid}_final_vs_target.png",
                             nrow=2,
                             padding=0,
                         )
@@ -373,7 +362,7 @@ def training_report(tb_writer, iteration):
                             torch.stack([diffuse_image, diffuse_gt_image]).clamp(0, 1),
                             tb_writer.log_dir
                             + "/"
-                            + f"{config['name']}_view/iter_{iteration:09}_view_{viewpoint.uid}_diffuse.png",
+                            + f"{config['name']}_view/iter_{iteration:09}_view_{viewpoint.uid}_diffuse_vs_target.png",
                             nrow=2,
                             padding=0,
                         )
@@ -381,7 +370,7 @@ def training_report(tb_writer, iteration):
                             torch.stack([glossy_image, glossy_gt_image]).clamp(0, 1),
                             tb_writer.log_dir
                             + "/"
-                            + f"{config['name']}_view/iter_{iteration:09}_view_{viewpoint.uid}_glossy.png",
+                            + f"{config['name']}_view/iter_{iteration:09}_view_{viewpoint.uid}_glossy_vs_target.png",
                             nrow=2,
                             padding=0,
                         )
@@ -391,7 +380,7 @@ def training_report(tb_writer, iteration):
                             ).clamp(0, 1),
                             tb_writer.log_dir
                             + "/"
-                            + f"{config['name']}_view/iter_{iteration:09}_view_{viewpoint.uid}_position.png",
+                            + f"{config['name']}_view/iter_{iteration:09}_view_{viewpoint.uid}_position_vs_target.png",
                             nrow=2,
                             padding=0,
                         )
@@ -401,17 +390,7 @@ def training_report(tb_writer, iteration):
                             ),
                             tb_writer.log_dir
                             + "/"
-                            + f"{config['name']}_view/iter_{iteration:09}_view_{viewpoint.uid}_normal.png",
-                            nrow=2,
-                            padding=0,
-                        )
-                        save_image(
-                            torch.stack([normal_image.cuda(), normal_gt_image]).clamp(
-                                0, 1
-                            ),
-                            tb_writer.log_dir
-                            + "/"
-                            + f"{config['name']}_view/iter_{iteration:09}_view_{viewpoint.uid}_normal.png",
+                            + f"{config['name']}_view/iter_{iteration:09}_view_{viewpoint.uid}_normal_vs_target.png",
                             nrow=2,
                             padding=0,
                         )
@@ -422,7 +401,7 @@ def training_report(tb_writer, iteration):
                                 ),
                                 tb_writer.log_dir
                                 + "/"
-                                + f"{config['name']}_view/iter_{iteration:09}_view_{viewpoint.uid}_brdf.png",
+                                + f"{config['name']}_view/iter_{iteration:09}_view_{viewpoint.uid}_brdf_vs_target.png",
                                 nrow=2,
                                 padding=0,
                             )
@@ -434,26 +413,8 @@ def training_report(tb_writer, iteration):
                                 .moveaxis(-1, 0),
                                 tb_writer.log_dir
                                 + "/"
-                                + f"{config['name']}_view/iter_{iteration:09}_view_{viewpoint.uid}_incident_radiance.png",
+                                + f"{config['name']}_view/iter_{iteration:09}_view_{viewpoint.uid}_incident_radiance_vs_target.png",
                                 padding=0,
-                            )
-                            save_image(
-                                raytracer.cuda_module.output_incident_radiance[1]
-                                .clamp(0, 1)
-                                .moveaxis(-1, 0)
-                                * package.brdf[0],
-                                tb_writer.log_dir
-                                + "/"
-                                + f"{config['name']}_view/iter_{iteration:09}_view_{viewpoint.uid}_sanity_check.png",
-                                padding=0,
-                            )
-                            torch.save(
-                                raytracer.cuda_module.output_incident_radiance[1]
-                                .clamp(0, 1)
-                                .moveaxis(-1, 0),
-                                tb_writer.log_dir
-                                + "/"
-                                + f"{config['name']}_view/iter_{iteration:09}_view_{viewpoint.uid}_incident_radiance.pt",
                             )
 
                         if raytracer.config.USE_LEVEL_OF_DETAIL:
