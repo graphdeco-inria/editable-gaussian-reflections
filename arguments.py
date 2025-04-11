@@ -77,7 +77,7 @@ class ModelParams(ParamGroup):
         self._white_background = False
         self.data_device = "cuda"
         self.eval = False
-        self.glossy_bbox_size_mult = 8.0
+        self.glossy_bbox_size_mult = 4.0
         self.scene_extent_multiplier = 5.0
         self.num_feat_per_gaussian_channel = 16
 
@@ -99,7 +99,7 @@ class ModelParams(ParamGroup):
 
         self.keep_every_kth_view = 1
         self.max_images = 9999999
-        self.num_farfield_init_points = 50_000  # 100_000
+        self.num_farfield_init_points = 1_000_000  # 100_000
 
         self.min_opacity = 0.005
 
@@ -179,6 +179,10 @@ class ModelParams(ParamGroup):
         else:
             self.skip_n_images = 0
 
+        self.a_thresh = 0.05
+        self.t_thresh = 0.01
+        self.exp_power = 2
+
         super().__init__(parser, "Loading Parameters", sentinel)
 
     def extract(self, args):
@@ -205,7 +209,7 @@ class OptimizationParams(ParamGroup):
         self.position_lr_max_steps = 30_000
         self.slowdown = 1
 
-        self.normal_lr = 0.0025
+        self.normal_lr = 0.0025 * 5 #! *5 may or may not help
         self.position_lr = 0.0025
         self.roughness_lr = 0.0025
         self.f0_lr = 0.0025

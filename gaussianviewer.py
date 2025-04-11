@@ -209,7 +209,7 @@ class GaussianViewer(Viewer):
                         net_image = package.roughness[max(nth_ray, 0)]
 
                 if mode_name == "RGB":
-                    net_image = tonemap(untonemap(net_image.permute(1, 2, 0))*self.exposure) # todo only expose rgb
+                    net_image = tonemap(untonemap(net_image.permute(1, 2, 0))*self.exposure) 
                 else:
                     net_image = net_image.permute(1, 2, 0)*self.exposure
             end.record()
