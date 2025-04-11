@@ -243,17 +243,17 @@ def render_set(
                     view, raytracer, pipeline, background, blur_sigma=blur_sigma
                 )
 
-                diffuse_gt_image = tonemap(view.diffuse_image).clamp(0.0, 1.0)
-                glossy_gt_image = tonemap(view.glossy_image).clamp(0.0, 1.0)
-                gt_image = tonemap(view.original_image).clamp(0.0, 1.0)
+                diffuse_gt_image = view.diffuse_image.clamp(0.0, 1.0)
+                glossy_gt_image = view.glossy_image.clamp(0.0, 1.0)
+                gt_image = view.original_image.clamp(0.0, 1.0)
                 position_gt_image = view.position_image
                 normal_gt_image = view.normal_image
                 roughness_gt_image = view.roughness_image
                 F0_gt_image = view.F0_image
 
-                diffuse_image = tonemap(package.rgb[0]).clamp(0, 1)
-                glossy_image = tonemap(package.rgb[1:-1]).sum(dim=0).clamp(0, 1)
-                pred_image = tonemap(package.rgb[-1]).clamp(0, 1)
+                diffuse_image = package.rgb[0].clamp(0, 1)
+                glossy_image = package.rgb[1:-1].sum(dim=0).clamp(0, 1)
+                pred_image = package.rgb[-1].clamp(0, 1)
 
                 psnr_test += psnr(pred_image, gt_image).mean() / len(views)
                 l1_test += F.l1_loss(pred_image, gt_image) / len(views)
