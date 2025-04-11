@@ -123,6 +123,26 @@ class Scene:
         ):
             self.autoadjust_zplanes()
 
+        import sys
+        sys.path.append(gaussians.model_params.raytracer_version)
+        import raytracer_config
+
+        if raytracer_config.MAX_BOUNCES > 0 and "SKIP_EXTRA_INIT" not in os.environ:
+            scene_info.point_cloud = BasicPointCloud(
+                np.concatenate(
+                    [scene_info.point_cloud.points, scene_info.extra_point_cloud.points]
+                ),
+                np.concatenate(
+                    [scene_info.point_cloud.colors, scene_info.extra_point_cloud.colors]
+                ),
+                np.concatenate(
+                    [
+                        scene_info.point_cloud.normals,
+                        scene_info.extra_point_cloud.normals,
+                    ]
+                ),
+            )
+
         if gaussians.model_params.znear_init_pruning:
             points = torch.from_numpy(scene_info.point_cloud.points).cuda().float()
             points_to_prune = (
@@ -138,26 +158,7 @@ class Scene:
             )
 
         self.autoadjust_zplanes()
-        import sys
-
-        sys.path.append(gaussians.model_params.raytracer_version)
-        import raytracer_config
-
-        if raytracer_config.MAX_BOUNCES > 0 and "SKIP_EXTRA_INIT" not in os.environ: #!!!!!!!!!!!!!!!!!!!!! souldn't this be before the pruning?
-            scene_info.point_cloud = BasicPointCloud(
-                np.concatenate(
-                    [scene_info.point_cloud.points, scene_info.extra_point_cloud.points]
-                ),
-                np.concatenate(
-                    [scene_info.point_cloud.colors, scene_info.extra_point_cloud.colors]
-                ),
-                np.concatenate(
-                    [
-                        scene_info.point_cloud.normals,
-                        scene_info.extra_point_cloud.normals,
-                    ]
-                ),
-            )
+        
 
         if self.loaded_iter:
             self.gaussians.load_ply(
@@ -195,32 +196,10 @@ class Scene:
             else:
                 T = torch.from_numpy(camera.camera_center)
 
-            if False:
-                points_world = gaussians.get_xyz
-                R_c2w_blender = -R
-                R_c2w_blender[:, 0] = -R_c2w_blender[:, 0]
-                points_local = (R_c2w_blender.T @ (points_world - T).T).T
+            points_dist_to_camera = (points - T).norm(dim=1)
+            too_close = points_dist_to_camera < camera.znear
 
-                x_size = math.tan(camera.FoVx / 2)
-                y_size = math.tan(camera.FoVy / 2)
-
-                x = points_local[:, 0]
-                y = points_local[:, 1]
-                z = points_local[:, 2]
-                in_frustrum_cone = (
-                    (x / z > -x_size)
-                    & (x / z < x_size)
-                    & (y / z > -y_size)
-                    & (y / z < y_size)
-                )
-                points_to_prune = ~in_frustrum_cone | (
-                    in_frustrum_cone & (-z > camera.znear)
-                )
-            else:
-                points_dist_to_camera = (points - T).norm(dim=1)
-                too_close = points_dist_to_camera < camera.znear
-
-                points_to_prune |= too_close
+            points_to_prune |= too_close
 
         return points_to_prune
 
