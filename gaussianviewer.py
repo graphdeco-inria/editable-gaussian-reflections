@@ -173,7 +173,7 @@ class GaussianViewer(Viewer):
                     self.raytracer.cuda_module.global_scale_factor.copy_(self.scaling_modifier)
                     if self.scaling_modifier != 1.0:
                         self.raytracer.cuda_module.update_bvh()
-                    package = render(camera, self.raytracer, self.pipe, self.background, blur_sigma=None, edits=dict(
+                    package = render(camera, self.raytracer, self.pipe, self.background, blur_sigma=None, targets_available=False, edits=dict(
                         reflectivity_shift = self.reflectivity_shift,
                         reflectivity_mult = self.reflectivity_mult,
                         roughness_shift = self.roughness_shift,
