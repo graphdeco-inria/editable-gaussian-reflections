@@ -143,7 +143,7 @@ class Scene:
         sys.path.append(gaussians.model_params.raytracer_version)
         import raytracer_config
 
-        if raytracer_config.MAX_BOUNCES > 0 and "SKIP_EXTRA_INIT" not in os.environ:
+        if raytracer_config.MAX_BOUNCES > 0 and "SKIP_EXTRA_INIT" not in os.environ: #!!!!!!!!!!!!!!!!!!!!! souldn't this be before the pruning?
             scene_info.point_cloud = BasicPointCloud(
                 np.concatenate(
                     [scene_info.point_cloud.points, scene_info.extra_point_cloud.points]

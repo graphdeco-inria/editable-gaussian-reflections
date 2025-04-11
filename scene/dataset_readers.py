@@ -85,10 +85,13 @@ def make_random_pcd(model_params: ModelParams) -> BasicPointCloud:
     rand_xyz = (
         np.random.random((num_rand_pts, 3)) * 2.6 - 1.3
     ) * model_params.glossy_bbox_size_mult
-    rand_rgb = np.random.random((num_rand_pts, 3))
+    if "GRAY_EXTRA_POINTS" in os.environ:
+        init_rgb = np.ones_like(rand_xyz) * model_params.init_extra_point_diffuse
+    else:
+        init_rgb = np.random.random((num_rand_pts, 3))
     pcd = BasicPointCloud(
         points=rand_xyz,
-        colors=rand_rgb,
+        colors=init_rgb,
         normals=np.zeros_like(rand_xyz),
     )
     return pcd

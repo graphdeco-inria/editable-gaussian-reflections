@@ -40,12 +40,13 @@ def render(
     bg_color: torch.Tensor,
     iteration=None,
     blur_sigma=None,
-    edits=None
+    edits=None,
+    targets_available=True
 ):
     
     do_backprop = torch.is_grad_enabled()
 
-    if do_backprop:
+    if targets_available:
         target = camera.original_image
         target_diffuse = camera.diffuse_image
         target_glossy = camera.glossy_image

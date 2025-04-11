@@ -123,11 +123,15 @@ class ModelParams(ParamGroup):
         self.init_scale_factor = 1.0  # 1.0 for 3dgs, 0.1 for mcmc
         self.init_opacity = 0.1  # 0.1 for 3dgs, 0.5 for mcmc
         self.init_roughness = 0.1
-        self.init_f0 = 0.04
+        if "CHROME_BALL" in os.environ:
+            self.init_f0 = 0.00
+        else:
+            self.init_f0 = 0.04
+        self.init_extra_point_diffuse = 0.2
 
         self.warmup_diffuse_loss_weight = 10000.0
         self.diffuse_loss_weight = 5.0
-        self.glossy_loss_weight = 0.0001  # ! was 0.001
+        self.glossy_loss_weight = 0.005  # ! was 0.001 
         self.normal_loss_weight = 1.0
         self.position_loss_weight = 1.0
         self.f0_loss_weight = 1.0
@@ -162,7 +166,7 @@ class ModelParams(ParamGroup):
 
         self.sparseness = -1
         self.warmup_until_iter = 0
-        self.no_bounces_until_iter = 3_000
+        self.no_bounces_until_iter = 0
         self.max_one_bounce_until_iter = 15_000
         self.diffuse_loss_weight_after_rebalance = 1.0
         self.glossy_loss_weight_after_rebalance = 1.0
@@ -170,7 +174,10 @@ class ModelParams(ParamGroup):
         self.enable_regular_loss_at_iter = -1
 
         self.num_samples = 1
-        self.skip_n_images = 0
+        if "CHROME_BALL" in os.environ:
+            self.skip_n_images = 50
+        else:
+            self.skip_n_images = 0
 
         super().__init__(parser, "Loading Parameters", sentinel)
 
@@ -256,7 +263,8 @@ class OptimizationParams(ParamGroup):
         self.sh_slowdown_factor = 20.0
         self.random_background = False
 
-        
+        self.beta_1 = 0.9
+        self.beta_2 = 0.95 # important to be lower than 0.999
 
         super().__init__(parser, "Optimization Parameters")
 

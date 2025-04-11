@@ -84,7 +84,7 @@ def training_report(tb_writer, iteration):
                 "name": "train",
                 "cameras": [
                     scene.getTrainCameras()[idx % len(scene.getTrainCameras())]
-                    for idx in range(5, 30, 5)
+                    for idx in args.val_views
                 ],
             },
         )
@@ -108,7 +108,7 @@ def training_report(tb_writer, iteration):
                         exist_ok=True,
                     )
 
-                    if "TONEMAP_IMAGES_AT_INPUT" in os.environ:
+                    if "DONT_TONEMAP_AT_OUTPUT" in os.environ:
                         diffuse_image = package.rgb[0].clamp(0, 1)
                         glossy_image = package.rgb[1:-1].sum(dim=0)
                         pred_image = package.rgb[-1].clamp(0, 1)
@@ -136,7 +136,7 @@ def training_report(tb_writer, iteration):
                         glossy_gt_image = tonemap(viewpoint.glossy_image).clamp(0, 1)
                         gt_image = tonemap(viewpoint.original_image).clamp(0, 1)
 
-                    if tb_writer and (idx < 5):
+                    if tb_writer and (idx < len(args.val_views)):
                         error_diffuse = diffuse_image - diffuse_gt_image
                         error_glossy = glossy_image - glossy_gt_image
                         error_final = pred_image - gt_image
@@ -156,7 +156,7 @@ def training_report(tb_writer, iteration):
                             ).clamp(0, 1),
                             tb_writer.log_dir
                             + "/"
-                            + f"{config['name']}_view/iter_{iteration:09}_{idx}.png",
+                            + f"{config['name']}_view/iter_{iteration:09}_view_{viewpoint.uid}.png",
                             nrow=3,
                         )
 
@@ -196,7 +196,7 @@ def training_report(tb_writer, iteration):
                     l1_test += l1_loss(pred_image, gt_image).mean().double()
                     psnr_test += psnr(pred_image, gt_image).mean().double()
 
-                    if tb_writer and (idx < 5):
+                    if tb_writer and (idx < len(args.val_views)):
                         if package.rgb.shape[0] > 2:
                             for k, (
                                 _rgb_img,
@@ -219,35 +219,35 @@ def training_report(tb_writer, iteration):
                                     _rgb_img.clamp(0, 1),
                                     tb_writer.log_dir
                                     + "/"
-                                    + f"{config['name']}_view/iter_{iteration:09}_{idx}_rgb_ray_{k}.png",
+                                    + f"{config['name']}_view/iter_{iteration:09}_view_{viewpoint.uid}_rgb_ray_{k}.png",
                                     padding=0,
                                 )
                                 save_image(
                                     torch.clamp(_normal_img / 2 + 0.5, 0.0, 1.0),
                                     tb_writer.log_dir
                                     + "/"
-                                    + f"{config['name']}_view/iter_{iteration:09}_{idx}_normal_ray_{k}.png",
+                                    + f"{config['name']}_view/iter_{iteration:09}_view_{viewpoint.uid}_normal_ray_{k}.png",
                                     padding=0,
                                 )
                                 save_image(
                                     torch.clamp(_F0_image, 0.0, 1.0),
                                     tb_writer.log_dir
                                     + "/"
-                                    + f"{config['name']}_view/iter_{iteration:09}_{idx}_F0_ray_{k}.png",
+                                    + f"{config['name']}_view/iter_{iteration:09}_view_{viewpoint.uid}_F0_ray_{k}.png",
                                     padding=0,
                                 )
                                 save_image(
                                     torch.clamp(_pos_image, 0.0, 1.0),
                                     tb_writer.log_dir
                                     + "/"
-                                    + f"{config['name']}_view/iter_{iteration:09}_{idx}_pos_ray_{k}.png",
+                                    + f"{config['name']}_view/iter_{iteration:09}_view_{viewpoint.uid}_pos_ray_{k}.png",
                                     padding=0,
                                 )
                                 save_image(
                                     torch.clamp(_brdf_image, 0.0, 1.0),
                                     tb_writer.log_dir
                                     + "/"
-                                    + f"{config['name']}_view/iter_{iteration:09}_{idx}_brdf_ray_{k}.png",
+                                    + f"{config['name']}_view/iter_{iteration:09}_view_{viewpoint.uid}_brdf_ray_{k}.png",
                                     padding=0,
                                 )
 
@@ -263,9 +263,20 @@ def training_report(tb_writer, iteration):
                                         .moveaxis(-1, 0),
                                         tb_writer.log_dir
                                         + "/"
-                                        + f"{config['name']}_view/iter_{iteration:09}_{idx}_incident_radiance_{k}.png",
+                                        + f"{config['name']}_view/iter_{iteration:09}_view_{viewpoint.uid}_incident_radiance_{k}.png",
                                         padding=0,
                                     )
+                        if raytracer.config.SAVE_RAY_IMAGES:
+                            save_image(raytracer.cuda_module.output_ray_origin[0].moveaxis(-1, 0), 
+                                      tb_writer.log_dir
+                                      + "/"
+                                      + f"{config['name']}_view/iter_{iteration:09}_view_{viewpoint.uid}_ray_origin.png",
+                                      padding=0)
+                            save_image(raytracer.cuda_module.output_ray_direction[0].moveaxis(-1, 0), 
+                                      tb_writer.log_dir
+                                      + "/"
+                                      + f"{config['name']}_view/iter_{iteration:09}_view_{viewpoint.uid}_ray_direction.png",
+                                      padding=0)
 
                         if raytracer.config.SAVE_LOD_IMAGES:
                             for k, (lod_mean, lod_scale, ray_lod) in enumerate(
@@ -279,21 +290,21 @@ def training_report(tb_writer, iteration):
                                     lod_mean.moveaxis(-1, 0),
                                     tb_writer.log_dir
                                     + "/"
-                                    + f"{config['name']}_view/iter_{iteration:09}_{idx}_lod_mean_{k}.png",
+                                    + f"{config['name']}_view/iter_{iteration:09}_view_{viewpoint.uid}_lod_mean_{k}.png",
                                     padding=0,
                                 )
                                 save_image(
                                     lod_scale.moveaxis(-1, 0),
                                     tb_writer.log_dir
                                     + "/"
-                                    + f"{config['name']}_view/iter_{iteration:09}_{idx}_lod_scale_{k}.png",
+                                    + f"{config['name']}_view/iter_{iteration:09}_view_{viewpoint.uid}_lod_scale_{k}.png",
                                     padding=0,
                                 )
                                 save_image(
                                     lod_mean.moveaxis(-1, 0),
                                     tb_writer.log_dir
                                     + "/"
-                                    + f"{config['name']}_view/iter_{iteration:09}_{idx}_ray_lod_{k}.png",
+                                    + f"{config['name']}_view/iter_{iteration:09}_view_{viewpoint.uid}_ray_lod_{k}.png",
                                     padding=0,
                                 )
 
@@ -302,13 +313,13 @@ def training_report(tb_writer, iteration):
                                 raytracer.cuda_module.num_hits_per_pixel,
                                 tb_writer.log_dir
                                 + "/"
-                                + f"{config['name']}_view/iter_{iteration:09}_{idx}_num_hits_per_pixel.pt",
+                                + f"{config['name']}_view/iter_{iteration:09}_view_{viewpoint.uid}_num_hits_per_pixel.pt",
                             )
                             torch.save(
                                 raytracer.cuda_module.num_traversed_per_pixel,
                                 tb_writer.log_dir
                                 + "/"
-                                + f"{config['name']}_view/iter_{iteration:09}_{idx}_num_traversed_per_pixel.pt",
+                                + f"{config['name']}_view/iter_{iteration:09}_view_{viewpoint.uid}_num_traversed_per_pixel.pt",
                             )
                             # also save them as normalized png
                             save_image(
@@ -318,7 +329,7 @@ def training_report(tb_writer, iteration):
                                 ),
                                 tb_writer.log_dir
                                 + "/"
-                                + f"{config['name']}_view/iter_{iteration:09}_{idx}_num_hits_per_pixel.png",
+                                + f"{config['name']}_view/iter_{iteration:09}_view_{viewpoint.uid}_num_hits_per_pixel.png",
                                 padding=0,
                             )
                             save_image(
@@ -328,7 +339,7 @@ def training_report(tb_writer, iteration):
                                 ),
                                 tb_writer.log_dir
                                 + "/"
-                                + f"{config['name']}_view/iter_{iteration:09}_{idx}_num_traversed_per_pixel.png",
+                                + f"{config['name']}_view/iter_{iteration:09}_view_{viewpoint.uid}_num_traversed_per_pixel.png",
                                 padding=0,
                             )
 
@@ -338,7 +349,7 @@ def training_report(tb_writer, iteration):
                             ).clamp(0, 1),
                             tb_writer.log_dir
                             + "/"
-                            + f"{config['name']}_view/iter_{iteration:09}_{idx}_roughness.png",
+                            + f"{config['name']}_view/iter_{iteration:09}_view_{viewpoint.uid}_roughness.png",
                             nrow=2,
                             padding=0,
                         )
@@ -346,7 +357,7 @@ def training_report(tb_writer, iteration):
                             torch.stack([F0_image.cuda(), F0_gt_image]).clamp(0, 1),
                             tb_writer.log_dir
                             + "/"
-                            + f"{config['name']}_view/iter_{iteration:09}_{idx}_F0.png",
+                            + f"{config['name']}_view/iter_{iteration:09}_view_{viewpoint.uid}_F0.png",
                             nrow=2,
                             padding=0,
                         )
@@ -354,7 +365,7 @@ def training_report(tb_writer, iteration):
                             torch.stack([pred_image, gt_image]).clamp(0, 1),
                             tb_writer.log_dir
                             + "/"
-                            + f"{config['name']}_view/iter_{iteration:09}_{idx}_final.png",
+                            + f"{config['name']}_view/iter_{iteration:09}_view_{viewpoint.uid}_final.png",
                             nrow=2,
                             padding=0,
                         )
@@ -362,7 +373,7 @@ def training_report(tb_writer, iteration):
                             torch.stack([diffuse_image, diffuse_gt_image]).clamp(0, 1),
                             tb_writer.log_dir
                             + "/"
-                            + f"{config['name']}_view/iter_{iteration:09}_{idx}_diffuse.png",
+                            + f"{config['name']}_view/iter_{iteration:09}_view_{viewpoint.uid}_diffuse.png",
                             nrow=2,
                             padding=0,
                         )
@@ -370,7 +381,7 @@ def training_report(tb_writer, iteration):
                             torch.stack([glossy_image, glossy_gt_image]).clamp(0, 1),
                             tb_writer.log_dir
                             + "/"
-                            + f"{config['name']}_view/iter_{iteration:09}_{idx}_glossy.png",
+                            + f"{config['name']}_view/iter_{iteration:09}_view_{viewpoint.uid}_glossy.png",
                             nrow=2,
                             padding=0,
                         )
@@ -380,7 +391,7 @@ def training_report(tb_writer, iteration):
                             ).clamp(0, 1),
                             tb_writer.log_dir
                             + "/"
-                            + f"{config['name']}_view/iter_{iteration:09}_{idx}_position.png",
+                            + f"{config['name']}_view/iter_{iteration:09}_view_{viewpoint.uid}_position.png",
                             nrow=2,
                             padding=0,
                         )
@@ -390,7 +401,7 @@ def training_report(tb_writer, iteration):
                             ),
                             tb_writer.log_dir
                             + "/"
-                            + f"{config['name']}_view/iter_{iteration:09}_{idx}_normal.png",
+                            + f"{config['name']}_view/iter_{iteration:09}_view_{viewpoint.uid}_normal.png",
                             nrow=2,
                             padding=0,
                         )
@@ -400,7 +411,7 @@ def training_report(tb_writer, iteration):
                             ),
                             tb_writer.log_dir
                             + "/"
-                            + f"{config['name']}_view/iter_{iteration:09}_{idx}_normal.png",
+                            + f"{config['name']}_view/iter_{iteration:09}_view_{viewpoint.uid}_normal.png",
                             nrow=2,
                             padding=0,
                         )
@@ -411,7 +422,7 @@ def training_report(tb_writer, iteration):
                                 ),
                                 tb_writer.log_dir
                                 + "/"
-                                + f"{config['name']}_view/iter_{iteration:09}_{idx}_brdf.png",
+                                + f"{config['name']}_view/iter_{iteration:09}_view_{viewpoint.uid}_brdf.png",
                                 nrow=2,
                                 padding=0,
                             )
@@ -423,7 +434,7 @@ def training_report(tb_writer, iteration):
                                 .moveaxis(-1, 0),
                                 tb_writer.log_dir
                                 + "/"
-                                + f"{config['name']}_view/iter_{iteration:09}_{idx}_incident_radiance.png",
+                                + f"{config['name']}_view/iter_{iteration:09}_view_{viewpoint.uid}_incident_radiance.png",
                                 padding=0,
                             )
                             save_image(
@@ -433,7 +444,7 @@ def training_report(tb_writer, iteration):
                                 * package.brdf[0],
                                 tb_writer.log_dir
                                 + "/"
-                                + f"{config['name']}_view/iter_{iteration:09}_{idx}_sanity_check.png",
+                                + f"{config['name']}_view/iter_{iteration:09}_view_{viewpoint.uid}_sanity_check.png",
                                 padding=0,
                             )
                             torch.save(
@@ -442,7 +453,7 @@ def training_report(tb_writer, iteration):
                                 .moveaxis(-1, 0),
                                 tb_writer.log_dir
                                 + "/"
-                                + f"{config['name']}_view/iter_{iteration:09}_{idx}_incident_radiance.pt",
+                                + f"{config['name']}_view/iter_{iteration:09}_view_{viewpoint.uid}_incident_radiance.pt",
                             )
 
                         if raytracer.config.USE_LEVEL_OF_DETAIL:
@@ -489,7 +500,7 @@ def training_report(tb_writer, iteration):
                                     ).clamp(0, 1),
                                     tb_writer.log_dir
                                     + "/"
-                                    + f"{config['name']}_view/iter_{iteration:09}_{idx}_blurred_{k}÷3.png",
+                                    + f"{config['name']}_view/iter_{iteration:09}_view_{viewpoint.uid}_blurred_{k}÷3.png",
                                     nrow=2,
                                     padding=0,
                                 )
@@ -605,6 +616,7 @@ parser.add_argument("--viewer", action="store_true")
 parser.add_argument("--viewer_mode", type=str, default="local")
 parser.add_argument("--detect_anomaly", action="store_true", default=False)
 parser.add_argument("--flip_camera", action="store_true", default=False)
+parser.add_argument("--val_views", action="append", type=int, default=[75])
 # parser.add_argument("--test_iterations", nargs="+", type=int, default=[100, 500, 1_000, 2_500, 5_000, 10_000, 20_000, 30_000, 60_000, 90_000])
 # parser.add_argument("--test_iterations", nargs="+", type=int, default=[1_000, 2_000, 3_000, 5_000, 10_000, 20_000, 30_000, 60_000, 90_000])
 # parser.add_argument("--test_iterations", nargs="+", type=int, default=[1_000, 3_000, 7_000, 15_000, 22_500, 30_000, 60_000, 90_000])
@@ -651,7 +663,6 @@ print("Optimizing " + args.model_path)
 # Initialize system state (RNG)
 safe_state(args.quiet)
 
-first_iter = 0
 tb_writer = prepare_output_and_logger(model_params, opt_params)
 
 gaussians = GaussianModel(model_params)
@@ -660,9 +671,11 @@ scene = Scene(model_params, gaussians)
 
 gaussians.training_setup(opt_params)
 
+first_iter = 0
 if args.start_checkpoint:
     (capture_data, first_iter) = torch.load(args.start_checkpoint, weights_only=False) #!!! Cant release like this, security risk
     gaussians.restore(capture_data, opt_params)
+first_iter += 1
 
 bg_color = [1, 1, 1] if model_params.white_background else [0, 0, 0]
 background = torch.tensor(bg_color, dtype=torch.float32, device="cuda")
@@ -675,6 +688,7 @@ raytracer = GaussianRaytracer(
     gaussians, viewpoint_stack[0].image_width, viewpoint_stack[0].image_height
 )
 raytracer.cuda_module.num_samples.fill_(model_params.num_samples)
+
 
 if args.viewer:
     from gaussianviewer import GaussianViewer
@@ -690,8 +704,6 @@ if args.viewer:
         viewer_thd.start()
 
 ema_loss_for_log = 0.0
-first_iter += 1
-
 start = time.time()
 
 if model_params.no_bounces_until_iter > 0:

@@ -281,8 +281,11 @@ class GaussianModel:
         )
         self._f0 = nn.Parameter(
             torch.ones((fused_point_cloud.shape[0], 3), device="cuda") * self.model_params.init_f0
-        )
-        self._diffuse = nn.Parameter(fused_color.clone())
+        )  
+        if "SKIP_TONEMAPPING" not in os.environ:
+            self._diffuse = nn.Parameter(untonemap(fused_color.clone()).clamp(0, 1))
+        else:
+            self._diffuse = nn.Parameter(fused_color.clone())
         self._scaling = nn.Parameter(scales.requires_grad_(True))
         self._rotation = nn.Parameter(rots.requires_grad_(True))
         self._opacity = nn.Parameter(opacities.requires_grad_(True))
@@ -406,7 +409,8 @@ class GaussianModel:
                 }
             )
 
-        self.optimizer = torch.optim.Adam(l, lr=0.0, eps=1e-15)
+        
+        self.optimizer = torch.optim.Adam(l, lr=0.0, eps=1e-15, betas=(training_args.beta_1, training_args.beta_2))
         self.xyz_scheduler_args = get_expon_lr_func(
             lr_init=training_args.position_lr_init * self.spatial_lr_scale,
             lr_final=training_args.position_lr_final * self.spatial_lr_scale,
@@ -688,9 +692,6 @@ class GaussianModel:
             extension_tensor = tensors_dict[group["name"]]
             stored_state = self.optimizer.state.get(group["params"][0], None)
             if stored_state is not None:
-                assert (
-                    stored_state["exp_avg"].shape[1:] == extension_tensor.shape[1:]
-                ), breakpoint()
                 stored_state["exp_avg"] = torch.cat(
                     (stored_state["exp_avg"], torch.zeros_like(extension_tensor)), dim=0
                 )
@@ -1075,6 +1076,7 @@ class GaussianModel:
             self.xyz_gradient_accum[update_filter] += score_diffuse
         elif "GLOSSY_DENS_ONLY" in os.environ:
             gradient_glossy = gradient_glossy[update_filter]
+            print(gradient_glossy.mean(), gradient_glossy.std())
             score_glossy = gradient_glossy.norm(dim=-1, keepdim=True)
             self.xyz_gradient_accum[update_filter] += score_glossy
         elif "DBG_FALLBACK_DENS" in os.environ:

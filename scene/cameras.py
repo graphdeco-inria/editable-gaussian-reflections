@@ -66,13 +66,14 @@ class Camera(nn.Module):
             self._glossy_image = glossy_image.half().to(image_holding_device)
         else:
             # *** optimized as tonemapped values, will need to be inverse the tonemapping before adding both passes
+            EXPOSURE = os.getenv("EXPOSURE", 3.5)
             self._original_image = (
-                (tonemap(diffuse_image + glossy_image)).half().to(image_holding_device)
+                (tonemap(diffuse_image * EXPOSURE+ glossy_image * EXPOSURE)).half().to(image_holding_device)
             )
             self._diffuse_image = (
-                (tonemap(diffuse_image)).half().to(image_holding_device)
+                (tonemap(diffuse_image * EXPOSURE)).half().to(image_holding_device)
             )
-            self._glossy_image = (tonemap(glossy_image)).half().to(image_holding_device)
+            self._glossy_image = (tonemap(glossy_image * EXPOSURE)).half().to(image_holding_device)
             if "DONT_CLAMP_TARGETS" not in os.environ:
                 self._original_image = torch.clamp(self._original_image, 0.0, 1.0)
                 self._diffuse_image = torch.clamp(self._diffuse_image, 0.0, 1.0)
