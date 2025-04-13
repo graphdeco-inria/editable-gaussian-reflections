@@ -13,7 +13,7 @@ from scene.tonemapping import *
 import json 
 from argparse import ArgumentParser, Namespace
 from imgui_bundle import imgui_ctx, imgui, imguizmo
-
+import math 
 
 gizmo = imguizmo.im_guizmo
 
@@ -41,6 +41,17 @@ class GaussianViewer(Viewer):
         else:
             self.ray_count = 4
         self.init_pose = None
+        self.train_transforms = None 
+        self.test_transforms = None
+        self.current_train_cam = -1 
+        self.current_test_cam = -1
+
+        self.blender_to_opengl = np.array([
+            [1,  0,  0,  0],
+            [0,  -1,  0,  0],
+            [0, 0,  -1,  0],
+            [0,  0,  0,  1]
+        ], dtype=float)
 
     def import_server_modules(self):
         global torch
@@ -97,8 +108,8 @@ class GaussianViewer(Viewer):
         background = torch.tensor(bg_color, dtype=torch.float32, device="cuda")
         viewer.background = background
 
-        viewer.camera_poses = json.load(open(os.path.join(model_path, "cameras.json"), "r"))
-        viewer.init_pose = np.hstack([ np.array(viewer.camera_poses[0]["rotation"]), np.array(viewer.camera_poses[0]["position"])[:, None] ])
+        viewer.train_transforms = json.load(open(os.path.join(model_path, "transforms_train.json"), "r"))
+        viewer.test_transforms = json.load(open(os.path.join(model_path, "transforms_test.json"), "r"))
         return viewer
     
     @classmethod
@@ -113,7 +124,7 @@ class GaussianViewer(Viewer):
         return viewer
 
     def create_widgets(self):
-        self.camera = FPSCamera(self.mode, self.raytracer.image_width, self.raytracer.image_height, 47, 0.001, 100)
+        self.camera = FPSCamera(self.mode, self.raytracer.image_width if self.raytracer is not None else 800, self.raytracer.image_height if self.raytracer is not None else 600, 47, 0.001, 100)
         self.point_view = TorchImage(self.mode)
         self.ellipsoid_viewer = EllipsoidViewer(self.mode)
         self.monitor = PerformanceMonitor(self.mode, ["Render"], add_other=False)
@@ -149,7 +160,8 @@ class GaussianViewer(Viewer):
         camera = self.camera
         world_to_view = torch.from_numpy(camera.to_camera).cuda().transpose(0, 1)
         full_proj_transform = torch.from_numpy(camera.full_projection).cuda().transpose(0, 1)
-        camera = MiniCam(camera.res_x, camera.res_y, camera.fov_y, camera.fov_x, camera.z_near, camera.z_far, world_to_view, full_proj_transform)
+        
+        camera = MiniCam(camera.res_x, camera.res_y, self.train_transforms["camera_angle_y"], self.train_transforms["camera_angle_x"], camera.z_near, camera.z_far, world_to_view, full_proj_transform)
 
         if self.ellipsoid_viewer.num_gaussians is None:
            self.ellipsoid_viewer.upload(
@@ -238,6 +250,41 @@ class GaussianViewer(Viewer):
                 _, self.exposure = imgui.drag_float("Exposure", self.exposure, v_min=0, v_max=6, v_speed=0.01)
 
             imgui.separator_text("Camera Settings")
+
+            if self.train_transforms is not None:
+                using_train_cam = self.current_train_cam != -1
+                if not using_train_cam:
+                    imgui.push_style_color(imgui.Col_.frame_bg, (0.0, 0.0, 0.0, 0.0)) 
+                    imgui.push_style_color(imgui.Col_.frame_bg_hovered, (0.0, 0.0, 0.0, 0.0))
+                    imgui.push_style_color(imgui.Col_.frame_bg_active, (0.0, 0.0, 0.0, 0.0))
+                train_cam_changed, self.current_train_cam = imgui.input_int("Set Train View", self.current_train_cam, step=1, step_fast=10)
+                if not train_cam_changed and imgui.is_item_hovered() and imgui.is_mouse_clicked(imgui.MouseButton_.right):
+                    train_cam_changed = True
+                    self.current_train_cam = 0
+                if not using_train_cam:
+                    imgui.pop_style_color(3)
+                self.current_train_cam = max(-1, min(len(self.train_transforms["frames"]) - 1, self.current_train_cam))
+
+                using_test_cam = self.current_test_cam != -1
+                if not using_test_cam:
+                    imgui.push_style_color(imgui.Col_.frame_bg, (0.0, 0.0, 0.0, 0.0)) 
+                    imgui.push_style_color(imgui.Col_.frame_bg_hovered, (0.0, 0.0, 0.0, 0.0))
+                    imgui.push_style_color(imgui.Col_.frame_bg_active, (0.0, 0.0, 0.0, 0.0))
+                test_cam_changed, self.current_test_cam = imgui.input_int("Set Test View", self.current_test_cam, step=1, step_fast=10)
+                if not test_cam_changed and imgui.is_item_hovered() and imgui.is_mouse_clicked(imgui.MouseButton_.right):
+                    test_cam_changed = True
+                    self.current_test_cam = 0
+                if not using_test_cam:
+                    imgui.pop_style_color(3)
+                self.current_test_cam = max(-1, min(len(self.test_transforms["frames"]) - 1, self.current_test_cam))
+                
+                if train_cam_changed:
+                    self.camera.update_pose(np.array(self.train_transforms["frames"][self.current_train_cam]["transform_matrix"]) @ self.blender_to_opengl)
+                    self.current_test_cam = -1
+                elif test_cam_changed:
+                    self.camera.update_pose(np.array(self.test_transforms["frames"][self.current_test_cam]["transform_matrix"]) @ self.blender_to_opengl)
+                    self.current_train_cam = -1
+                
             self.camera.show_gui()
 
             imgui.separator_text("BRDF Editing")
@@ -267,27 +314,29 @@ class GaussianViewer(Viewer):
         with imgui_ctx.begin("Point View"):
             gizmo.set_drawlist()
             pos = imgui.get_cursor_screen_pos()
-            print(pos)
             gizmo.set_drawlist()
             
             gizmo.set_rect(pos.x, pos.y, self.camera.res_x, self.camera.res_y)
 
-            if imgui.is_item_hovered() and not gizmo.is_using():
-                self.camera.process_mouse_input()
+            # if imgui.is_item_hovered() and not gizmo.is_using():
+            #     cam_changed_from_mouse = self.camera.process_mouse_input()
+            # else:
+            #     cam_changed_from_mouse = False
+            # if imgui.is_item_focused() or imgui.is_item_hovered():
+            #     cam_changed_from_keyboard = self.camera.process_keyboard_input()
+            # else:
+            #     cam_changed_from_keyboard = False
             
-            if imgui.is_item_focused() or imgui.is_item_hovered():
-                self.camera.process_keyboard_input()
-
             if self.render_modes[self.render_mode] == "Ellipsoids":
                self.ellipsoid_viewer.show_gui()
             else:
                self.point_view.show_gui()
 
-            if imgui.is_item_hovered():
-                self.camera.process_mouse_input()
-            
-            if imgui.is_item_focused() or imgui.is_item_hovered():
-                self.camera.process_keyboard_input()
+            cam_changed_from_mouse = imgui.is_item_hovered() and self.camera.process_mouse_input()
+            cam_changed_from_keyboard = (imgui.is_item_focused() or imgui.is_item_hovered()) and self.camera.process_keyboard_input()
+            if cam_changed_from_mouse or cam_changed_from_keyboard:
+                self.current_train_cam = -1
+                self.current_test_cam = -1
         
         with imgui_ctx.begin("Performance"):
             self.monitor.show_gui()
@@ -307,27 +356,25 @@ class GaussianViewer(Viewer):
         self.exposure = text["exposure"]
 
     def server_send(self):
-        return None, {
-            # "cameras": self.cameras,
-            "ray_count": self.ray_count,
-            "init_cam": self.camera_poses[0],
-            
-        }
+        if self.first_send:
+            data = {
+                # "cameras": self.cameras,
+                "ray_count": self.ray_count,
+                "train_transforms": self.train_transforms,
+                "test_transforms": self.test_transforms
+            }
+        else:
+            data = {}
+        return None, data
     
     def client_recv(self, _, text):
-        if self.ray_count != text["ray_count"]:
+        if "ray_count" in text and self.ray_count != text["ray_count"]:
             self.ray_count = text["ray_count"]
             self.ray_choices = ["All/Default"] + ["Ray " + str(i) for i in range(self.ray_count)]
-        if self.init_pose is None:
-            self.init_pose = text["init_cam"]
-            self.camera.update_pose(np.hstack([ 
-            
-            # np.array(self.init_pose["position"])[:, None] 
-                np.array(self.init_pose["rotation"]), 
-                np.array([ 0.00221941, -0.49231448,  0.29137429])[:, None] # todo clean this up
-            
-            ]))
-            # [ 0.00221941 -0.49231448  0.29137429]
+        if "train_transforms" in text and self.init_pose is None:
+            self.train_transforms = text["train_transforms"]
+            self.test_transforms = text["test_transforms"]
+            self.camera.update_pose(np.array(text["train_transforms"]["frames"][0]["transform_matrix"]) @ self.blender_to_opengl)
     
 if __name__ == "__main__":
     parser = ArgumentParser()
@@ -358,7 +405,7 @@ if __name__ == "__main__":
     else:
         viewer = GaussianViewer.from_ply(args.model_path, args.iter, mode)
 
-    if args.mode == "server":
+    if args.mode in ["client", "server"]:
         viewer.run(args.ip, args.port)
     else:
         viewer.run()
