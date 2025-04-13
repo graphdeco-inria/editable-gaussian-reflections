@@ -40,6 +40,8 @@ class Viewer(ABC):
         if self.mode in LOCAL_SERVER:
             self.import_server_modules()
 
+        self.first_send = True
+
     def _setup(self):
         """ Go over all of the widgets and initialize them """
         for _, widget in vars(self).items():
@@ -75,6 +77,7 @@ class Viewer(ABC):
 
         if self.mode is SERVER:
             self._server_send(websocket)
+            self.first_send = False
 
         if self.mode is CLIENT and self.websocket is not None:
             try:
@@ -100,6 +103,7 @@ class Viewer(ABC):
 
         # Main Loop
         try:
+            self.first_send = True
             while True:
                 self._main(websocket)
         except ConnectionClosedOK:
@@ -191,7 +195,7 @@ class Viewer(ABC):
             # Try to connect to the server
             if self.websocket is None:
                 try:
-                    print(ip, port)
+                    # print("132.203.32.208", port)
                     self.websocket = connect(f"ws://{ip}:{port}", max_size=None, compression=None)
                     print("INFO: Connected to server.")
                 except Exception as e:
@@ -270,7 +274,7 @@ class Viewer(ABC):
                 widget = self.widget_id_to_widget[int(widget_id)]
                 widget.client_recv(data.get("binary", None), data.get("metadata", None))
 
-    def run(self, ip: str = "localhost", port: int = 8000):
+    def run(self, ip: str = "localhost", port: int = 6009):
         self.create_widgets()
 
         # Run the client connection in a different thread, the main thread runs the GUI.
@@ -311,7 +315,6 @@ class Viewer(ABC):
             glfw.make_context_current(None)
 
             # Start server
-            print(ip, port)
             with serve(self._server_loop, ip, port, max_size=None, compression=None) as server:
                 server_thread = threading.Thread(target=server.serve_forever)
                 server_thread.start()
