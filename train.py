@@ -112,6 +112,7 @@ def training_report(tb_writer, iteration):
                         diffuse_image = package.rgb[0].clamp(0, 1)
                         glossy_image = package.rgb[1:-1].sum(dim=0)
                         pred_image = package.rgb[-1].clamp(0, 1)
+                        pred_image_without_denoising = package.rgb[:-1].sum(dim=0)
                         diffuse_gt_image = torch.clamp(
                             viewpoint.diffuse_image, 0.0, 1.0
                         )
@@ -123,6 +124,7 @@ def training_report(tb_writer, iteration):
                             untonemap(package.rgb[1:-1]).sum(dim=0)
                         ).clamp(0, 1)
                         pred_image = package.rgb[-1].clamp(0, 1)
+                        pred_image_without_denoising = tonemap(untonemap(package.rgb[:-1]).sum(dim=0))
                         diffuse_gt_image = torch.clamp(
                             viewpoint.diffuse_image, 0.0, 1.0
                         )
@@ -132,6 +134,7 @@ def training_report(tb_writer, iteration):
                         diffuse_image = tonemap(package.rgb[0]).clamp(0, 1)
                         glossy_image = tonemap(package.rgb[1:-1].sum(dim=0)).clamp(0, 1)
                         pred_image = tonemap(package.rgb[-1]).clamp(0, 1)
+                        pred_image_without_denoising = tonemap(package.rgb[:-1]).sum(dim=0)
                         diffuse_gt_image = tonemap(viewpoint.diffuse_image).clamp(0, 1)
                         glossy_gt_image = tonemap(viewpoint.glossy_image).clamp(0, 1)
                         gt_image = tonemap(viewpoint.original_image).clamp(0, 1)
@@ -354,7 +357,15 @@ def training_report(tb_writer, iteration):
                             torch.stack([pred_image, gt_image]).clamp(0, 1),
                             tb_writer.log_dir
                             + "/"
-                            + f"{config['name']}_view/iter_{iteration:09}_view_{viewpoint.uid}_final_vs_target.png",
+                            + f"{config['name']}_view/iter_{iteration:09}_view_{viewpoint.uid}_final_denoised_vs_target.png",
+                            nrow=2,
+                            padding=0,
+                        )
+                        save_image(
+                            torch.stack([pred_image_without_denoising, gt_image]).clamp(0, 1),
+                            tb_writer.log_dir
+                            + "/"
+                            + f"{config['name']}_view/iter_{iteration:09}_view_{viewpoint.uid}_final_without_denoising_vs_target.png",
                             nrow=2,
                             padding=0,
                         )
@@ -947,29 +958,29 @@ for iteration in tqdm(
                     quit()
 
         # Clamp the gaussian scales to min 1% of the longest axis for numerical stability
-        # if "SKIP_CLAMP_MINSIZE" not in os.environ:
-        #     with torch.no_grad():
-        #         scaling = gaussians.get_scaling
-        #         max_scaling = scaling.amax(dim=1)
-        #         gaussians._scaling.data.clamp_(
-        #             min=torch.log(max_scaling * float(os.getenv("MIN_RELATIVE_SCALING", 0.01))).unsqueeze(-1)
-        #         )
+        if "CLAMP_MINSIZE" in os.environ:
+            with torch.no_grad():
+                scaling = gaussians.get_scaling
+                max_scaling = scaling.amax(dim=1)
+                gaussians._scaling.data.clamp_(
+                    min=torch.log(max_scaling * float(os.getenv("MIN_RELATIVE_SCALING", 0.01))).unsqueeze(-1)
+                )
 
-        if model_params.add_mcmc_noise:
-            L = build_scaling_rotation(gaussians.get_scaling, gaussians.get_rotation)
-            actual_covariance = L @ L.transpose(1, 2)
+        # if model_params.add_mcmc_noise:
+        #     L = build_scaling_rotation(gaussians.get_scaling, gaussians.get_rotation)
+        #     actual_covariance = L @ L.transpose(1, 2)
 
-            def op_sigmoid(x, k=100, x0=0.995):
-                return 1 / (1 + torch.exp(-k * (x - x0)))
+        #     def op_sigmoid(x, k=100, x0=0.995):
+        #         return 1 / (1 + torch.exp(-k * (x - x0)))
 
-            print(opt_params.noise_lr * xyz_lr)
-            noise = (
-                torch.randn_like(gaussians._xyz)
-                * (op_sigmoid(1 - gaussians.get_opacity))
-                * xyz_lr
-            )
-            noise = torch.bmm(actual_covariance, noise.unsqueeze(-1)).squeeze(-1)
-            gaussians._xyz.add_(noise)
+        #     print(opt_params.noise_lr * xyz_lr)
+        #     noise = (
+        #         torch.randn_like(gaussians._xyz)
+        #         * (op_sigmoid(1 - gaussians.get_opacity))
+        #         * xyz_lr
+        #     )
+        #     noise = torch.bmm(actual_covariance, noise.unsqueeze(-1)).squeeze(-1)
+        #     gaussians._xyz.add_(noise)
 
         if args.viewer:
             viewer.gaussian_lock.release()
