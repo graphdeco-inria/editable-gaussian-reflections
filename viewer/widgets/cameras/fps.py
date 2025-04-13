@@ -13,7 +13,7 @@ class FPSCamera(Camera):
             to_world: np.ndarray=None
     ):
         super().__init__(mode, res_x, res_y, fov_y, z_near, z_far, to_world)
-        self.speed = 1
+        self.speed = 2
         self.mouse_speed = 2
         self.radians_per_pixel = np.pi / 150
         self.invert_mouse = False
