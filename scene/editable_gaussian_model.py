@@ -23,12 +23,12 @@ class EditableGaussianModel(GaussianModel):
 
     # ----------------------------------------------------------------
 
+    
     @property
     def get_roughness(self):
         roughness = super().get_roughness.clone()
 
         for key, edit in self.edits.items():
-            print(edit.roughness_override)
             base_roughness = torch.lerp(roughness, torch.tensor(1.0).cuda(), edit.roughness_override)
             modified_roughness = (edit.roughness_mult * (base_roughness + edit.roughness_shift)).clamp(0, 1)
             roughness = torch.where(self.selections[key], modified_roughness, roughness)
@@ -70,18 +70,16 @@ class EditableGaussianModel(GaussianModel):
     @property
     def get_xyz(self):
         xyz = super().get_xyz.clone()
-        return xyz
-        # for key, edit in self.edits.items():
-            # xyz[self.selections[key]] += torch.tensor([edit.translation_x, edit.translation_y, edit.translation_z], device=xyz.device)
-        # return xyz
+        for key, edit in self.edits.items():
+            xyz[self.selections[key].squeeze(1)] += torch.tensor([edit.translate_x, edit.translate_y, edit.translate_z], device=xyz.device)
+        return xyz 
 
     @property
     def get_scaling(self):
         scaling = super().get_scaling.clone()
+        for key, edit in self.edits.items():
+            scaling[self.selections[key].squeeze(1)] *= torch.tensor([edit.scale_x, edit.scale_y, edit.scale_z], device=scaling.device)
         return scaling
-        # for key, edit in self.edits.items():
-        #     scaling[self.selections[key]] *= torch.tensor([edit.scale_x, edit.scale_y, edit.scale_z], device=scaling.device)
-        # return scaling
 
     @property
     def get_rotation(self):

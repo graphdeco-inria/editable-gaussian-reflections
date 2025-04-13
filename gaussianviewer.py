@@ -47,9 +47,9 @@ class Edit:
     glossy_value_shift: float = 0.0
     glossy_value_mult: float = 1.0
 
-    translation_x: float = 0.0
-    translation_y: float = 0.0
-    translation_z: float = 0.0
+    translate_x: float = 0.0
+    translate_y: float = 0.0
+    translate_z: float = 0.0
 
     scale_x: float = 1.0
     scale_y: float = 1.0
@@ -228,8 +228,8 @@ class GaussianViewer(Viewer):
             with torch.no_grad():
                 with self.gaussian_lock:
                     self.raytracer.cuda_module.global_scale_factor.copy_(self.scaling_modifier)
-                    if self.scaling_modifier != 1.0:
-                        self.raytracer.cuda_module.update_bvh()
+                    # if self.scaling_modifier != 1.0:
+                    self.raytracer.cuda_module.update_bvh() #!!!!! dont do every frame
 
                     self.update_bbox_selection() 
 
@@ -346,6 +346,11 @@ class GaussianViewer(Viewer):
             if did_disable:
                 imgui.begin_disabled()
 
+            disabled_cause_no_selection = False
+            if self.selection_choice == 0:
+                imgui.begin_disabled()
+                disabled_cause_no_selection = True
+
             imgui.separator_text("BRDF Editing")
 
             imgui.set_cursor_pos_x((imgui.get_content_region_avail().x - imgui.calc_text_size("Roughness").x) * 0.35)
@@ -457,21 +462,18 @@ class GaussianViewer(Viewer):
 
             imgui.spacing() 
 
-            x = 0
-            y = 0
-            z = 0
             imgui.push_item_width(imgui.get_content_region_avail().x * 0.21)
-            _, x = imgui.drag_float("##Translate X", x, v_min=-1, v_max=1, v_speed=0.01, format="%+.2f")
+            _, self.edit.translate_x = imgui.drag_float("##Translate X", self.edit.translate_x, v_min=-1, v_max=1, v_speed=0.01, format="%+.2f")
             if imgui.is_item_hovered() and imgui.is_mouse_clicked(imgui.MouseButton_.right):
-                x = 0.0
+                self.edit.translate_x = 0.0
             imgui.same_line()
-            _, y = imgui.drag_float("##Translate Y", y, v_min=-1, v_max=1, v_speed=0.01, format="+%.2f")
+            _, self.edit.translate_y = imgui.drag_float("##Translate Y", self.edit.translate_y, v_min=-1, v_max=1, v_speed=0.01, format="+%.2f")
             if imgui.is_item_hovered() and imgui.is_mouse_clicked(imgui.MouseButton_.right):
-                y = 0.0
+                self.edit.translate_y = 0.0
             imgui.same_line()
-            _, z = imgui.drag_float("##Translate Z", z, v_min=-1, v_max=1, v_speed=0.01, format="+%.2f")
+            _, self.edit.translate_z = imgui.drag_float("##Translate Z", self.edit.translate_z, v_min=-1, v_max=1, v_speed=0.01, format="+%.2f")
             if imgui.is_item_hovered() and imgui.is_mouse_clicked(imgui.MouseButton_.right):
-                z = 0.0
+                self.edit.translate_z = 0.0
             imgui.same_line()
             imgui.text("Translation")
             imgui.pop_item_width()
@@ -483,6 +485,9 @@ class GaussianViewer(Viewer):
             clicked = imgui.button("Reset Selection Pose", size=(240, 24))
             clicked = imgui.button("Reset All Poses", size=(240, 24))
         
+            if disabled_cause_no_selection:
+                imgui.end_disabled()
+
             if did_disable:
                 imgui.end_disabled()
 
@@ -578,7 +583,6 @@ class GaussianViewer(Viewer):
             "ray_choice": self.ray_choice,
             "selection_choice": self.selection_choice,
 
-
             # current edit 
             "roughness_shift": self.edit.roughness_shift,
             "roughness_mult": self.edit.roughness_mult,
@@ -594,7 +598,13 @@ class GaussianViewer(Viewer):
             "glossy_value_mult": self.edit.glossy_value_mult,
             "roughness_override": self.edit.roughness_override,
             "diffuse_override": self.edit.diffuse_override,
-            "glossy_override": self.edit.glossy_override
+            "glossy_override": self.edit.glossy_override,
+            "translate_x": self.edit.translate_x,
+            "translate_y": self.edit.translate_y,
+            "translate_z": self.edit.translate_z,
+            "scale_x": self.edit.scale_x,
+            "scale_y": self.edit.scale_y,
+            "scale_z": self.edit.scale_z
         }
     
     def server_recv(self, _, text):
@@ -620,6 +630,12 @@ class GaussianViewer(Viewer):
         self.edit.roughness_override = text["roughness_override"]
         self.edit.diffuse_override = text["diffuse_override"]
         self.edit.glossy_override = text["glossy_override"]
+        self.edit.translate_x = text["translate_x"]
+        self.edit.translate_y = text["translate_y"]
+        self.edit.translate_z = text["translate_z"]
+        self.edit.scale_x = text["scale_x"]
+        self.edit.scale_y = text["scale_y"]
+        self.edit.scale_z = text["scale_z"]
 
     def server_send(self):
         if self.first_send:
