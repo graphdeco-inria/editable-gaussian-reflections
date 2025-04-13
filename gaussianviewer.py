@@ -343,14 +343,21 @@ class GaussianViewer(Viewer):
             if clicked:
                 self.in_selection_mode = not self.in_selection_mode
                 self.selection_choice = 0
+            if clicked:
+                pass
             if did_disable:
                 imgui.begin_disabled()
 
+            
             disabled_cause_no_selection = False
             if self.selection_choice == 0:
                 imgui.begin_disabled()
                 disabled_cause_no_selection = True
 
+            clicked = imgui.button("Duplicate selected", size=(240, 24))
+            if clicked and self.raytracer is not None:
+                self.gaussians.duplicate_selected(self.selection_choice)
+            
             imgui.separator_text("BRDF Editing")
 
             imgui.set_cursor_pos_x((imgui.get_content_region_avail().x - imgui.calc_text_size("Roughness").x) * 0.35)
@@ -604,7 +611,7 @@ class GaussianViewer(Viewer):
             "translate_z": self.edit.translate_z,
             "scale_x": self.edit.scale_x,
             "scale_y": self.edit.scale_y,
-            "scale_z": self.edit.scale_z
+            "scale_z": self.edit.scale_z,
         }
     
     def server_recv(self, _, text):

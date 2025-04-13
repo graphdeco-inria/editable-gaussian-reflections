@@ -88,33 +88,36 @@ class EditableGaussianModel(GaussianModel):
 
     # ----------------------------------------------------------------
 
-    def clone_selection(self, selection_name: str):
-        selection = self.edits[selection_name].selection
+    @torch.no_grad()
+    def duplicate_selected(self, selection_name: str):
+        target_selection = self.selections[selection_name].squeeze(1).cuda()
 
-        new_xyz = self._xyz[selection].clone()
-        new_position = self._position[selection].clone()
-        new_rotation = self._rotation[selection].clone()
-        new_scaling = self._scaling[selection].clone()
-        new_opacity = self._opacity[selection].clone()
-        new_diffuse = self._diffuse[selection].clone()
-        new_roughness = self._roughness[selection].clone()
-        new_f0 = self._f0[selection].clone()
-        new_normal = self._normal[selection].clone()
-        new_lod_mean = self._lod_mean[selection].clone()
-        new_lod_scale = self._lod_scale[selection].clone()
-        new_round_counter = self._round_counter[selection].clone()
+        new_xyz = self._xyz[target_selection].clone() + 0.2
+        new_position = self._position[target_selection].clone()
+        new_rotation = self._rotation[target_selection].clone()
+        new_scaling = self._scaling[target_selection].clone()
+        new_opacity = self._opacity[target_selection].clone()
+        new_diffuse = self._diffuse[target_selection].clone()
+        new_roughness = self._roughness[target_selection].clone()
+        new_f0 = self._f0[target_selection].clone()
+        new_normal = self._normal[target_selection].clone()
+        new_lod_mean = self._lod_mean[target_selection].clone()
+        new_lod_scale = self._lod_scale[target_selection].clone()
+        new_round_counter = self._round_counter[target_selection].clone()
 
-        self.densification_postfix(
-            new_xyz,
-            new_position,
-            new_normal,
-            new_roughness_params,
-            new_f0_params,
-            new_diffuse,
-            new_opacity,
-            new_lod_mean,
-            new_lod_scale,
-            new_scaling,
-            new_rotation,
-            new_round_counter
-        )
+        self._xyz = torch.cat((self._xyz, new_xyz), dim=0)
+        self._position = torch.cat((self._position, new_position), dim=0)
+        self._rotation = torch.cat((self._rotation, new_rotation), dim=0)
+        self._scaling = torch.cat((self._scaling, new_scaling), dim=0)
+        self._opacity = torch.cat((self._opacity, new_opacity), dim=0)
+        self._diffuse = torch.cat((self._diffuse, new_diffuse), dim=0)
+        self._roughness = torch.cat((self._roughness, new_roughness), dim=0)
+        self._f0 = torch.cat((self._f0, new_f0), dim=0)
+        self._normal = torch.cat((self._normal, new_normal), dim=0)
+        self._lod_mean = torch.cat((self._lod_mean, new_lod_mean), dim=0)
+        self._lod_scale = torch.cat((self._lod_scale, new_lod_scale), dim=0)
+        self._round_counter = torch.cat((self._round_counter, new_round_counter), dim=0)
+
+        for key, selection in self.selections.items():
+            new_selection = torch.cat((selection, ~target_selection[target_selection].unsqueeze(1)), dim=0)
+            self.selections[key] = new_selection
