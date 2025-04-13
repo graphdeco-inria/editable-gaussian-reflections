@@ -96,10 +96,11 @@ class GaussianRaytracer:
             self.cuda_module.gaussian_lod_scale.copy_(self.pc._lod_scale)
         
         if edits is not None:
-            #!!! softplus + weird clamping
-            hsv = kornia.color.rgb_to_hsv(self.pc._diffuse.T[None, :, :, None].nan_to_num(0.0).clamp(-1000, 1000))[0, :, :, 0].T
-            #hsv[:, 0] = (hsv[:, 0] + edits["hue"]) + 1
-            #hsv[:, 1] = torch.clamp(hsv[:,840 2] + edits["value"], 0, 1)
+            hsv = kornia.color.rgb_to_hsv(self.pc._diffuse.T[None, :, :, None])[0, :, :, 0].T
+
+            hsv[:, 0] = (hsv[:, 0] + math.pi * edits["diffuse_hue_shift"]) % (2 * math.pi)
+            hsv[:, 1] = (edits["diffuse_saturation_mult"] * hsv[:, 1] + edits["diffuse_saturation_shift"]).clamp(0, 1)
+            hsv[:, 2] = (edits["diffuse_value_mult"] * hsv[:, 2] + edits["diffuse_value_shift"]).clamp(0)
             rgb = kornia.color.hsv_to_rgb(hsv.T[None, :, :, None])[0, :, :, 0].T
             #rgb = torch.log(1 + torch.exp(rgb))
         else:

@@ -456,11 +456,25 @@ class GaussianViewer(Viewer):
         
     
     def client_send(self):
-        return None, {
+        None, {
             "scaling_modifier": self.scaling_modifier,
             "render_mode": self.render_mode,
             "exposure": self.exposure,
-            "ray_choice": self.ray_choice
+            "ray_choice": self.ray_choice,
+            "reflectivity_shift": self.reflectivity_shift,
+            "reflectivity_mult": self.reflectivity_mult,
+            "roughness_shift": self.roughness_shift,
+            "roughness_mult": self.roughness_mult,
+            "diffuse_hue_shift": self.diffuse_hue_shift,
+            "diffuse_saturation_shift": self.diffuse_saturation_shift,
+            "diffuse_saturation_mult": self.diffuse_saturation_mult,
+            "diffuse_value_shift": self.diffuse_value_shift,
+            "diffuse_value_mult": self.diffuse_value_mult,
+            "glossy_hue_shift": self.glossy_hue_shift,
+            "glossy_saturation_shift": self.glossy_saturation_shift,
+            "glossy_saturation_mult": self.glossy_saturation_mult,
+            "glossy_value_shift": self.glossy_value_shift,
+            "glossy_value_mult": self.glossy_value_mult,
         }
     
     def server_recv(self, _, text):
@@ -468,6 +482,20 @@ class GaussianViewer(Viewer):
         self.render_mode = text["render_mode"]
         self.ray_choice = text["ray_choice"]
         self.exposure = text["exposure"]
+        self.reflectivity_shift = text["reflectivity_shift"]
+        self.reflectivity_mult = text["reflectivity_mult"]
+        self.roughness_shift = text["roughness_shift"]
+        self.roughness_mult = text["roughness_mult"]
+        self.diffuse_hue_shift = text["diffuse_hue_shift"]
+        self.diffuse_saturation_shift = text["diffuse_saturation_shift"]
+        self.diffuse_saturation_mult = text["diffuse_saturation_mult"]
+        self.diffuse_value_shift = text["diffuse_value_shift"]
+        self.diffuse_value_mult = text["diffuse_value_mult"]
+        self.glossy_hue_shift = text["glossy_hue_shift"]
+        self.glossy_saturation_shift = text["glossy_saturation_shift"]
+        self.glossy_saturation_mult = text["glossy_saturation_mult"]
+        self.glossy_value_shift = text["glossy_value_shift"]
+        self.glossy_value_mult = text["glossy_value_mult"]
 
     def server_send(self):
         if self.first_send:
