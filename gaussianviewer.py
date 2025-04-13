@@ -87,9 +87,6 @@ class GaussianViewer(Viewer):
         global GaussianModel
         from scene import GaussianModel
 
-        global EditableGaussianModel
-        from scene import EditableGaussianModel
-
         global PipelineParams, ModelParams
         from arguments import PipelineParams, ModelParams
 
@@ -104,8 +101,8 @@ class GaussianViewer(Viewer):
 
     @classmethod
     def from_ply(cls, model_path, iter, mode: ViewerMode):
-        global GaussianModel
-        from scene import GaussianModel
+        global EditableGaussianModel
+        from scene import EditableGaussianModel
         from gaussian_renderer import GaussianRaytracer
 
         # Read configuration
@@ -123,31 +120,38 @@ class GaussianViewer(Viewer):
         pipe.compute_cov3D_python = "compute_cov3D_python" in model_params
         pipe.convert_SHs_python = "convert_SHs_python" in model_params
 
+        # Open object selections
+        source_path = model_params.source_path
+        train_transforms = json.load(open(os.path.join(source_path, "transforms_train.json"), "r"))
+        test_transforms = json.load(open(os.path.join(source_path, "transforms_test.json"), "r"))
+        bounding_boxes = json.load(open(os.path.join(source_path, "bounding_boxes.json"), "r"))
+        selection_masks = {}
+        for bbox_name in bounding_boxes.keys():
+            mask = (np.array(Image.open(os.path.join(source_path, f"selection_masks/{bbox_name}.png")).convert("RGB")).mean(axis=2) > 0.5).astype(bool)
+            selection_masks[bbox_name] = mask
 
-        gaussians = GaussianModel(model_params)
+        # 
+        edits = { bbox_name: Edit() for bbox_name in bounding_boxes.keys() }
+        gaussians = EditableGaussianModel(edits, bounding_boxes, model_params)
         ply_path = os.path.join(model_path, "point_cloud", f"iteration_{iter}", "point_cloud.ply")
         gaussians.load_ply(ply_path)
-        raytracer = GaussianRaytracer(gaussians, int(model_params.resolution*1.5), model_params.resolution)
+        gaussians.construct_selections()
+        raytracer = GaussianRaytracer(gaussians, int(model_params.resolution*1.5), model_params.resolution) #!!! hard-coded aspect ratio
 
         viewer = cls(mode, raytracer)
         viewer.separate_sh = False
         viewer.gaussians = gaussians
         viewer.dataset = dataset
         viewer.pipe = pipe
+        viewer.train_transforms = train_transforms
+        viewer.test_transforms = test_transforms
+        viewer.bounding_boxes = bounding_boxes
+        viewer.selection_masks = selection_masks
 
         bg_color = [1, 1, 1] if dataset.white_background else [0, 0, 0]
         background = torch.tensor(bg_color, dtype=torch.float32, device="cuda")
         viewer.background = background
 
-        source_path = model_params.source_path
-        viewer.train_transforms = json.load(open(os.path.join(source_path, "transforms_train.json"), "r"))
-        viewer.test_transforms = json.load(open(os.path.join(source_path, "transforms_test.json"), "r"))
-
-        viewer.bounding_boxes = json.load(open(os.path.join(source_path, "bounding_boxes.json"), "r"))
-        viewer.selection_masks = {}
-        for bbox_name in viewer.bounding_boxes.keys():
-            mask = (np.array(Image.open(os.path.join(source_path, f"selection_masks/{bbox_name}.png")).convert("RGB")).mean(axis=2) > 0.5).astype(bool)
-            viewer.selection_masks[bbox_name] = mask
         return viewer
     
     @classmethod
@@ -184,26 +188,18 @@ class GaussianViewer(Viewer):
         # Render settings
         self.exposure = 1.0
         self.scaling_modifier = 1.0
-        
-        
 
         self.in_selection_mode = False
 
         # Editing
-        self.reset_brdf_edit_settings()
-        if self.raytracer is not None:
-            self.selection = torch.zeros_like(self.raytracer.pc._roughness).bool()
+        self.edit = Edit()
 
     def update_bbox_selection(self):
         if self.raytracer is not None and self.selection_choice != 0:
-            bounding_box = self.bounding_boxes[self.selection_choices[self.selection_choice]]
-            dist1 = self.raytracer.pc._xyz - (torch.tensor(bounding_box["min"], device="cuda"))
-            dist2 = self.raytracer.pc._xyz - (torch.tensor(bounding_box["max"], device="cuda"))
-            within_bbox = (dist1 >= 0).all(dim=-1) & (dist2 <= 0).all(dim=-1)
-            self.selection = within_bbox.unsqueeze(1)
+            self.edit = self.gaussians.edits[self.selection_choices[self.selection_choice]]
 
-    def reset_brdf_edit_settings(self):
-        self.edit = Edit()
+    # def reset_brdf_edit_settings(self):
+    #     self.edit = Edit() 
 
     def step(self):
         camera = self.camera
@@ -237,24 +233,7 @@ class GaussianViewer(Viewer):
 
                     self.update_bbox_selection() 
 
-                    package = render(camera, self.raytracer, self.pipe, self.background, blur_sigma=None, targets_available=False, edits=dict(
-                        roughness_shift=self.edit.roughness_shift,
-                        roughness_mult=self.edit.roughness_mult,
-                        diffuse_hue_shift=self.edit.diffuse_hue_shift,
-                        diffuse_saturation_shift=self.edit.diffuse_saturation_shift,
-                        diffuse_saturation_mult=self.edit.diffuse_saturation_mult,
-                        diffuse_value_shift=self.edit.diffuse_value_shift,
-                        diffuse_value_mult=self.edit.diffuse_value_mult,
-                        glossy_hue_shift=self.edit.glossy_hue_shift,
-                        glossy_saturation_shift=self.edit.glossy_saturation_shift,
-                        glossy_saturation_mult=self.edit.glossy_saturation_mult,
-                        glossy_value_shift=self.edit.glossy_value_shift,
-                        glossy_value_mult=self.edit.glossy_value_mult,
-                        roughness_override=self.edit.roughness_override,
-                        diffuse_override=self.edit.diffuse_override,
-                        glossy_override=self.edit.glossy_override,
-                        selection=self.selection,
-                    ))
+                    package = render(camera, self.raytracer, self.pipe, self.background, blur_sigma=None, targets_available=False)
                     
                     self.raytracer.cuda_module.global_scale_factor.copy_(1.0)
 
@@ -356,7 +335,7 @@ class GaussianViewer(Viewer):
             clicked, self.selection_choice = imgui.combo("Object List", self.selection_choice, self.selection_choices)
             if clicked:
                 self.update_bbox_selection()    
-                self.reset_brdf_edit_settings()
+                # self.reset_brdf_edit_settings()
             
             if did_disable:
                 imgui.end_disabled()
@@ -529,7 +508,7 @@ class GaussianViewer(Viewer):
                             if mask[i, j]:
                                 self.selection_choice = self.selection_choices.index(bbox_name)
                                 self.update_bbox_selection()
-                                self.reset_brdf_edit_settings()
+                                # self.reset_brdf_edit_settings()
                                 break
                         self.in_selection_mode = False
                     elif imgui.is_mouse_clicked(imgui.MouseButton_.right):
