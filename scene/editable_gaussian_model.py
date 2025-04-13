@@ -20,6 +20,7 @@ class EditableGaussianModel(GaussianModel):
                 dist2 = self._xyz - (torch.tensor(bounding_box["max"], device="cuda"))
                 within_bbox = (dist1 >= 0).all(dim=-1) & (dist2 <= 0).all(dim=-1)
                 self.selections[key] = within_bbox.unsqueeze(1)
+            self.selections["everything"] = torch.ones(self._xyz.shape[0], 1, device="cuda", dtype=torch.bool)
 
     # ----------------------------------------------------------------
 
@@ -29,9 +30,10 @@ class EditableGaussianModel(GaussianModel):
         roughness = super().get_roughness.clone()
 
         for key, edit in self.edits.items():
-            base_roughness = torch.lerp(roughness, torch.tensor(1.0).cuda(), edit.roughness_override)
-            modified_roughness = (edit.roughness_mult * (base_roughness + edit.roughness_shift)).clamp(0, 1)
-            roughness = torch.where(self.selections[key], modified_roughness, roughness)
+            if edit.use_roughness_override:
+                base_roughness = torch.lerp(roughness, torch.tensor(1.0).cuda(), edit.roughness_override)
+                modified_roughness = (edit.roughness_mult * (base_roughness + edit.roughness_shift)).clamp(0, 1)
+                roughness = torch.where(self.selections[key], modified_roughness, roughness)
 
         return roughness
 
@@ -119,5 +121,6 @@ class EditableGaussianModel(GaussianModel):
         self._round_counter = torch.cat((self._round_counter, new_round_counter), dim=0)
 
         for key, selection in self.selections.items():
-            new_selection = torch.cat((selection, ~target_selection[target_selection].unsqueeze(1)), dim=0)
+            xtra = target_selection[target_selection].unsqueeze(1)
+            new_selection = torch.cat((selection, xtra if selection == "Everything" else ~xtra), dim=0)
             self.selections[key] = new_selection

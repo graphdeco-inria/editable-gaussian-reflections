@@ -17,6 +17,7 @@ import math
 from PIL import Image
 from viewer.widgets.ellipsoid_viewer import EllipsoidViewer
 from dataclasses import dataclass
+import dataclasses
 
 gizmo = imguizmo.im_guizmo
 Matrix3 = gizmo.Matrix3
@@ -31,16 +32,17 @@ class Edit:
     roughness_shift: float = 0.0
     roughness_mult: float = 1.0
 
-    diffuse_override: tuple[float, float, float, float] = (0.0, 0.0, 0.0, 0.0)
+    diffuse_override: tuple[float, float, float, float] = (0.5, 0.5, 0.5, 0.0)
     diffuse_hue_shift: float = 0.0
     diffuse_saturation_shift: float = 0.0
     diffuse_saturation_mult: float = 1.0
     diffuse_value_shift: float = 0.0
     diffuse_value_mult: float = 1.0
     
+    use_roughness_override: bool = False
     roughness_override: float = 0.0
 
-    glossy_override: tuple[float, float, float, float] = (0.0, 0.0, 0.0, 0.0)
+    glossy_override: tuple[float, float, float, float] = (0.5, 0.5, 0.5, 0.0)
     glossy_hue_shift: float = 0.0
     glossy_saturation_shift: float = 0.0
     glossy_saturation_mult: float = 1.0
@@ -129,6 +131,7 @@ class GaussianViewer(Viewer):
         for bbox_name in bounding_boxes.keys():
             mask = (np.array(Image.open(os.path.join(source_path, f"selection_masks/{bbox_name}.png")).convert("RGB")).mean(axis=2) > 0.5).astype(bool)
             selection_masks[bbox_name] = mask
+        bounding_boxes["everything"] = {"min": [-1000, 1000, -1000], "max": [1000, 1000, 1000] }
 
         # 
         edits = { bbox_name: Edit() for bbox_name in bounding_boxes.keys() }
@@ -179,11 +182,11 @@ class GaussianViewer(Viewer):
         self.ray_choice = 0
 
         self.selection_choice = 0
-        self.selection_choices = ["None"]
+        self.selection_choices = ["none"]
         if self.raytracer is not None:
-            self.selection_choices = ["None"] + [x for x in self.bounding_boxes.keys()]
+            self.selection_choices = ["none"] + [x for x in self.bounding_boxes.keys()]
         else:
-            self.selection_choices = ["None"]
+            self.selection_choices = ["none"] 
         
         # Render settings
         self.exposure = 1.0
@@ -362,9 +365,13 @@ class GaussianViewer(Viewer):
 
             imgui.set_cursor_pos_x((imgui.get_content_region_avail().x - imgui.calc_text_size("Roughness").x) * 0.35)
             imgui.text("Roughness")
+            imgui.push_item_width(imgui.get_content_region_avail().x * 0.595)
             _, self.edit.roughness_override = imgui.drag_float("##Roughness Override", self.edit.roughness_override, v_min=0, v_max=1, v_speed=0.01/2)
             if imgui.is_item_hovered() and imgui.is_mouse_clicked(imgui.MouseButton_.right):
                 self.edit.roughness_override = 0.0
+            imgui.pop_item_width()
+            imgui.same_line()
+            _, self.edit.use_roughness_override = imgui.checkbox("##Use Roughness Override", self.edit.use_roughness_override)
             imgui.same_line()
             imgui.text("Override")
             imgui.push_item_width(imgui.get_content_region_avail().x * 0.329)
@@ -386,7 +393,7 @@ class GaussianViewer(Viewer):
             
             imgui.set_cursor_pos_x((imgui.get_content_region_avail().x - imgui.calc_text_size("Diffuse").x) * 0.35)
             imgui.text("Diffuse")
-            _, self.edit.diffuse_override = imgui.color_edit4("##Diffuse Override", self.edit.diffuse_override, flags=imgui.ColorEditFlags_.no_options)
+            _, self.edit.diffuse_override = imgui.color_edit4("##Diffuse Override", self.edit.diffuse_override, flags=imgui.ColorEditFlags_.no_options | imgui.ColorEditFlags_.alpha_preview)
             if imgui.is_item_hovered() and imgui.is_mouse_clicked(imgui.MouseButton_.right):
                 self.edit.diffuse_override = (0.0, 0.0, 0.0, 0.0)
             imgui.same_line()
@@ -424,7 +431,7 @@ class GaussianViewer(Viewer):
 
             imgui.set_cursor_pos_x((imgui.get_content_region_avail().x - imgui.calc_text_size("Specular").x) * 0.35)
             imgui.text("Specular")
-            _, self.edit.glossy_override = imgui.color_edit4("##Specular Override", self.edit.glossy_override, flags=imgui.ColorEditFlags_.no_options)
+            _, self.edit.glossy_override = imgui.color_edit4("##Specular Override", self.edit.glossy_override, flags=imgui.ColorEditFlags_.no_options | imgui.ColorEditFlags_.alpha_preview)
             if imgui.is_item_hovered() and imgui.is_mouse_clicked(imgui.MouseButton_.right):
                 self.edit.glossy_override = (0.0, 0.0, 0.0, 0.0)
             imgui.same_line()
@@ -589,29 +596,7 @@ class GaussianViewer(Viewer):
             "exposure": self.exposure,
             "ray_choice": self.ray_choice,
             "selection_choice": self.selection_choice,
-
-            # current edit 
-            "roughness_shift": self.edit.roughness_shift,
-            "roughness_mult": self.edit.roughness_mult,
-            "diffuse_hue_shift": self.edit.diffuse_hue_shift,
-            "diffuse_saturation_shift": self.edit.diffuse_saturation_shift,
-            "diffuse_saturation_mult": self.edit.diffuse_saturation_mult,
-            "diffuse_value_shift": self.edit.diffuse_value_shift,
-            "diffuse_value_mult": self.edit.diffuse_value_mult,
-            "glossy_hue_shift": self.edit.glossy_hue_shift,
-            "glossy_saturation_shift": self.edit.glossy_saturation_shift,
-            "glossy_saturation_mult": self.edit.glossy_saturation_mult,
-            "glossy_value_shift": self.edit.glossy_value_shift,
-            "glossy_value_mult": self.edit.glossy_value_mult,
-            "roughness_override": self.edit.roughness_override,
-            "diffuse_override": self.edit.diffuse_override,
-            "glossy_override": self.edit.glossy_override,
-            "translate_x": self.edit.translate_x,
-            "translate_y": self.edit.translate_y,
-            "translate_z": self.edit.translate_z,
-            "scale_x": self.edit.scale_x,
-            "scale_y": self.edit.scale_y,
-            "scale_z": self.edit.scale_z,
+            **dataclasses.asdict(self.edit)
         }
     
     def server_recv(self, _, text):
@@ -621,28 +606,8 @@ class GaussianViewer(Viewer):
         self.selection_choice = text["selection_choice"]
         self.exposure = text["exposure"]
         
-        # current edit 
-        self.edit.roughness_shift = text["roughness_shift"]
-        self.edit.roughness_mult = text["roughness_mult"]
-        self.edit.diffuse_hue_shift = text["diffuse_hue_shift"]
-        self.edit.diffuse_saturation_shift = text["diffuse_saturation_shift"]
-        self.edit.diffuse_saturation_mult = text["diffuse_saturation_mult"]
-        self.edit.diffuse_value_shift = text["diffuse_value_shift"]
-        self.edit.diffuse_value_mult = text["diffuse_value_mult"]
-        self.edit.glossy_hue_shift = text["glossy_hue_shift"]
-        self.edit.glossy_saturation_shift = text["glossy_saturation_shift"]
-        self.edit.glossy_saturation_mult = text["glossy_saturation_mult"]
-        self.edit.glossy_value_shift = text["glossy_value_shift"]
-        self.edit.glossy_value_mult = text["glossy_value_mult"]
-        self.edit.roughness_override = text["roughness_override"]
-        self.edit.diffuse_override = text["diffuse_override"]
-        self.edit.glossy_override = text["glossy_override"]
-        self.edit.translate_x = text["translate_x"]
-        self.edit.translate_y = text["translate_y"]
-        self.edit.translate_z = text["translate_z"]
-        self.edit.scale_x = text["scale_x"]
-        self.edit.scale_y = text["scale_y"]
-        self.edit.scale_z = text["scale_z"]
+        for field in dataclasses.fields(self.edit):
+            setattr(self.edit, field.name, text[field.name])
 
     def server_send(self):
         if self.first_send:
