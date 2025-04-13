@@ -72,7 +72,6 @@ class ModelParams(ParamGroup):
         self._model_path = ""
         self._images = "images"
         self._resolution = 1536
-
         # // 2 ## Yohan: on quarter res this crashes at 600 iters and I don't know why => this is because this gives the width, not the height! so it results in non-pow2 sizes for the height
         self._white_background = False
         self.data_device = "cuda"
@@ -99,7 +98,7 @@ class ModelParams(ParamGroup):
 
         self.keep_every_kth_view = 1
         self.max_images = 9999999
-        self.num_farfield_init_points = 1_000_000  # 100_000
+        self.num_farfield_init_points = 500_000  # 100_000
 
         self.min_opacity = 0.005
 
@@ -109,8 +108,6 @@ class ModelParams(ParamGroup):
         self.zfar_scaleup = 1.5
 
         self.force_mcmc_custom_init = False
-        self.add_mcmc_noise = False
-
         self.downsampling_mode = "area"
 
         self.exposure = 1.0
@@ -131,7 +128,7 @@ class ModelParams(ParamGroup):
 
         self.warmup_diffuse_loss_weight = 10000.0
         self.diffuse_loss_weight = 5.0
-        self.glossy_loss_weight = 0.005  # ! was 0.001 
+        self.glossy_loss_weight = 0.01    #0.005  # ! was 0.001 
         self.normal_loss_weight = 1.0
         self.position_loss_weight = 1.0
         self.f0_loss_weight = 1.0
@@ -209,7 +206,7 @@ class OptimizationParams(ParamGroup):
         self.position_lr_max_steps = 30_000
         self.slowdown = 1
 
-        self.normal_lr = 0.0025 * 5 #! *5 may or may not help
+        self.normal_lr = 0.0025
         self.position_lr = 0.0025
         self.roughness_lr = 0.0025
         self.f0_lr = 0.0025
@@ -249,7 +246,7 @@ class OptimizationParams(ParamGroup):
         self.densify_grad_threshold = 0.0002
 
         self.densif_use_top_k = True
-        self.densif_final_num_gaussians = 500_000  #! 1M
+        self.densif_final_num_gaussians = 500_000 
         self.densif_size_ranking_weight = 0.0
         self.densif_opacity_ranking_weight = 0.0
         self.densif_lod_ranking_weight = 0.0
@@ -268,7 +265,7 @@ class OptimizationParams(ParamGroup):
         self.random_background = False
 
         self.beta_1 = 0.9
-        self.beta_2 = 0.95 # important to be lower than 0.999
+        self.beta_2 = 0.9 # important to be lower than 0.999
 
         super().__init__(parser, "Optimization Parameters")
 
