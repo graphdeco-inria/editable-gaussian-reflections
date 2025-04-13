@@ -96,13 +96,16 @@ class GaussianRaytracer:
             self.cuda_module.gaussian_lod_scale.copy_(self.pc._lod_scale)
         
         if edits is not None:
-            hsv = kornia.color.rgb_to_hsv(self.pc._diffuse.T[None, :, :, None])[0, :, :, 0].T
-
+            base_diffuse = torch.lerp(self.pc._diffuse, torch.tensor(edits["diffuse_override"])[:3].cuda(), edits["diffuse_override"][-1])
+            hsv = kornia.color.rgb_to_hsv(base_diffuse.T[None, :, :, None])[0, :, :, 0].T
             hsv[:, 0] = (hsv[:, 0] + math.pi * edits["diffuse_hue_shift"]) % (2 * math.pi)
-            hsv[:, 1] = (edits["diffuse_saturation_mult"] * hsv[:, 1] + edits["diffuse_saturation_shift"]).clamp(0, 1)
-            hsv[:, 2] = (edits["diffuse_value_mult"] * hsv[:, 2] + edits["diffuse_value_shift"]).clamp(0)
-            rgb = kornia.color.hsv_to_rgb(hsv.T[None, :, :, None])[0, :, :, 0].T
-            #rgb = torch.log(1 + torch.exp(rgb))
+            hsv[:, 1] = (edits["diffuse_saturation_mult"] * (hsv[:, 1] + edits["diffuse_saturation_shift"])).clamp(0, 1)
+            hsv[:, 2] = (edits["diffuse_value_mult"] * (hsv[:, 2] + edits["diffuse_value_shift"])).clamp(0)
+            rgb = torch.where(
+                edits["selection"], 
+                kornia.color.hsv_to_rgb(hsv.T[None, :, :, None])[0, :, :, 0].T,
+                self.pc._diffuse
+            )
         else:
             rgb = self.pc._diffuse
         self.cuda_module.gaussian_rgb.copy_(rgb)
@@ -111,10 +114,30 @@ class GaussianRaytracer:
         if self.cuda_module.gaussian_normal is not None:
             self.cuda_module.gaussian_normal.copy_(self.pc._normal)
         if self.cuda_module.gaussian_roughness is not None:
-            roughness = self.pc._roughness#.clamp(0) + (edits["roughness"] if edits is not None else 0)
+            if edits is not None:
+                base_roughness = torch.lerp(self.pc._roughness, torch.tensor(1.0).cuda(), edits["roughness_override"])
+                roughness = (edits["roughness_mult"] * (base_roughness + edits["roughness_shift"])).clamp(0, 1)
+                roughness = torch.where(
+                    edits["selection"], roughness, self.pc._roughness
+                )
+            else:
+                roughness = self.pc._roughness
+            roughness = roughness.clamp(0)
             self.cuda_module.gaussian_roughness.copy_(roughness)
         if self.cuda_module.gaussian_f0 is not None:
-            f0 = self.pc._f0 + (edits["reflectivity_shift"] if edits is not None else 0)
+            if edits is not None:
+                base_f0 = torch.lerp(self.pc._f0, torch.tensor(edits["glossy_override"])[:3].cuda(), edits["glossy_override"][-1])
+                hsv = kornia.color.rgb_to_hsv(base_f0.T[None, :, :, None])[0, :, :, 0].T
+                hsv[:, 0] = (hsv[:, 0] + math.pi * edits["glossy_hue_shift"]) % (2 * math.pi)
+                hsv[:, 1] = (edits["glossy_saturation_mult"] * (hsv[:, 1] + edits["glossy_saturation_shift"])).clamp(0, 1)
+                hsv[:, 2] = (edits["glossy_value_mult"] * (hsv[:, 2] + edits["glossy_value_shift"])).clamp(0)
+                f0 = torch.where(
+                    edits["selection"], 
+                    kornia.color.hsv_to_rgb(hsv.T[None, :, :, None])[0, :, :, 0].T,
+                    self.pc._f0
+                )
+            else:
+                f0 = self.pc._f0
             self.cuda_module.gaussian_f0.copy_(f0)
 
     @torch.no_grad()

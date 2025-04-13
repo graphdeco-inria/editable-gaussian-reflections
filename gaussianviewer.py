@@ -14,21 +14,46 @@ import json
 from argparse import ArgumentParser, Namespace
 from imgui_bundle import imgui_ctx, imgui, imguizmo
 import math 
+from PIL import Image
+from viewer.widgets.ellipsoid_viewer import EllipsoidViewer
+from dataclasses import dataclass
 
 gizmo = imguizmo.im_guizmo
-
 Matrix3 = gizmo.Matrix3
 Matrix6 = gizmo.Matrix6
 Matrix16 = gizmo.Matrix16
 
-from viewer.widgets.ellipsoid_viewer import EllipsoidViewer
-
 class Dummy(object):
     pass
 
+@dataclass
+class Edit:
+    roughness_shift: float = 0.0
+    roughness_mult: float = 1.0
 
-class Dummy(object):
-    pass
+    diffuse_override: tuple[float, float, float, float] = (0.0, 0.0, 0.0, 0.0)
+    diffuse_hue_shift: float = 0.0
+    diffuse_saturation_shift: float = 0.0
+    diffuse_saturation_mult: float = 1.0
+    diffuse_value_shift: float = 0.0
+    diffuse_value_mult: float = 1.0
+    
+    roughness_override: float = 0.0
+
+    glossy_override: tuple[float, float, float, float] = (0.0, 0.0, 0.0, 0.0)
+    glossy_hue_shift: float = 0.0
+    glossy_saturation_shift: float = 0.0
+    glossy_saturation_mult: float = 1.0
+    glossy_value_shift: float = 0.0
+    glossy_value_mult: float = 1.0
+
+    translation_x: float = 0.0
+    translation_y: float = 0.0
+    translation_z: float = 0.0
+
+    scale_x: float = 1.0
+    scale_y: float = 1.0
+    scale_z: float = 1.0
 
 class GaussianViewer(Viewer):
     def __init__(self, mode: ViewerMode, raytracer: "GaussianRaytracer"):
@@ -53,12 +78,17 @@ class GaussianViewer(Viewer):
             [0,  0,  0,  1]
         ], dtype=float)
 
+        self.selected_object_transform = Matrix16([1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0])
+
     def import_server_modules(self):
         global torch
         import torch
 
         global GaussianModel
         from scene import GaussianModel
+
+        global EditableGaussianModel
+        from scene import EditableGaussianModel
 
         global PipelineParams, ModelParams
         from arguments import PipelineParams, ModelParams
@@ -93,6 +123,7 @@ class GaussianViewer(Viewer):
         pipe.compute_cov3D_python = "compute_cov3D_python" in model_params
         pipe.convert_SHs_python = "convert_SHs_python" in model_params
 
+
         gaussians = GaussianModel(model_params)
         ply_path = os.path.join(model_path, "point_cloud", f"iteration_{iter}", "point_cloud.ply")
         gaussians.load_ply(ply_path)
@@ -108,8 +139,15 @@ class GaussianViewer(Viewer):
         background = torch.tensor(bg_color, dtype=torch.float32, device="cuda")
         viewer.background = background
 
-        viewer.train_transforms = json.load(open(os.path.join(model_path, "transforms_train.json"), "r"))
-        viewer.test_transforms = json.load(open(os.path.join(model_path, "transforms_test.json"), "r"))
+        source_path = model_params.source_path
+        viewer.train_transforms = json.load(open(os.path.join(source_path, "transforms_train.json"), "r"))
+        viewer.test_transforms = json.load(open(os.path.join(source_path, "transforms_test.json"), "r"))
+
+        viewer.bounding_boxes = json.load(open(os.path.join(source_path, "bounding_boxes.json"), "r"))
+        viewer.selection_masks = {}
+        for bbox_name in viewer.bounding_boxes.keys():
+            mask = (np.array(Image.open(os.path.join(source_path, f"selection_masks/{bbox_name}.png")).convert("RGB")).mean(axis=2) > 0.5).astype(bool)
+            viewer.selection_masks[bbox_name] = mask
         return viewer
     
     @classmethod
@@ -136,33 +174,36 @@ class GaussianViewer(Viewer):
         self.ray_choices = ["All/Default"] + ["Ray " + str(i) for i in range(self.ray_count)] 
         self.ray_choice = 0
 
-        self.brdf_selection_choice = 0
-        self.brdf_selection_options = ["None", "Cup", "Table", "Shelf", "All"]
+        self.selection_choice = 0
+        self.selection_choices = ["None"]
+        if self.raytracer is not None:
+            self.selection_choices = ["None"] + [x for x in self.bounding_boxes.keys()]
+        else:
+            self.selection_choices = ["None"]
         
         # Render settings
         self.exposure = 1.0
         self.scaling_modifier = 1.0
         
-        # Editing
-        self.reflectivity_shift = 0.0
-        self.reflectivity_mult = 1.0
-        self.roughness_shift = 0.0
-        self.roughness_mult = 1.0
-
-        self.diffuse_hue_shift = 0.0
-        self.diffuse_saturation_shift = 0.0
-        self.diffuse_saturation_mult = 1.0
-        self.diffuse_value_shift = 0.0
-        self.diffuse_value_mult = 1.0
         
-        self.glossy_hue_shift = 0.0
-        self.glossy_saturation_shift = 0.0
-        self.glossy_saturation_mult = 1.0
-        self.glossy_value_shift = 0.0
-        self.glossy_value_mult = 1.0
 
         self.in_selection_mode = False
 
+        # Editing
+        self.reset_brdf_edit_settings()
+        if self.raytracer is not None:
+            self.selection = torch.zeros_like(self.raytracer.pc._roughness).bool()
+
+    def update_bbox_selection(self):
+        if self.raytracer is not None and self.selection_choice != 0:
+            bounding_box = self.bounding_boxes[self.selection_choices[self.selection_choice]]
+            dist1 = self.raytracer.pc._xyz - (torch.tensor(bounding_box["min"], device="cuda"))
+            dist2 = self.raytracer.pc._xyz - (torch.tensor(bounding_box["max"], device="cuda"))
+            within_bbox = (dist1 >= 0).all(dim=-1) & (dist2 <= 0).all(dim=-1)
+            self.selection = within_bbox.unsqueeze(1)
+
+    def reset_brdf_edit_settings(self):
+        self.edit = Edit()
 
     def step(self):
         camera = self.camera
@@ -193,22 +234,26 @@ class GaussianViewer(Viewer):
                     self.raytracer.cuda_module.global_scale_factor.copy_(self.scaling_modifier)
                     if self.scaling_modifier != 1.0:
                         self.raytracer.cuda_module.update_bvh()
+
+                    self.update_bbox_selection() 
+
                     package = render(camera, self.raytracer, self.pipe, self.background, blur_sigma=None, targets_available=False, edits=dict(
-                        reflectivity_shift=self.reflectivity_shift,
-                        reflectivity_mult=self.reflectivity_mult,
-                        roughness_shift=self.roughness_shift,
-                        roughness_mult=self.roughness_mult,
-                        diffuse_hue_shift=self.diffuse_hue_shift,
-                        diffuse_saturation_shift=self.diffuse_saturation_shift,
-                        diffuse_saturation_mult=self.diffuse_saturation_mult,
-                        diffuse_value_shift=self.diffuse_value_shift,
-                        diffuse_value_mult=self.diffuse_value_mult,
-                        glossy_hue_shift=self.glossy_hue_shift,
-                        glossy_saturation_shift=self.glossy_saturation_shift,
-                        glossy_saturation_mult=self.glossy_saturation_mult,
-                        glossy_value_shift=self.glossy_value_shift,
-                        glossy_value_mult=self.glossy_value_mult,
-                        # selection= put the selection mask here
+                        roughness_shift=self.edit.roughness_shift,
+                        roughness_mult=self.edit.roughness_mult,
+                        diffuse_hue_shift=self.edit.diffuse_hue_shift,
+                        diffuse_saturation_shift=self.edit.diffuse_saturation_shift,
+                        diffuse_saturation_mult=self.edit.diffuse_saturation_mult,
+                        diffuse_value_shift=self.edit.diffuse_value_shift,
+                        diffuse_value_mult=self.edit.diffuse_value_mult,
+                        glossy_hue_shift=self.edit.glossy_hue_shift,
+                        glossy_saturation_shift=self.edit.glossy_saturation_shift,
+                        glossy_saturation_mult=self.edit.glossy_saturation_mult,
+                        glossy_value_shift=self.edit.glossy_value_shift,
+                        glossy_value_mult=self.edit.glossy_value_mult,
+                        roughness_override=self.edit.roughness_override,
+                        diffuse_override=self.edit.diffuse_override,
+                        glossy_override=self.edit.glossy_override,
+                        selection=self.selection,
                     ))
                     
                     self.raytracer.cuda_module.global_scale_factor.copy_(1.0)
@@ -307,137 +352,229 @@ class GaussianViewer(Viewer):
             self.camera.show_gui()
 
             imgui.separator_text("Selection")
-            
-            clicked, selected_index = imgui.combo("Object List", self.brdf_selection_choice, self.brdf_selection_options)
+
+            clicked, self.selection_choice = imgui.combo("Object List", self.selection_choice, self.selection_choices)
+            if clicked:
+                self.update_bbox_selection()    
+                self.reset_brdf_edit_settings()
             
             if did_disable:
                 imgui.end_disabled()
-            clicked = imgui.button("                 Selection Tool                 " if not self.in_selection_mode else "                       Cancel                       ")
+            clicked = imgui.button("Point and Click", size=(240, 24))
             if clicked:
                 self.in_selection_mode = not self.in_selection_mode
+                self.selection_choice = 0
             if did_disable:
                 imgui.begin_disabled()
 
             imgui.separator_text("BRDF Editing")
 
-            imgui.set_cursor_pos_x((imgui.get_content_region_avail().x - imgui.calc_text_size("Surface").x) * 0.35)
-            imgui.text("Surface")
-            imgui.push_item_width(imgui.get_content_region_avail().x * 0.33333)
-            _, self.roughness_shift = imgui.drag_float("##Roughness Shift", self.roughness_shift, v_min=-1, v_max=1, v_speed=0.01, format="%+.2f")
-            if imgui.is_item_hovered() and imgui.is_mouse_clicked(imgui.MouseButton_.right):
-                self.roughness_shift = 0.0
-            imgui.same_line()
-            _, self.roughness_mult = imgui.drag_float("##Roughness Mult", self.roughness_mult, v_min=0, v_max=3.0, v_speed=0.01, format="x%.2f")
-            if imgui.is_item_hovered() and imgui.is_mouse_clicked(imgui.MouseButton_.right):
-                self.roughness_mult = 1.0
-            imgui.same_line()
+            imgui.set_cursor_pos_x((imgui.get_content_region_avail().x - imgui.calc_text_size("Roughness").x) * 0.35)
             imgui.text("Roughness")
-            _, self.reflectivity_shift = imgui.drag_float("##Reflectivity Shift", self.reflectivity_shift, v_min=-1, v_max=1, v_speed=0.01, format="%+.2f")
+            _, self.edit.roughness_override = imgui.drag_float("##Roughness Override", self.edit.roughness_override, v_min=0, v_max=1, v_speed=0.01/2)
             if imgui.is_item_hovered() and imgui.is_mouse_clicked(imgui.MouseButton_.right):
-                self.reflectivity_shift = 0.0
+                self.edit.roughness_override = 0.0
             imgui.same_line()
-            _, self.reflectivity_mult = imgui.drag_float("##Reflectivity Mult", self.reflectivity_mult, v_min=0, v_max=3.0, v_speed=0.01, format="x%.2f")
+            imgui.text("Override")
+            imgui.push_item_width(imgui.get_content_region_avail().x * 0.329)
+            _, self.edit.roughness_shift = imgui.drag_float("##Roughness Shift", self.edit.roughness_shift, v_min=-1, v_max=1, v_speed=0.01, format="%+.2f")
             if imgui.is_item_hovered() and imgui.is_mouse_clicked(imgui.MouseButton_.right):
-                self.reflectivity_mult = 1.0
+                self.edit.roughness_shift = 0.0
             imgui.same_line()
-            imgui.text("Reflectivity")
+            _, self.edit.roughness_mult = imgui.drag_float("##Roughness Mult", self.edit.roughness_mult, v_min=0, v_max=3.0, v_speed=0.01, format="x%.2f")
+            if imgui.is_item_hovered() and imgui.is_mouse_clicked(imgui.MouseButton_.right):
+                self.edit.roughness_mult = 1.0
+            imgui.same_line()
+            imgui.text("Adjust")
             imgui.pop_item_width()
 
             imgui.spacing() 
             imgui.spacing() 
-        
+
+            imgui.spacing() 
+            
             imgui.set_cursor_pos_x((imgui.get_content_region_avail().x - imgui.calc_text_size("Diffuse").x) * 0.35)
             imgui.text("Diffuse")
-            imgui.push_item_width(imgui.get_content_region_avail().x * 0.69)
-            _, self.diffuse_hue_shift = imgui.drag_float("##Diffuse Hue Shift", self.diffuse_hue_shift, v_min=-1, v_max=1, v_speed=0.01, format="%+.2f")
+            _, self.edit.diffuse_override = imgui.color_edit4("##Diffuse Override", self.edit.diffuse_override, flags=imgui.ColorEditFlags_.no_options)
             if imgui.is_item_hovered() and imgui.is_mouse_clicked(imgui.MouseButton_.right):
-                self.diffuse_hue_shift = 0.0
+                self.edit.diffuse_override = (0.0, 0.0, 0.0, 0.0)
+            imgui.same_line()
+            imgui.text("Override")
+            imgui.push_item_width(imgui.get_content_region_avail().x * 0.68)
+            _, self.edit.diffuse_hue_shift = imgui.drag_float("##Diffuse Hue Shift", self.edit.diffuse_hue_shift, v_min=-1, v_max=1, v_speed=0.01, format="%+.2f")
+            if imgui.is_item_hovered() and imgui.is_mouse_clicked(imgui.MouseButton_.right):
+                self.edit.diffuse_hue_shift = 0.0
             imgui.same_line()
             imgui.text("Hue")
             imgui.pop_item_width()
-            imgui.push_item_width(imgui.get_content_region_avail().x * 0.33333)
-            _, self.diffuse_saturation_shift = imgui.drag_float("##Diffuse Saturation Shift", self.diffuse_saturation_shift, v_min=-1, v_max=1, v_speed=0.01, format="%+.2f")
+            imgui.push_item_width(imgui.get_content_region_avail().x * 0.329)
+            _, self.edit.diffuse_saturation_shift = imgui.drag_float("##Diffuse Saturation Shift", self.edit.diffuse_saturation_shift, v_min=-1, v_max=1, v_speed=0.01, format="%+.2f")
             if imgui.is_item_hovered() and imgui.is_mouse_clicked(imgui.MouseButton_.right):
-                self.diffuse_saturation_shift = 0.0
+                self.edit.diffuse_saturation_shift = 0.0
             imgui.same_line()
-            _, self.diffuse_saturation_mult = imgui.drag_float("##Diffuse Saturation Mult", self.diffuse_saturation_mult, v_min=0, v_max=3.0, v_speed=0.01, format="x%.2f")
+            _, self.edit.diffuse_saturation_mult = imgui.drag_float("##Diffuse Saturation Mult", self.edit.diffuse_saturation_mult, v_min=0, v_max=3.0, v_speed=0.01, format="x%.2f")
             if imgui.is_item_hovered() and imgui.is_mouse_clicked(imgui.MouseButton_.right):
-                self.diffuse_saturation_mult = 1.0
+                self.edit.diffuse_saturation_mult = 1.0
             imgui.same_line()
             imgui.text("Saturation")
-            _, self.diffuse_value_shift = imgui.drag_float("##Diffuse Value Shift", self.diffuse_value_shift, v_min=-1, v_max=1, v_speed=0.01, format="%+.2f")
+            _, self.edit.diffuse_value_shift = imgui.drag_float("##Diffuse Value Shift", self.edit.diffuse_value_shift, v_min=-1, v_max=1, v_speed=0.01, format="%+.2f")
             if imgui.is_item_hovered() and imgui.is_mouse_clicked(imgui.MouseButton_.right):
-                self.diffuse_value_shift = 0.0
+                self.edit.diffuse_value_shift = 0.0
             imgui.same_line()
-            _, self.diffuse_value_mult = imgui.drag_float("##Diffuse Value Mult", self.diffuse_value_mult, v_min=0, v_max=3.0, v_speed=0.01, format="x%.2f")
+            _, self.edit.diffuse_value_mult = imgui.drag_float("##Diffuse Value Mult", self.edit.diffuse_value_mult, v_min=0, v_max=3.0, v_speed=0.01, format="x%.2f")
             if imgui.is_item_hovered() and imgui.is_mouse_clicked(imgui.MouseButton_.right):
-                self.diffuse_value_mult = 1.0
+                self.edit.diffuse_value_mult = 1.0
             imgui.same_line()
             imgui.text("Value")
+            imgui.pop_item_width()
 
             imgui.spacing() 
             imgui.spacing() 
 
             imgui.set_cursor_pos_x((imgui.get_content_region_avail().x - imgui.calc_text_size("Specular").x) * 0.35)
             imgui.text("Specular")
-            imgui.push_item_width(imgui.get_content_region_avail().x * 0.69)
-            _, self.glossy_hue_shift = imgui.drag_float("##Specular Hue Shift", self.glossy_hue_shift, v_min=-1, v_max=1, v_speed=0.01, format="%+.2f")
+            _, self.edit.glossy_override = imgui.color_edit4("##Specular Override", self.edit.glossy_override, flags=imgui.ColorEditFlags_.no_options)
             if imgui.is_item_hovered() and imgui.is_mouse_clicked(imgui.MouseButton_.right):
-                self.glossy_hue_shift = 0.0
+                self.edit.glossy_override = (0.0, 0.0, 0.0, 0.0)
+            imgui.same_line()
+            imgui.text("Override")
+            imgui.push_item_width(imgui.get_content_region_avail().x * 0.68)
+            _, self.edit.glossy_hue_shift = imgui.drag_float("##Specular Hue Shift", self.edit.glossy_hue_shift, v_min=-1, v_max=1, v_speed=0.01, format="%+.2f")
+            if imgui.is_item_hovered() and imgui.is_mouse_clicked(imgui.MouseButton_.right):
+                self.edit.glossy_hue_shift = 0.0
             imgui.same_line()
             imgui.text("Hue")
             imgui.pop_item_width()
-            imgui.push_item_width(imgui.get_content_region_avail().x * 0.33333)
-            _, self.glossy_saturation_shift = imgui.drag_float("##Specular Saturation Shift", self.glossy_saturation_shift, v_min=-1, v_max=1, v_speed=0.01, format="%+.2f")
+            imgui.push_item_width(imgui.get_content_region_avail().x * 0.329)
+            _, self.edit.glossy_saturation_shift = imgui.drag_float("##Specular Saturation Shift", self.edit.glossy_saturation_shift, v_min=-1, v_max=1, v_speed=0.01, format="%+.2f")
             if imgui.is_item_hovered() and imgui.is_mouse_clicked(imgui.MouseButton_.right):
-                self.glossy_saturation_shift = 0.0
+                self.edit.glossy_saturation_shift = 0.0
             imgui.same_line()
-            _, self.glossy_saturation_mult = imgui.drag_float("##Specular Saturation Mult", self.glossy_saturation_mult, v_min=0, v_max=3.0, v_speed=0.01, format="x%.2f")
+            _, self.edit.glossy_saturation_mult = imgui.drag_float("##Specular Saturation Mult", self.edit.glossy_saturation_mult, v_min=0, v_max=3.0, v_speed=0.01, format="x%.2f")
             if imgui.is_item_hovered() and imgui.is_mouse_clicked(imgui.MouseButton_.right):
-                self.glossy_saturation_mult = 1.0
+                self.edit.glossy_saturation_mult = 1.0
             imgui.same_line()
             imgui.text("Saturation")
-            _, self.glossy_value_shift = imgui.drag_float("##Specular Value Shift", self.glossy_value_shift, v_min=-1, v_max=1, v_speed=0.01, format="%+.2f")
+            _, self.edit.glossy_value_shift = imgui.drag_float("##Specular Value Shift", self.edit.glossy_value_shift, v_min=-1, v_max=1, v_speed=0.01, format="%+.2f")
             if imgui.is_item_hovered() and imgui.is_mouse_clicked(imgui.MouseButton_.right):
-                self.glossy_value_shift = 0.0
+                self.edit.glossy_value_shift = 0.0
             imgui.same_line()
-            _, self.glossy_value_mult = imgui.drag_float("##Specular Value Mult", self.glossy_value_mult, v_min=0, v_max=3.0, v_speed=0.01, format="x%.2f")
+            _, self.edit.glossy_value_mult = imgui.drag_float("##Specular Value Mult", self.edit.glossy_value_mult, v_min=0, v_max=3.0, v_speed=0.01, format="x%.2f")
             if imgui.is_item_hovered() and imgui.is_mouse_clicked(imgui.MouseButton_.right):
-                self.glossy_value_mult = 1.0
+                self.edit.glossy_value_mult = 1.0
             imgui.same_line()
             imgui.text("Value")
+            imgui.pop_item_width()
 
+            imgui.spacing() 
+            imgui.spacing() 
+
+            clicked = imgui.button("Reset Selection BRDF", size=(240, 24))
+            clicked = imgui.button("Reset All BRDFs", size=(240, 24))
             imgui.spacing() 
             imgui.spacing() 
 
             imgui.separator_text("Geometric Editing")
 
-            imgui.checkbox("Show Gizmo", False)    
-            imgui.button("Duplicate")
+            imgui.spacing() 
+
+            x = 0
+            y = 0
+            z = 0
+            imgui.push_item_width(imgui.get_content_region_avail().x * 0.21)
+            _, x = imgui.drag_float("##Translate X", x, v_min=-1, v_max=1, v_speed=0.01, format="%+.2f")
+            if imgui.is_item_hovered() and imgui.is_mouse_clicked(imgui.MouseButton_.right):
+                x = 0.0
+            imgui.same_line()
+            _, y = imgui.drag_float("##Translate Y", y, v_min=-1, v_max=1, v_speed=0.01, format="+%.2f")
+            if imgui.is_item_hovered() and imgui.is_mouse_clicked(imgui.MouseButton_.right):
+                y = 0.0
+            imgui.same_line()
+            _, z = imgui.drag_float("##Translate Z", z, v_min=-1, v_max=1, v_speed=0.01, format="+%.2f")
+            if imgui.is_item_hovered() and imgui.is_mouse_clicked(imgui.MouseButton_.right):
+                z = 0.0
+            imgui.same_line()
+            imgui.text("Translation")
+            imgui.pop_item_width()
+
+            imgui.spacing() 
+
+            # imgui.checkbox("Show Gizmo", False)    
+            imgui.button("Duplicate", size=(240, 24))
+            clicked = imgui.button("Reset Selection Pose", size=(240, 24))
+            clicked = imgui.button("Reset All Poses", size=(240, 24))
         
             if did_disable:
                 imgui.end_disabled()
 
         with imgui_ctx.begin("Point View"):
-            gizmo.set_drawlist()
-            pos = imgui.get_cursor_screen_pos()
-            gizmo.set_drawlist()
-            
-            gizmo.set_rect(pos.x, pos.y, self.camera.res_x, self.camera.res_y)
-
-            # if imgui.is_item_hovered() and not gizmo.is_using():
-            #     cam_changed_from_mouse = self.camera.process_mouse_input()
-            # else:
-            #     cam_changed_from_mouse = False
-            # if imgui.is_item_focused() or imgui.is_item_hovered():
-            #     cam_changed_from_keyboard = self.camera.process_keyboard_input()
-            # else:
-            #     cam_changed_from_keyboard = False
-            
             if self.render_modes[self.render_mode] == "Ellipsoids":
                self.ellipsoid_viewer.show_gui()
             else:
-               self.point_view.show_gui()
+                self.point_view.show_gui()
+                if self.in_selection_mode:
+                    if imgui.is_mouse_clicked(imgui.MouseButton_.left):
+                        mouse_pos = imgui.get_mouse_pos()
+                        window_pos = imgui.get_window_pos()
+                        j, i = int(mouse_pos[0] - window_pos.x), int(mouse_pos[1] - window_pos.y - 30)
+                        IMAGE_HEIGHT = 400 
+                        IMAGE_WIDTH = 600 
+                        i = min(max(0, i), IMAGE_HEIGHT - 1)
+                        j = min(max(0, j), IMAGE_WIDTH - 1)
+                        if False:
+                            print(f"Mouse clicked at pixel position: ({i}, {j})")
+                        for bbox_name, mask in self.selection_masks.items():
+                            Image.fromarray((mask * 255).astype(np.uint8)).save(f"{bbox_name}_vis.png")
+                            print(bbox_name, mask[i, j], np.sum(mask))
+                            if mask[i, j]:
+                                self.selection_choice = self.selection_choices.index(bbox_name)
+                                self.update_bbox_selection()
+                                self.reset_brdf_edit_settings()
+                                break
+                        self.in_selection_mode = False
+                    elif imgui.is_mouse_clicked(imgui.MouseButton_.right):
+                        self.in_selection_mode = False
+                if self.selection_choice != 0 and False:
+
+                    view = Matrix16([0.258821, -0, 0.965925, -0,
+                    0.511862, 0.848048, -0.137154, 2.38419e-07,
+                    -0.819151, 0.529919, 0.219493, -8,
+                    0, 0, 0, 1])
+                    
+                    projection = Matrix16([4.1653, 0, 0, 0, 
+                    0, 4.1653, 0, 0, 
+                    0, 0, -1.002, -0.2002, 
+                    0, 0, -1, 0])
+                    
+                    print((imgui.get_window_pos().x, imgui.get_window_pos().y, imgui.get_window_width(), imgui.get_window_height(), self.camera.res_x, self.camera.res_y))
+
+                    gizmo.set_drawlist()
+                    gizmo.set_rect(imgui.get_window_pos().x, imgui.get_window_pos().y, 600, 400) # ! tmp
+                    def glm_to_mat16(mat: glm.mat4x4):
+                        return Matrix16(mat[0].to_list() + mat[1].to_list() + mat[2].to_list() + mat[3].to_list())
+
+                    cameraView =  Matrix16([1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0])
+                    cameraProjection = Matrix16() 
+                    fov = 27.0
+                    camYAngle = 165.0 / 180.0 * 3.14159
+                    camXAngle = 32.0 / 180.0 * 3.14159
+                    camDistance = 8.0
+                    eye = glm.vec3(
+                        math.cos(camYAngle) * math.cos(camXAngle) * camDistance,
+                        math.sin(camXAngle) * camDistance,
+                        math.sin(camYAngle) * math.cos(camXAngle) * camDistance,
+                    )
+                    at = glm.vec3(0.0, 0.0, 0.0)
+                    up = glm.vec3(0.0, 1.0, 0.0)
+                    cameraView = glm_to_mat16(glm.lookAt(eye, at, up))
+
+                    aspect_ratio = 1.0
+                    cameraProjection_glm = glm.perspective(glm.radians(fov), aspect_ratio, 0.1, 100.0)
+                    cameraProjection = glm_to_mat16(cameraProjection_glm)
+
+                    view_mat = Matrix16(self.camera.to_camera.flatten().tolist())
+                    # proj_mat = Matrix16(self.camera.full_projection.flatten().tolist())
+                    gizmo.manipulate(cameraView, cameraProjection, gizmo.OPERATION.translate, gizmo.MODE.local, self.selected_object_transform, None, None, None, None)
 
             cam_changed_from_mouse = imgui.is_item_hovered() and self.camera.process_mouse_input()
             cam_changed_from_keyboard = (imgui.is_item_focused() or imgui.is_item_hovered()) and self.camera.process_keyboard_input()
@@ -453,57 +590,70 @@ class GaussianViewer(Viewer):
             draw_list = imgui.get_foreground_draw_list()
             color = imgui.color_convert_float4_to_u32((1.0, 1.0, 0.0, 0.7))  
             draw_list.add_circle_filled((mouse_pos[0], mouse_pos[1]), 3.0, color)
-        
     
     def client_send(self):
-        None, {
+        return None, {
             "scaling_modifier": self.scaling_modifier,
             "render_mode": self.render_mode,
             "exposure": self.exposure,
             "ray_choice": self.ray_choice,
-            "reflectivity_shift": self.reflectivity_shift,
-            "reflectivity_mult": self.reflectivity_mult,
-            "roughness_shift": self.roughness_shift,
-            "roughness_mult": self.roughness_mult,
-            "diffuse_hue_shift": self.diffuse_hue_shift,
-            "diffuse_saturation_shift": self.diffuse_saturation_shift,
-            "diffuse_saturation_mult": self.diffuse_saturation_mult,
-            "diffuse_value_shift": self.diffuse_value_shift,
-            "diffuse_value_mult": self.diffuse_value_mult,
-            "glossy_hue_shift": self.glossy_hue_shift,
-            "glossy_saturation_shift": self.glossy_saturation_shift,
-            "glossy_saturation_mult": self.glossy_saturation_mult,
-            "glossy_value_shift": self.glossy_value_shift,
-            "glossy_value_mult": self.glossy_value_mult,
+            "selection_choice": self.selection_choice,
+
+
+            # current edit 
+            "roughness_shift": self.edit.roughness_shift,
+            "roughness_mult": self.edit.roughness_mult,
+            "diffuse_hue_shift": self.edit.diffuse_hue_shift,
+            "diffuse_saturation_shift": self.edit.diffuse_saturation_shift,
+            "diffuse_saturation_mult": self.edit.diffuse_saturation_mult,
+            "diffuse_value_shift": self.edit.diffuse_value_shift,
+            "diffuse_value_mult": self.edit.diffuse_value_mult,
+            "glossy_hue_shift": self.edit.glossy_hue_shift,
+            "glossy_saturation_shift": self.edit.glossy_saturation_shift,
+            "glossy_saturation_mult": self.edit.glossy_saturation_mult,
+            "glossy_value_shift": self.edit.glossy_value_shift,
+            "glossy_value_mult": self.edit.glossy_value_mult,
+            "roughness_override": self.edit.roughness_override,
+            "diffuse_override": self.edit.diffuse_override,
+            "glossy_override": self.edit.glossy_override
         }
     
     def server_recv(self, _, text):
         self.scaling_modifier = text["scaling_modifier"]
         self.render_mode = text["render_mode"]
         self.ray_choice = text["ray_choice"]
+        self.selection_choice = text["selection_choice"]
         self.exposure = text["exposure"]
-        self.reflectivity_shift = text["reflectivity_shift"]
-        self.reflectivity_mult = text["reflectivity_mult"]
-        self.roughness_shift = text["roughness_shift"]
-        self.roughness_mult = text["roughness_mult"]
-        self.diffuse_hue_shift = text["diffuse_hue_shift"]
-        self.diffuse_saturation_shift = text["diffuse_saturation_shift"]
-        self.diffuse_saturation_mult = text["diffuse_saturation_mult"]
-        self.diffuse_value_shift = text["diffuse_value_shift"]
-        self.diffuse_value_mult = text["diffuse_value_mult"]
-        self.glossy_hue_shift = text["glossy_hue_shift"]
-        self.glossy_saturation_shift = text["glossy_saturation_shift"]
-        self.glossy_saturation_mult = text["glossy_saturation_mult"]
-        self.glossy_value_shift = text["glossy_value_shift"]
-        self.glossy_value_mult = text["glossy_value_mult"]
+        
+        # current edit 
+        self.edit.roughness_shift = text["roughness_shift"]
+        self.edit.roughness_mult = text["roughness_mult"]
+        self.edit.diffuse_hue_shift = text["diffuse_hue_shift"]
+        self.edit.diffuse_saturation_shift = text["diffuse_saturation_shift"]
+        self.edit.diffuse_saturation_mult = text["diffuse_saturation_mult"]
+        self.edit.diffuse_value_shift = text["diffuse_value_shift"]
+        self.edit.diffuse_value_mult = text["diffuse_value_mult"]
+        self.edit.glossy_hue_shift = text["glossy_hue_shift"]
+        self.edit.glossy_saturation_shift = text["glossy_saturation_shift"]
+        self.edit.glossy_saturation_mult = text["glossy_saturation_mult"]
+        self.edit.glossy_value_shift = text["glossy_value_shift"]
+        self.edit.glossy_value_mult = text["glossy_value_mult"]
+        self.edit.roughness_override = text["roughness_override"]
+        self.edit.diffuse_override = text["diffuse_override"]
+        self.edit.glossy_override = text["glossy_override"]
 
     def server_send(self):
         if self.first_send:
             data = {
                 # "cameras": self.cameras,
                 "ray_count": self.ray_count,
+                "selection_choices": self.selection_choices,
                 "train_transforms": self.train_transforms,
-                "test_transforms": self.test_transforms
+                "test_transforms": self.test_transforms,
+                "bounding_boxes": self.bounding_boxes,
+                "selection_masks": {
+                    k: v.tolist() for k, v in self.selection_masks.items()
+                }
             }
         else:
             data = {}
@@ -513,10 +663,19 @@ class GaussianViewer(Viewer):
         if "ray_count" in text and self.ray_count != text["ray_count"]:
             self.ray_count = text["ray_count"]
             self.ray_choices = ["All/Default"] + ["Ray " + str(i) for i in range(self.ray_count)]
-        if "train_transforms" in text and self.init_pose is None:
+        if "train_transforms" in text:
             self.train_transforms = text["train_transforms"]
             self.test_transforms = text["test_transforms"]
             self.camera.update_pose(np.array(text["train_transforms"]["frames"][0]["transform_matrix"]) @ self.blender_to_opengl)
+        if "selection_choices" in text:
+            self.selection_choices = text["selection_choices"]
+        if "bounding_boxes" in text:
+            self.bounding_boxes = text["bounding_boxes"]
+        if "selection_masks" in text:
+            self.selection_masks = {
+                k: np.array(v) for k, v in text["selection_masks"].items()
+            }
+        
     
 if __name__ == "__main__":
     parser = ArgumentParser()

@@ -65,11 +65,6 @@ class Scene:
 
         data_dir = model_params.source_path
         if os.path.exists(os.path.join(data_dir, "transforms_train.json")):
-            shutil.copy(os.path.join(data_dir, "transforms_train.json"), self.model_path)
-            test_json_path = os.path.join(data_dir, "transforms_test.json")
-            if os.path.exists(test_json_path):
-                shutil.copy(test_json_path, self.model_path)
-
             if os.path.isdir(os.path.join(data_dir, "train", "preview")):
                 scene_info = readBlenderPriorSceneInfo(model_params, data_dir)
             else:
