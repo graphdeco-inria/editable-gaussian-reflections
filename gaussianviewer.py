@@ -194,6 +194,8 @@ class GaussianViewer(Viewer):
 
         self.in_selection_mode = False
 
+        self.hovering_over = None
+
         # Editing
         self.edit = Edit()
 
@@ -264,6 +266,10 @@ class GaussianViewer(Viewer):
                     net_image = tonemap(untonemap(net_image.permute(1, 2, 0))*self.exposure) 
                 else:
                     net_image = net_image.permute(1, 2, 0)*self.exposure
+            if self.hovering_over is not None:
+                overlay = torch.tensor(self.selection_masks[self.hovering_over]).cuda().unsqueeze(-1).repeat(1, 1, 3)
+                net_image[:, :, 0] += overlay[:, :, 0] * 0.15
+                net_image[:, :, 1] += overlay[:, :, 1] * 0.10
             end.record()
             end.synchronize()
             self.point_view.step(net_image)
@@ -511,27 +517,30 @@ class GaussianViewer(Viewer):
             else:
                 self.point_view.show_gui()
                 if self.in_selection_mode:
+                    mouse_pos = imgui.get_mouse_pos()
+                    window_pos = imgui.get_window_pos()
+                    j, i = int(mouse_pos[0] - window_pos.x), int(mouse_pos[1] - window_pos.y - 30)
+                    IMAGE_HEIGHT = 400 
+                    IMAGE_WIDTH = 600 
+                    i = min(max(0, i), IMAGE_HEIGHT - 1)
+                    j = min(max(0, j), IMAGE_WIDTH - 1)
+                    if False:
+                        print(f"Mouse at pixel position: ({i}, {j})")
+                    self.hovering_over = None
+                    for bbox_name, mask in self.selection_masks.items():
+                        if mask[i, j]:
+                            self.hovering_over = bbox_name
                     if imgui.is_mouse_clicked(imgui.MouseButton_.left):
-                        mouse_pos = imgui.get_mouse_pos()
-                        window_pos = imgui.get_window_pos()
-                        j, i = int(mouse_pos[0] - window_pos.x), int(mouse_pos[1] - window_pos.y - 30)
-                        IMAGE_HEIGHT = 400 
-                        IMAGE_WIDTH = 600 
-                        i = min(max(0, i), IMAGE_HEIGHT - 1)
-                        j = min(max(0, j), IMAGE_WIDTH - 1)
-                        if False:
-                            print(f"Mouse clicked at pixel position: ({i}, {j})")
                         for bbox_name, mask in self.selection_masks.items():
-                            Image.fromarray((mask * 255).astype(np.uint8)).save(f"{bbox_name}_vis.png")
-                            print(bbox_name, mask[i, j], np.sum(mask))
                             if mask[i, j]:
                                 self.selection_choice = self.selection_choices.index(bbox_name)
                                 self.update_bbox_selection()
-                                # self.reset_brdf_edit_settings()
-                                break
                         self.in_selection_mode = False
                     elif imgui.is_mouse_clicked(imgui.MouseButton_.right):
                         self.in_selection_mode = False
+                else:
+                    self.hovering_over = None
+
                 if self.selection_choice != 0 and False:
 
                     view = Matrix16([0.258821, -0, 0.965925, -0,
@@ -596,6 +605,7 @@ class GaussianViewer(Viewer):
             "exposure": self.exposure,
             "ray_choice": self.ray_choice,
             "selection_choice": self.selection_choice,
+            "hovering_over": self.hovering_over,
             **dataclasses.asdict(self.edit)
         }
     
@@ -605,6 +615,7 @@ class GaussianViewer(Viewer):
         self.ray_choice = text["ray_choice"]
         self.selection_choice = text["selection_choice"]
         self.exposure = text["exposure"]
+        self.hovering_over = text["hovering_over"]
         
         for field in dataclasses.fields(self.edit):
             setattr(self.edit, field.name, text[field.name])
