@@ -71,9 +71,9 @@ class Scene:
                 shutil.copy(test_json_path, self.model_path)
 
             if os.path.isdir(os.path.join(data_dir, "train", "preview")):
-            scene_info = readBlenderPriorSceneInfo(model_params, data_dir)
+                scene_info = readBlenderPriorSceneInfo(model_params, data_dir)
             else:
-            scene_info = readBlenderSceneInfo(model_params, data_dir)
+                scene_info = readBlenderSceneInfo(model_params, data_dir)
         else:
             scene_info = readColmapSceneInfo(model_params, data_dir)
 
