@@ -145,15 +145,23 @@ class GaussianViewer(Viewer):
         
         # Editing
         self.reflectivity_shift = 0.0
-        self.reflectivity_mult = 0.0
+        self.reflectivity_mult = 1.0
         self.roughness_shift = 0.0
-        self.roughness_mult = 0.0
-        self.hue = 0.0
-        self.saturation = 0.0
-        self.value = 0.0
-        self.spec_hue = 0.0
-        self.spec_saturation = 0.0
-        self.spec_value = 0.0
+        self.roughness_mult = 1.0
+
+        self.diffuse_hue_shift = 0.0
+        self.diffuse_saturation_shift = 0.0
+        self.diffuse_saturation_mult = 1.0
+        self.diffuse_value_shift = 0.0
+        self.diffuse_value_mult = 1.0
+        
+        self.glossy_hue_shift = 0.0
+        self.glossy_saturation_shift = 0.0
+        self.glossy_saturation_mult = 1.0
+        self.glossy_value_shift = 0.0
+        self.glossy_value_mult = 1.0
+
+        self.in_selection_mode = False
 
 
     def step(self):
@@ -186,18 +194,23 @@ class GaussianViewer(Viewer):
                     if self.scaling_modifier != 1.0:
                         self.raytracer.cuda_module.update_bvh()
                     package = render(camera, self.raytracer, self.pipe, self.background, blur_sigma=None, targets_available=False, edits=dict(
-                        reflectivity_shift = self.reflectivity_shift,
-                        reflectivity_mult = self.reflectivity_mult,
-                        roughness_shift = self.roughness_shift,
-                        roughness_mult = self.roughness_mult,
-                        hue = self.hue,
-                        saturation = self.saturation,
-                        value = self.value,
-                        spec_hue = self.spec_hue,
-                        spec_saturation = self.spec_saturation,
-                        spec_value = self.spec_value,
+                        reflectivity_shift=self.reflectivity_shift,
+                        reflectivity_mult=self.reflectivity_mult,
+                        roughness_shift=self.roughness_shift,
+                        roughness_mult=self.roughness_mult,
+                        diffuse_hue_shift=self.diffuse_hue_shift,
+                        diffuse_saturation_shift=self.diffuse_saturation_shift,
+                        diffuse_saturation_mult=self.diffuse_saturation_mult,
+                        diffuse_value_shift=self.diffuse_value_shift,
+                        diffuse_value_mult=self.diffuse_value_mult,
+                        glossy_hue_shift=self.glossy_hue_shift,
+                        glossy_saturation_shift=self.glossy_saturation_shift,
+                        glossy_saturation_mult=self.glossy_saturation_mult,
+                        glossy_value_shift=self.glossy_value_shift,
+                        glossy_value_mult=self.glossy_value_mult,
                         # selection= put the selection mask here
                     ))
+                    
                     self.raytracer.cuda_module.global_scale_factor.copy_(1.0)
 
                     mode_name = self.render_modes[self.render_mode]
@@ -233,7 +246,13 @@ class GaussianViewer(Viewer):
 
     def show_gui(self):
         gizmo.begin_frame()
+
         with imgui_ctx.begin(f"Point View Settings"):
+            did_disable = False
+            if self.in_selection_mode:
+                imgui.begin_disabled()
+                did_disable = True
+
             _, self.render_mode = imgui.list_box("Render Mode", self.render_mode, self.render_modes)
             _, self.ray_choice = imgui.list_box("Displayed Rays", self.ray_choice, self.ray_choices)
 
@@ -287,29 +306,117 @@ class GaussianViewer(Viewer):
                 
             self.camera.show_gui()
 
+            imgui.separator_text("Selection")
+            
+            clicked, selected_index = imgui.combo("Object List", self.brdf_selection_choice, self.brdf_selection_options)
+            
+            if did_disable:
+                imgui.end_disabled()
+            clicked = imgui.button("                 Selection Tool                 " if not self.in_selection_mode else "                       Cancel                       ")
+            if clicked:
+                self.in_selection_mode = not self.in_selection_mode
+            if did_disable:
+                imgui.begin_disabled()
+
             imgui.separator_text("BRDF Editing")
 
-            clicked, selected_index = imgui.combo("Selection", self.brdf_selection_choice, self.brdf_selection_options)
-
+            imgui.set_cursor_pos_x((imgui.get_content_region_avail().x - imgui.calc_text_size("Surface").x) * 0.35)
             imgui.text("Surface")
-            _, self.roughness_shift = imgui.drag_float("Roughness Shift", self.roughness_shift, v_min=-1, v_max=1, v_speed=0.01)
-            _, self.roughness_mult = imgui.drag_float("Roughness Mult", self.roughness_mult, v_min=0, v_max=1, v_speed=0.01)
-            _, self.reflectivity_shift = imgui.drag_float("Reflectivity Shift", self.reflectivity_shift, v_min=-1, v_max=1, v_speed=0.01)
-            _, self.reflectivity_mult = imgui.drag_float("Reflectivity Mult", self.reflectivity_mult, v_min=0, v_max=1, v_speed=0.01)
-            imgui.text("Diffuse Color")
-            _, self.hue = imgui.drag_float("Hue Shift", self.hue, v_min=-1, v_max=1, v_speed=0.01)
-            _, self.saturation = imgui.drag_float("Saturation Shift", self.saturation, v_min=-1, v_max=1, v_speed=0.01)
-            _, self.value = imgui.drag_float("Value Shift", self.value, v_min=-1, v_max=1, v_speed=0.01)
-            imgui.text("Specular Color")
-            _, self.spec_hue = imgui.drag_float("Spec Hue Shift", self.spec_hue, v_min=-1, v_max=1, v_speed=0.01)
-            _, self.spec_saturation = imgui.drag_float("Spec Saturation Shift", self.spec_saturation, v_min=-1, v_max=1, v_speed=0.01)
-            _, self.spec_value = imgui.drag_float("Spec Value Shift", self.spec_value, v_min=-1, v_max=1, v_speed=0.01)
+            imgui.push_item_width(imgui.get_content_region_avail().x * 0.33333)
+            _, self.roughness_shift = imgui.drag_float("##Roughness Shift", self.roughness_shift, v_min=-1, v_max=1, v_speed=0.01, format="%+.2f")
+            if imgui.is_item_hovered() and imgui.is_mouse_clicked(imgui.MouseButton_.right):
+                self.roughness_shift = 0.0
+            imgui.same_line()
+            _, self.roughness_mult = imgui.drag_float("##Roughness Mult", self.roughness_mult, v_min=0, v_max=3.0, v_speed=0.01, format="x%.2f")
+            if imgui.is_item_hovered() and imgui.is_mouse_clicked(imgui.MouseButton_.right):
+                self.roughness_mult = 1.0
+            imgui.same_line()
+            imgui.text("Roughness")
+            _, self.reflectivity_shift = imgui.drag_float("##Reflectivity Shift", self.reflectivity_shift, v_min=-1, v_max=1, v_speed=0.01, format="%+.2f")
+            if imgui.is_item_hovered() and imgui.is_mouse_clicked(imgui.MouseButton_.right):
+                self.reflectivity_shift = 0.0
+            imgui.same_line()
+            _, self.reflectivity_mult = imgui.drag_float("##Reflectivity Mult", self.reflectivity_mult, v_min=0, v_max=3.0, v_speed=0.01, format="x%.2f")
+            if imgui.is_item_hovered() and imgui.is_mouse_clicked(imgui.MouseButton_.right):
+                self.reflectivity_mult = 1.0
+            imgui.same_line()
+            imgui.text("Reflectivity")
+            imgui.pop_item_width()
+
+            imgui.spacing() 
+            imgui.spacing() 
+        
+            imgui.set_cursor_pos_x((imgui.get_content_region_avail().x - imgui.calc_text_size("Diffuse").x) * 0.35)
+            imgui.text("Diffuse")
+            imgui.push_item_width(imgui.get_content_region_avail().x * 0.69)
+            _, self.diffuse_hue_shift = imgui.drag_float("##Diffuse Hue Shift", self.diffuse_hue_shift, v_min=-1, v_max=1, v_speed=0.01, format="%+.2f")
+            if imgui.is_item_hovered() and imgui.is_mouse_clicked(imgui.MouseButton_.right):
+                self.diffuse_hue_shift = 0.0
+            imgui.same_line()
+            imgui.text("Hue")
+            imgui.pop_item_width()
+            imgui.push_item_width(imgui.get_content_region_avail().x * 0.33333)
+            _, self.diffuse_saturation_shift = imgui.drag_float("##Diffuse Saturation Shift", self.diffuse_saturation_shift, v_min=-1, v_max=1, v_speed=0.01, format="%+.2f")
+            if imgui.is_item_hovered() and imgui.is_mouse_clicked(imgui.MouseButton_.right):
+                self.diffuse_saturation_shift = 0.0
+            imgui.same_line()
+            _, self.diffuse_saturation_mult = imgui.drag_float("##Diffuse Saturation Mult", self.diffuse_saturation_mult, v_min=0, v_max=3.0, v_speed=0.01, format="x%.2f")
+            if imgui.is_item_hovered() and imgui.is_mouse_clicked(imgui.MouseButton_.right):
+                self.diffuse_saturation_mult = 1.0
+            imgui.same_line()
+            imgui.text("Saturation")
+            _, self.diffuse_value_shift = imgui.drag_float("##Diffuse Value Shift", self.diffuse_value_shift, v_min=-1, v_max=1, v_speed=0.01, format="%+.2f")
+            if imgui.is_item_hovered() and imgui.is_mouse_clicked(imgui.MouseButton_.right):
+                self.diffuse_value_shift = 0.0
+            imgui.same_line()
+            _, self.diffuse_value_mult = imgui.drag_float("##Diffuse Value Mult", self.diffuse_value_mult, v_min=0, v_max=3.0, v_speed=0.01, format="x%.2f")
+            if imgui.is_item_hovered() and imgui.is_mouse_clicked(imgui.MouseButton_.right):
+                self.diffuse_value_mult = 1.0
+            imgui.same_line()
+            imgui.text("Value")
+
+            imgui.spacing() 
+            imgui.spacing() 
+
+            imgui.set_cursor_pos_x((imgui.get_content_region_avail().x - imgui.calc_text_size("Specular").x) * 0.35)
+            imgui.text("Specular")
+            imgui.push_item_width(imgui.get_content_region_avail().x * 0.69)
+            _, self.glossy_hue_shift = imgui.drag_float("##Specular Hue Shift", self.glossy_hue_shift, v_min=-1, v_max=1, v_speed=0.01, format="%+.2f")
+            if imgui.is_item_hovered() and imgui.is_mouse_clicked(imgui.MouseButton_.right):
+                self.glossy_hue_shift = 0.0
+            imgui.same_line()
+            imgui.text("Hue")
+            imgui.pop_item_width()
+            imgui.push_item_width(imgui.get_content_region_avail().x * 0.33333)
+            _, self.glossy_saturation_shift = imgui.drag_float("##Specular Saturation Shift", self.glossy_saturation_shift, v_min=-1, v_max=1, v_speed=0.01, format="%+.2f")
+            if imgui.is_item_hovered() and imgui.is_mouse_clicked(imgui.MouseButton_.right):
+                self.glossy_saturation_shift = 0.0
+            imgui.same_line()
+            _, self.glossy_saturation_mult = imgui.drag_float("##Specular Saturation Mult", self.glossy_saturation_mult, v_min=0, v_max=3.0, v_speed=0.01, format="x%.2f")
+            if imgui.is_item_hovered() and imgui.is_mouse_clicked(imgui.MouseButton_.right):
+                self.glossy_saturation_mult = 1.0
+            imgui.same_line()
+            imgui.text("Saturation")
+            _, self.glossy_value_shift = imgui.drag_float("##Specular Value Shift", self.glossy_value_shift, v_min=-1, v_max=1, v_speed=0.01, format="%+.2f")
+            if imgui.is_item_hovered() and imgui.is_mouse_clicked(imgui.MouseButton_.right):
+                self.glossy_value_shift = 0.0
+            imgui.same_line()
+            _, self.glossy_value_mult = imgui.drag_float("##Specular Value Mult", self.glossy_value_mult, v_min=0, v_max=3.0, v_speed=0.01, format="x%.2f")
+            if imgui.is_item_hovered() and imgui.is_mouse_clicked(imgui.MouseButton_.right):
+                self.glossy_value_mult = 1.0
+            imgui.same_line()
+            imgui.text("Value")
+
+            imgui.spacing() 
+            imgui.spacing() 
 
             imgui.separator_text("Geometric Editing")
 
             imgui.checkbox("Show Gizmo", False)    
             imgui.button("Duplicate")
-            
+        
+            if did_disable:
+                imgui.end_disabled()
 
         with imgui_ctx.begin("Point View"):
             gizmo.set_drawlist()
@@ -340,6 +447,13 @@ class GaussianViewer(Viewer):
         
         with imgui_ctx.begin("Performance"):
             self.monitor.show_gui()
+
+        if self.in_selection_mode:
+            mouse_pos = imgui.get_mouse_pos()
+            draw_list = imgui.get_foreground_draw_list()
+            color = imgui.color_convert_float4_to_u32((1.0, 1.0, 0.0, 0.7))  
+            draw_list.add_circle_filled((mouse_pos[0], mouse_pos[1]), 3.0, color)
+        
     
     def client_send(self):
         return None, {
