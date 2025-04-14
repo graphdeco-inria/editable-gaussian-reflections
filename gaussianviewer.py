@@ -82,6 +82,7 @@ class GaussianViewer(Viewer):
 
         self.selected_object_transform = Matrix16([1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0])
 
+
     def import_server_modules(self):
         global torch
         import torch
@@ -121,26 +122,10 @@ class GaussianViewer(Viewer):
         pipe.antialiasing = "antialiasing" in model_params
         pipe.compute_cov3D_python = "compute_cov3D_python" in model_params
         pipe.convert_SHs_python = "convert_SHs_python" in model_params
-
-        # Open object selections
-        source_path = model_params.source_path
-        train_transforms = json.load(open(os.path.join(source_path, "transforms_train.json"), "r"))
-        test_transforms = json.load(open(os.path.join(source_path, "transforms_test.json"), "r"))
-        bounding_boxes = json.load(open(os.path.join(source_path, "bounding_boxes.json"), "r"))
-        selection_masks = {}
-        poses = {}
-        for bbox_name, bbox in bounding_boxes.items():
-            mask = (np.array(Image.open(os.path.join(source_path, f"selection_masks/{bbox_name}.png")).convert("RGB")).mean(axis=2) > 0.5).astype(bool)
-            selection_masks[bbox_name] = mask
-        bounding_boxes["everything"] = {"min": [-1000, 1000, -1000], "max": [1000, 1000, 1000] }
         
-
-        # 
-        edits = { bbox_name: Edit() for bbox_name in bounding_boxes.keys() }
-        gaussians = EditableGaussianModel(edits, bounding_boxes, model_params)
+        gaussians = EditableGaussianModel(model_params)
         ply_path = os.path.join(model_path, "point_cloud", f"iteration_{iter}", "point_cloud.ply")
         gaussians.load_ply(ply_path)
-        gaussians.construct_selections()
         raytracer = GaussianRaytracer(gaussians, int(model_params.resolution*1.5), model_params.resolution) #!!! hard-coded aspect ratio
 
         viewer = cls(mode, raytracer)
@@ -148,18 +133,36 @@ class GaussianViewer(Viewer):
         viewer.gaussians = gaussians
         viewer.dataset = dataset
         viewer.pipe = pipe
-        viewer.train_transforms = train_transforms
-        viewer.test_transforms = test_transforms
-        viewer.bounding_boxes = bounding_boxes
-        viewer.selection_masks = selection_masks
-        viewer.edits = edits
-
+        
         bg_color = [1, 1, 1] if dataset.white_background else [0, 0, 0]
         background = torch.tensor(bg_color, dtype=torch.float32, device="cuda")
         viewer.background = background
 
+        viewer.load_metadata(model_params)
+
         return viewer
     
+    def load_metadata(self, model_params):
+        source_path = model_params.source_path
+        
+        self.train_transforms = json.load(open(os.path.join(source_path, "transforms_train.json"), "r"))
+        self.test_transforms = json.load(open(os.path.join(source_path, "transforms_test.json"), "r"))
+
+        
+        self.bounding_boxes = json.load(open(os.path.join(source_path, "bounding_boxes.json"), "r"))
+        
+        self.edits = { bbox_name: Edit() for bbox_name in self.bounding_boxes.keys() }
+        
+        self.selection_masks = {}
+        for bbox_name, bbox in self.bounding_boxes.items():
+            mask = (np.array(Image.open(os.path.join(source_path, f"selection_masks/{bbox_name}.png")).convert("RGB")).mean(axis=2) > 0.5).astype(bool)
+            self.selection_masks[bbox_name] = mask
+
+        self.gaussians.make_editable(self.edits, self.bounding_boxes)
+
+        self.bounding_boxes["everything"] = {"min": [-1000, 1000, -1000], "max": [1000, 1000, 1000] }
+        
+
     @classmethod
     def from_gaussians(cls, raytracer, dataset, pipe, gaussians, separate_sh, mode: ViewerMode):
         viewer = cls(mode, raytracer)
@@ -200,9 +203,16 @@ class GaussianViewer(Viewer):
         self.hovering_over = None
 
         # Editing
-        self.edit = Edit()
-        if not hasattr(self, "edits"):
-            self.edits = None
+        if self.mode == ViewerMode.CLIENT:
+            self.edit = None
+        else:
+            self.edit = Edit()
+            self.set_camera_pose(self.train_transforms, 0)
+
+    def set_camera_pose(self, transforms, i: int):
+        self.camera.update_pose(np.array(transforms["frames"][i]["transform_matrix"]) @ self.blender_to_opengl)
+        self.camera.fov_x = transforms["camera_angle_x"]
+        self.camera.fov_y = transforms["camera_angle_y"]
 
     def update_bbox_selection(self):
         if self.edits is not None and self.selection_choice != 0:
@@ -237,6 +247,19 @@ class GaussianViewer(Viewer):
             start.record()
             with torch.no_grad():
                 with self.gaussian_lock:
+
+                    if self.in_selection_mode:
+                        for bbox_name, bbox in self.bounding_boxes.items():
+                            rgb_backup = self.gaussians._diffuse.clone()
+                            rgb = self.gaussians._diffuse
+                            rgb *= 0 
+                            # todo set bounces to 0
+                            rgb[self.selections[bbox_name].squeeze(1)] += 1
+                            package = render(camera, self.raytracer, self.pipe, self.background, blur_sigma=None, targets_available=False)
+                            mask_render = package.rgb[0].cpu().numpy()
+                            self.gaussians._diffuse.copy_(rgb_backup)
+                            print(bbox_name)
+
                     for key in self.edits.keys():
                         if key not in self.gaussians.created_objects:
                             self.gaussians.duplicate_selected(key.replace("_copy", "", 1))
@@ -624,6 +647,7 @@ class GaussianViewer(Viewer):
             "selection_choice": self.selection_choice,
             "hovering_over": self.hovering_over,
             "edits": { key: dataclasses.asdict(edit) for key, edit in self.edits.items() } if self.edits is not None else None,
+            "in_selection_mode": self.in_selection_mode
         }
     
     def server_recv(self, _, text):
@@ -633,6 +657,7 @@ class GaussianViewer(Viewer):
         self.selection_choice = text["selection_choice"]
         self.exposure = text["exposure"]
         self.hovering_over = text["hovering_over"]
+        self.in_selection_mode = text["in_selection_mode"]
         
         if text["edits"] is not None:
             for key, edit in text["edits"].items():
@@ -662,9 +687,7 @@ class GaussianViewer(Viewer):
         if "train_transforms" in text:
             self.train_transforms = text["train_transforms"]
             self.test_transforms = text["test_transforms"]
-            self.camera.fov_x = text["train_transforms"]["camera_angle_x"]
-            self.camera.fov_y = text["train_transforms"]["camera_angle_y"]
-            self.camera.update_pose(np.array(text["train_transforms"]["frames"][0]["transform_matrix"]) @ self.blender_to_opengl)
+            self.set_camera_pose(self.train_transforms, 0)
         if "selection_choices" in text:
             self.selection_choices = text["selection_choices"]
         if "bounding_boxes" in text:

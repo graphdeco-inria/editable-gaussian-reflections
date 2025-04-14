@@ -5,16 +5,18 @@ import kornia
 import math 
 
 class EditableGaussianModel(GaussianModel):
-    def __init__(self, edits: dict, bounding_boxes: dict, *args, **kwargs):
+
+    def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self.ready_for_editing = False
+
+    def make_editable(self, edits, bounding_boxes):
         assert set(edits.keys()) == set(bounding_boxes.keys()), "Edits and bounding boxes must have the same keys"
-        self.edits = edits
+        self.edits = edits 
         self.bounding_boxes = bounding_boxes
-
         self.created_objects = list(self.edits.keys())
-
-    def construct_selections(self):
         self.selections = {}
+        
         with torch.no_grad():
             for key in self.edits.keys():
                 bounding_box = self.bounding_boxes[key]
@@ -23,7 +25,8 @@ class EditableGaussianModel(GaussianModel):
                 within_bbox = (dist1 >= 0).all(dim=-1) & (dist2 <= 0).all(dim=-1)
                 self.selections[key] = within_bbox.unsqueeze(1)
             self.selections["everything"] = torch.ones(self._xyz.shape[0], 1, device="cuda", dtype=torch.bool)
-
+        
+        self.ready_for_editing = True 
 
     # ----------------------------------------------------------------
 
@@ -31,6 +34,9 @@ class EditableGaussianModel(GaussianModel):
     @property
     def get_roughness(self):
         roughness = super().get_roughness.clone()
+
+        if not self.ready_for_editing:
+            return roughness
 
         for key, edit in self.edits.items():
             if edit.use_roughness_override:
@@ -43,6 +49,9 @@ class EditableGaussianModel(GaussianModel):
     @property
     def get_diffuse(self):
         diffuse = super().get_diffuse.clone()
+
+        if not self.ready_for_editing:
+            return diffuse
             
         for key, edit in self.edits.items():
             base_diffuse = torch.lerp(diffuse, torch.tensor(edit.diffuse_override)[:3].cuda(), edit.diffuse_override[-1])
@@ -58,6 +67,9 @@ class EditableGaussianModel(GaussianModel):
     @property
     def get_f0(self):
         f0 = super().get_f0.clone()
+        
+        if not self.ready_for_editing:
+            return f0
 
         for key, edit in self.edits.items():
             base_f0 = torch.lerp(f0, torch.tensor(edit.glossy_override)[:3].cuda(), edit.glossy_override[-1])
@@ -75,19 +87,34 @@ class EditableGaussianModel(GaussianModel):
     @property
     def get_xyz(self):
         xyz = super().get_xyz.clone()
+        
+        if not self.ready_for_editing:
+            return xyz
+        
         for key, edit in self.edits.items():
             xyz[self.selections[key].squeeze(1)] += torch.tensor([edit.translate_x, edit.translate_y, edit.translate_z], device=xyz.device)
+        
         return xyz 
 
     @property
     def get_scaling(self):
         scaling = super().get_scaling.clone()
+
+        if not self.ready_for_editing:
+            return scaling
+        
         for key, edit in self.edits.items():
             scaling[self.selections[key].squeeze(1)] *= torch.tensor([edit.scale_x, edit.scale_y, edit.scale_z], device=scaling.device)
+        
         return scaling
 
     @property
     def get_rotation(self):
+        rotation = super().get_scaling.clone()
+
+        if not self.ready_for_editing:
+            return rotation
+        
         return super().get_rotation # todo
 
 
