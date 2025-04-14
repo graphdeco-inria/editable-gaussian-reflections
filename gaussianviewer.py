@@ -210,11 +210,11 @@ class GaussianViewer(Viewer):
     #     self.edit = Edit() 
 
     def step(self):
-        camera = self.camera
-        world_to_view = torch.from_numpy(camera.to_camera).cuda().transpose(0, 1)
-        full_proj_transform = torch.from_numpy(camera.full_projection).cuda().transpose(0, 1)
+        world_to_view = torch.from_numpy(self.camera.to_camera).cuda().transpose(0, 1)
+        full_proj_transform = torch.from_numpy(self.camera.full_projection).cuda().transpose(0, 1)
         
-        camera = MiniCam(camera.res_x, camera.res_y, self.train_transforms["camera_angle_y"], self.train_transforms["camera_angle_x"], camera.z_near, camera.z_far, world_to_view, full_proj_transform)
+        # self.train_transforms["camera_angle_y"]
+        camera = MiniCam(self.camera.res_x, self.camera.res_y, self.camera.fov_y, self.camera.fov_x, self.camera.z_near, self.camera.z_far, world_to_view, full_proj_transform)
 
         if self.ellipsoid_viewer.num_gaussians is None:
            self.ellipsoid_viewer.upload(
@@ -387,7 +387,7 @@ class GaussianViewer(Viewer):
             if clicked:
                 old_key = self.selection_choices[self.selection_choice] 
                 new_key = old_key + "_copy"
-                self.selection_choices.index(self.selection_choices.index(old_key) + 1, new_key)
+                self.selection_choices.insert(self.selection_choices.index(old_key) + 1, new_key)
                 self.edits[new_key] = Edit()
                 self.bounding_boxes[new_key] = self.bounding_boxes[old_key]
                 self.selection_choice = self.selection_choices.index(new_key)
@@ -508,8 +508,6 @@ class GaussianViewer(Viewer):
 
             imgui.spacing() 
             imgui.spacing() 
-
-            
 
             imgui.separator_text("Geometric Editing")
 
@@ -654,6 +652,8 @@ class GaussianViewer(Viewer):
         if "train_transforms" in text:
             self.train_transforms = text["train_transforms"]
             self.test_transforms = text["test_transforms"]
+            self.camera.fov_x = text["train_transforms"]["camera_angle_x"]
+            self.camera.fov_y = text["train_transforms"]["camera_angle_y"]
             self.camera.update_pose(np.array(text["train_transforms"]["frames"][0]["transform_matrix"]) @ self.blender_to_opengl)
         if "selection_choices" in text:
             self.selection_choices = text["selection_choices"]
