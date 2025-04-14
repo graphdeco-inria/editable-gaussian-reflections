@@ -541,47 +541,29 @@ class GaussianViewer(Viewer):
                 else:
                     self.hovering_over = None
 
-                if self.selection_choice != 0 and False:
-
-                    view = Matrix16([0.258821, -0, 0.965925, -0,
-                    0.511862, 0.848048, -0.137154, 2.38419e-07,
-                    -0.819151, 0.529919, 0.219493, -8,
-                    0, 0, 0, 1])
-                    
-                    projection = Matrix16([4.1653, 0, 0, 0, 
-                    0, 4.1653, 0, 0, 
-                    0, 0, -1.002, -0.2002, 
-                    0, 0, -1, 0])
-                    
-                    print((imgui.get_window_pos().x, imgui.get_window_pos().y, imgui.get_window_width(), imgui.get_window_height(), self.camera.res_x, self.camera.res_y))
-
+                if self.selection_choice != 0:
                     gizmo.set_drawlist()
                     gizmo.set_rect(imgui.get_window_pos().x, imgui.get_window_pos().y, 600, 400) # ! tmp
-                    def glm_to_mat16(mat: glm.mat4x4):
-                        return Matrix16(mat[0].to_list() + mat[1].to_list() + mat[2].to_list() + mat[3].to_list())
 
-                    cameraView =  Matrix16([1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0])
-                    cameraProjection = Matrix16() 
-                    fov = 27.0
-                    camYAngle = 165.0 / 180.0 * 3.14159
-                    camXAngle = 32.0 / 180.0 * 3.14159
-                    camDistance = 8.0
-                    eye = glm.vec3(
-                        math.cos(camYAngle) * math.cos(camXAngle) * camDistance,
-                        math.sin(camXAngle) * camDistance,
-                        math.sin(camYAngle) * math.cos(camXAngle) * camDistance,
-                    )
-                    at = glm.vec3(0.0, 0.0, 0.0)
-                    up = glm.vec3(0.0, 1.0, 0.0)
-                    cameraView = glm_to_mat16(glm.lookAt(eye, at, up))
+                    to_camera = self.camera.to_camera
+                    to_camera[1] *= -1
 
-                    aspect_ratio = 1.0
-                    cameraProjection_glm = glm.perspective(glm.radians(fov), aspect_ratio, 0.1, 100.0)
-                    cameraProjection = glm_to_mat16(cameraProjection_glm)
+                    view_mat = Matrix16((to_camera.T).flatten().tolist())
+                    proj_mat = Matrix16((self.camera.projection.T).flatten().tolist())
 
-                    view_mat = Matrix16(self.camera.to_camera.flatten().tolist())
-                    # proj_mat = Matrix16(self.camera.full_projection.flatten().tolist())
-                    gizmo.manipulate(cameraView, cameraProjection, gizmo.OPERATION.translate, gizmo.MODE.local, self.selected_object_transform, None, None, None, None)
+                    bbox = self.bounding_boxes[self.selection_choices[self.selection_choice]]
+                    avg_x = (bbox["min"][0] + bbox["max"][0]) / 2
+                    avg_y = (bbox["min"][1] + bbox["max"][1]) / 2
+                    avg_z = (bbox["min"][2] + bbox["max"][2]) / 2
+                    pose =  Matrix16([
+                        1.0, 0.0, 0.0,0.0, 
+                    
+                        0.0, 1.0, 0.0, 0.0, 
+                        0.0, 0.0, 1.0, 0.0,
+                         avg_x, avg_y, avg_z, 1.0]) # self.selected_object_transform
+
+
+                    gizmo.manipulate(view_mat, proj_mat, gizmo.OPERATION.translate, gizmo.MODE.local, pose, None, None, None, None)
 
             cam_changed_from_mouse = imgui.is_item_hovered() and self.camera.process_mouse_input()
             cam_changed_from_keyboard = (imgui.is_item_focused() or imgui.is_item_hovered()) and self.camera.process_keyboard_input()
