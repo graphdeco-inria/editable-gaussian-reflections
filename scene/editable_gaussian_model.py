@@ -11,6 +11,8 @@ class EditableGaussianModel(GaussianModel):
         self.edits = edits
         self.bounding_boxes = bounding_boxes
 
+        self.created_objects = list(self.edits.keys())
+
     def construct_selections(self):
         self.selections = {}
         with torch.no_grad():
@@ -121,7 +123,14 @@ class EditableGaussianModel(GaussianModel):
         self._lod_scale = torch.cat((self._lod_scale, new_lod_scale), dim=0)
         self._round_counter = torch.cat((self._round_counter, new_round_counter), dim=0)
 
+        self.selections[selection_name + "_copy"] = torch.zeros_like(self.selections[selection_name], dtype=torch.bool)
+        xtra = target_selection[target_selection].unsqueeze(1)
         for key, selection in self.selections.items():
-            xtra = target_selection[target_selection].unsqueeze(1)
-            new_selection = torch.cat((selection, xtra if selection == "Everything" else ~xtra), dim=0)
+            new_selection = torch.cat((selection, xtra if key in ["Everything", selection_name + "_copy"] else ~xtra), dim=0)
             self.selections[key] = new_selection
+            print("newsize", new_selection.size())
+
+        print(list(self.selections.keys()))
+
+        self.created_objects.append(selection_name + "_copy")
+        print("ADDED", selection_name + "_copy")

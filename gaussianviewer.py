@@ -235,6 +235,12 @@ class GaussianViewer(Viewer):
             start.record()
             with torch.no_grad():
                 with self.gaussian_lock:
+                    for key in self.edits.keys():
+                        if key not in self.gaussians.created_objects:
+                            self.gaussians.duplicate_selected(key.replace("_copy", "", 1))
+                            self.selection_choices.append(key)
+                            self.raytracer.rebuild_bvh()
+
                     self.raytracer.cuda_module.global_scale_factor.copy_(self.scaling_modifier)
                     # if self.scaling_modifier != 1.0:
                     self.raytracer.cuda_module.update_bvh() #!!!!! dont do every frame
@@ -342,12 +348,21 @@ class GaussianViewer(Viewer):
                 
             self.camera.show_gui()
 
+            if did_disable:
+                imgui.end_disabled()
+
+
+        with imgui_ctx.begin(f"Editing Settings"):
+            did_disable = False
+            if self.in_selection_mode:
+                imgui.begin_disabled()
+                did_disable = True
+
             imgui.separator_text("Selection")
 
             clicked, self.selection_choice = imgui.combo("Object List", self.selection_choice, self.selection_choices)
             if clicked:
                 self.update_bbox_selection()    
-                # self.reset_brdf_edit_settings()
             
             if did_disable:
                 imgui.end_disabled()
@@ -360,15 +375,33 @@ class GaussianViewer(Viewer):
             if did_disable:
                 imgui.begin_disabled()
 
+            imgui.spacing() 
+            imgui.spacing() 
             
             disabled_cause_no_selection = False
             if self.selection_choice == 0:
                 imgui.begin_disabled()
                 disabled_cause_no_selection = True
 
-            clicked = imgui.button("Duplicate selected", size=(240, 24))
-            if clicked and self.raytracer is not None:
-                self.gaussians.duplicate_selected(self.selection_choice)
+            clicked = imgui.button("Duplicate Selection", size=(240, 24))
+            if clicked:
+                old_key = self.selection_choices[self.selection_choice] 
+                new_key = old_key + "_copy"
+                self.selection_choices.index(self.selection_choices.index(old_key) + 1, new_key)
+                self.edits[new_key] = Edit()
+                self.bounding_boxes[new_key] = self.bounding_boxes[old_key]
+                self.selection_choice = self.selection_choices.index(new_key)
+                self.update_bbox_selection()
+
+            clicked = imgui.button("Reset Selection", size=(240, 24))
+            if clicked and self.edits is not None and self.selection_choice != 0:
+                for key, value in dataclasses.asdict(Edit()).items():
+                    setattr(self.edits[self.selection_choices[self.selection_choice]], key, value)
+            clicked = imgui.button("Reset Everything", size=(240, 24))
+            if clicked and self.edits is not None:
+                for edit in self.edits.values():
+                    for key, value in dataclasses.asdict(Edit()).items():
+                        setattr(edit, key, value)
             
             imgui.separator_text("BRDF Editing")
 
@@ -476,17 +509,7 @@ class GaussianViewer(Viewer):
             imgui.spacing() 
             imgui.spacing() 
 
-            clicked = imgui.button("Reset Selection BRDF", size=(240, 24))
-            if clicked and self.edits is not None and self.selection_choice != 0:
-                for key, value in dataclasses.asdict(Edit()).items():
-                    setattr(self.edits[self.selection_choices[self.selection_choice]], key, value)
-            clicked = imgui.button("Reset All BRDFs", size=(240, 24))
-            if clicked and self.edits is not None:
-                for edit in self.edits.values():
-                    for key, value in dataclasses.asdict(Edit()).items():
-                        setattr(edit, key, value)
-            imgui.spacing() 
-            imgui.spacing() 
+            
 
             imgui.separator_text("Geometric Editing")
 
@@ -509,11 +532,6 @@ class GaussianViewer(Viewer):
             imgui.pop_item_width()
 
             imgui.spacing() 
-
-            # imgui.checkbox("Show Gizmo", False)    
-            imgui.button("Duplicate", size=(240, 24))
-            clicked = imgui.button("Reset Selection Pose", size=(240, 24))
-            clicked = imgui.button("Reset All Poses", size=(240, 24))
         
             if disabled_cause_no_selection:
                 imgui.end_disabled()
@@ -610,7 +628,7 @@ class GaussianViewer(Viewer):
         
         if text["edits"] is not None:
             for key, edit in text["edits"].items():
-                self.edits[key] = dataclasses.replace(self.edits[key], **edit)
+                self.edits[key] = Edit(**edit)
 
     def server_send(self):
         if self.first_send:
