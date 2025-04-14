@@ -86,8 +86,8 @@ class GaussianRaytracer:
 
     @torch.no_grad()
     def _export_param_values(self, edits=None):
-        self.cuda_module.gaussian_scales.copy_(self.pc._scaling)
-        self.cuda_module.gaussian_rotations.copy_(self.pc._rotation)
+        self.cuda_module.gaussian_scales.copy_(self.pc._get_scaling)
+        self.cuda_module.gaussian_rotations.copy_(self.pc._get_rotation)
         self.cuda_module.gaussian_means.copy_(self.pc.get_xyz)
         self.cuda_module.gaussian_opacity.copy_(self.pc._opacity)
         if self.cuda_module.gaussian_lod_mean is not None:

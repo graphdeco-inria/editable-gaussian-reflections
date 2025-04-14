@@ -59,6 +59,11 @@ class Edit:
     scale_y: float = 1.0
     scale_z: float = 1.0
 
+    rotate_x: float = 0.0
+    rotate_y: float = 0.0 
+    rotate_z: float = 0.0
+    
+
 class GaussianViewer(Viewer):
     def __init__(self, mode: ViewerMode, raytracer: "GaussianRaytracer"):
         super().__init__(mode)
@@ -568,6 +573,38 @@ class GaussianViewer(Viewer):
             imgui.text("Translation")
             imgui.pop_item_width()
 
+            imgui.push_item_width(imgui.get_content_region_avail().x * 0.21)
+            _, self.edit.rotate_x = imgui.drag_float("##Rotate X", self.edit.rotate_x, v_min=-180, v_max=180, v_speed=1.0, format="%+.1f")
+            if imgui.is_item_hovered() and imgui.is_mouse_clicked(imgui.MouseButton_.right):
+                self.edit.rotate_x = 0.0
+            imgui.same_line()
+            _, self.edit.rotate_y = imgui.drag_float("##Rotate Y", self.edit.rotate_y, v_min=-180, v_max=180, v_speed=1.0, format="%+.1f")
+            if imgui.is_item_hovered() and imgui.is_mouse_clicked(imgui.MouseButton_.right):
+                self.edit.rotate_y = 0.0
+            imgui.same_line()
+            _, self.edit.rotate_z = imgui.drag_float("##Rotate Z", self.edit.rotate_z, v_min=-180, v_max=180, v_speed=1.0, format="%+.1f")
+            if imgui.is_item_hovered() and imgui.is_mouse_clicked(imgui.MouseButton_.right):
+                self.edit.rotate_z = 0.0
+            imgui.same_line()
+            imgui.text("Rotation")
+            imgui.pop_item_width()
+
+            imgui.push_item_width(imgui.get_content_region_avail().x * 0.21)
+            _, self.edit.scale_x = imgui.drag_float("##Scale X", self.edit.scale_x, v_min=0.01, v_max=10.0, v_speed=0.01, format="x%.2f")
+            if imgui.is_item_hovered() and imgui.is_mouse_clicked(imgui.MouseButton_.right):
+                self.edit.scale_x = 1.0
+            imgui.same_line()
+            _, self.edit.scale_y = imgui.drag_float("##Scale Y", self.edit.scale_y, v_min=0.01, v_max=10.0, v_speed=0.01, format="x%.2f")
+            if imgui.is_item_hovered() and imgui.is_mouse_clicked(imgui.MouseButton_.right):
+                self.edit.scale_y = 1.0
+            imgui.same_line()
+            _, self.edit.scale_z = imgui.drag_float("##Scale Z", self.edit.scale_z, v_min=0.01, v_max=10.0, v_speed=0.01, format="x%.2f")
+            if imgui.is_item_hovered() and imgui.is_mouse_clicked(imgui.MouseButton_.right):
+                self.edit.scale_z = 1.0
+            imgui.same_line()
+            imgui.text("Scale")
+            imgui.pop_item_width()
+
             imgui.spacing() 
         
             if disabled_cause_no_selection:
@@ -671,17 +708,65 @@ class GaussianViewer(Viewer):
                         original_x = (bbox["min"][0] + bbox["max"][0]) / 2
                         original_y = (bbox["min"][1] + bbox["max"][1]) / 2
                         original_z = (bbox["min"][2] + bbox["max"][2]) / 2
+
+                        rotation_x_matrix = np.array([
+                            [1.0, 0.0, 0.0, 0.0],
+                            [0.0, math.cos(math.radians(self.edit.rotate_x)), -math.sin(math.radians(self.edit.rotate_x)), 0.0],
+                            [0.0, math.sin(math.radians(self.edit.rotate_x)), math.cos(math.radians(self.edit.rotate_x)), 0.0],
+                            [0.0, 0.0, 0.0, 1.0]
+                        ])
+                        rotation_y_matrix = np.array([
+                            [math.cos(math.radians(self.edit.rotate_y)), 0.0, math.sin(math.radians(self.edit.rotate_y)), 0.0],
+                            [0.0, 1.0, 0.0, 0.0],
+                            [-math.sin(math.radians(self.edit.rotate_y)), 0.0, math.cos(math.radians(self.edit.rotate_y)), 0.0],
+                            [0.0, 0.0, 0.0, 1.0]
+                        ])
+                        rotation_z_matrix = np.array([
+                            [math.cos(math.radians(self.edit.rotate_z)), -math.sin(math.radians(self.edit.rotate_z)), 0.0, 0.0],
+                            [math.sin(math.radians(self.edit.rotate_z)), math.cos(math.radians(self.edit.rotate_z)), 0.0, 0.0],
+                            [0.0, 0.0, 1.0, 0.0],
+                            [0.0, 0.0, 0.0, 1.0]
+                        ])
+
+                        rotation_matrix = rotation_x_matrix @ rotation_y_matrix @ rotation_z_matrix
+
                         pose = Matrix16([
-                            1.0, 0.0, 0.0,0.0, 
-                            0.0, 1.0, 0.0, 0.0, 
-                            0.0, 0.0, 1.0, 0.0,
-                                original_x + self.edit.translate_x,
-                                original_y + self.edit.translate_y,
-                                original_z + self.edit.translate_z, 1.0]) # self.selected_object_transform
-                        gizmo.manipulate(view_mat, proj_mat, gizmo.OPERATION.translate, gizmo.MODE.local, pose, None, None, None, None)
-                        self.edit.translate_x = float(pose.values[12] - original_x)
-                        self.edit.translate_y = float(pose.values[13] - original_y)
-                        self.edit.translate_z = float(pose.values[14] - original_z)
+                            self.edit.scale_x * rotation_matrix[0, 0], self.edit.scale_x * rotation_matrix[0, 1], self.edit.scale_x * rotation_matrix[0, 2], 0.0,
+                            self.edit.scale_y * rotation_matrix[1, 0], self.edit.scale_y * rotation_matrix[1, 1], self.edit.scale_y * rotation_matrix[1, 2], 0.0,
+                            self.edit.scale_z * rotation_matrix[2, 0], self.edit.scale_z * rotation_matrix[2, 1], self.edit.scale_z * rotation_matrix[2, 2], 0.0,
+                            original_x + self.edit.translate_x, original_y + self.edit.translate_y, original_z + self.edit.translate_z, 1.0
+                        ])
+
+                        gizmo_mode = dict(move=gizmo.OPERATION.translate, scale=gizmo.OPERATION.scale, rotate=gizmo.OPERATION.rotate)[self.tool]
+                        gizmo.manipulate(view_mat, proj_mat, gizmo_mode, gizmo.MODE.local, pose, None, None, None, None)
+                        
+                        scale_x, scale_y, scale_z = np.linalg.norm(pose.values[0:3]), np.linalg.norm(pose.values[4:7]), np.linalg.norm(pose.values[8:11])
+
+                        rotation_matrix = np.array(pose.values).reshape(4, 4)[:3, :3] / [scale_x, scale_y, scale_z]
+
+                        translate_x, translate_y, translate_z = pose.values[12], pose.values[13], pose.values[14]
+
+                        rotate_x, rotate_y, rotate_z = np.degrees(np.arctan2(
+                            [rotation_matrix[2, 1], -rotation_matrix[2, 0], rotation_matrix[1, 0]],
+                            [rotation_matrix[2, 2], np.sqrt(rotation_matrix[2, 1]**2 + rotation_matrix[2, 2]**2), rotation_matrix[0, 0]]
+                        ))
+
+                        self.edit.translate_x = float(translate_x - original_x)
+                        self.edit.translate_y = float(translate_y - original_y)
+                        self.edit.translate_z = float(translate_z - original_z)
+                        self.edit.scale_x = float(scale_x)
+                        self.edit.scale_y = float(scale_y)
+                        self.edit.scale_z = float(scale_z)
+                        self.edit.rotate_x = float(rotate_x)
+                        self.edit.rotate_y = float(rotate_y)
+                        self.edit.rotate_z = float(rotate_z)
+
+                        # self.edit.translate_x = float(pose.values[12] - original_x)
+                        # self.edit.translate_y = float(pose.values[13] - original_y)
+                        # self.edit.translate_z = float(pose.values[14] - original_z)
+                        # self.edit.scale_x = float(pose.values[0])
+                        # self.edit.scale_y = float(pose.values[5])
+                        # self.edit.scale_z = float(pose.values[10])
 
             if self.selection_choice == 0:
                 cam_changed_from_mouse = imgui.is_item_hovered() and self.camera.process_mouse_input()

@@ -128,29 +128,54 @@ class EditableGaussianModel(GaussianModel):
         
         for key, edit in self.edits.items():
             xyz[self.selections[key].squeeze(1)] += torch.tensor([edit.translate_x, edit.translate_y, edit.translate_z], device=xyz.device)
+            bounding_box = self.bounding_boxes[key]
+            bbox_center = torch.tensor([(bounding_box["min"][i] + bounding_box["max"][i]) / 2 for i in range(3)], device=xyz.device)
+            object_center = bbox_center + torch.tensor([edit.translate_x, edit.translate_y, edit.translate_z], device=xyz.device)
+            xyz[self.selections[key].squeeze(1)] = (
+                (xyz[self.selections[key].squeeze(1)] - object_center) * torch.tensor(
+                    [edit.scale_x, edit.scale_y, edit.scale_z], device=xyz.device
+                ) + object_center
+            )
+            rotation_angles = torch.tensor([edit.rotate_x, edit.rotate_y, edit.rotate_z], device=xyz.device)
+            rotation_angles = torch.deg2rad(rotation_angles) 
+            rotation_matrix = kornia.geometry.axis_angle_to_rotation_matrix(-rotation_angles[None])[0]
+
+            xyz[self.selections[key].squeeze(1)] = (
+                torch.matmul(
+                    xyz[self.selections[key].squeeze(1)] - object_center, 
+                    rotation_matrix.T
+                ) + object_center
+            )
         
         self.xyz = xyz
         return xyz 
 
     @property
-    def get_scaling(self):
-        scaling = super().get_scaling.clone()
+    def _get_scaling(self): # no activation
+        scaling = torch.exp(self._scaling)
 
         if not self.ready_for_editing:
-            return scaling
+            return torch.log(scaling)
         
         if not self.is_dirty:
             return self.scaling
         
+        rotation_quaternion = torch.nn.functional.normalize(self._rotation, dim=-1)
+        rotation_matrix = kornia.geometry.conversions.quaternion_to_rotation_matrix(rotation_quaternion)
+        world_scales = torch.matmul(rotation_matrix, scaling.unsqueeze(-1)).squeeze(-1)
+
         for key, edit in self.edits.items():
-            scaling[self.selections[key].squeeze(1)] *= torch.tensor([edit.scale_x, edit.scale_y, edit.scale_z], device=scaling.device)
+            world_scales[self.selections[key].squeeze(1)] *= torch.tensor([edit.scale_x, edit.scale_y, edit.scale_z], device=scaling.device)
         
-        self.scaling = scaling
-        return scaling
+        scaling = torch.matmul(rotation_matrix.mT, world_scales.unsqueeze(-1)).squeeze(-1)
+
+        self.scaling = torch.log(scaling)
+        return self.scaling
 
     @property
-    def get_rotation(self):
-        rotation = super().get_scaling.clone()
+    def _get_rotation(self): # no activation
+        rotation = self._rotation 
+        return rotation
 
         if not self.ready_for_editing:
             return rotation
@@ -158,7 +183,8 @@ class EditableGaussianModel(GaussianModel):
         if not self.is_dirty:
             return self.diffuse
         
-        # todo
+        for key, edit in self.edits.items():
+            pass # todo 
         
         self.rotation = rotation
         return rotation
