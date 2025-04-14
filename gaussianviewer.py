@@ -150,6 +150,7 @@ class GaussianViewer(Viewer):
         viewer.test_transforms = test_transforms
         viewer.bounding_boxes = bounding_boxes
         viewer.selection_masks = selection_masks
+        viewer.edits = edits
 
         bg_color = [1, 1, 1] if dataset.white_background else [0, 0, 0]
         background = torch.tensor(bg_color, dtype=torch.float32, device="cuda")
@@ -198,10 +199,12 @@ class GaussianViewer(Viewer):
 
         # Editing
         self.edit = Edit()
+        if not hasattr(self, "edits"):
+            self.edits = None
 
     def update_bbox_selection(self):
-        if self.raytracer is not None and self.selection_choice != 0:
-            self.edit = self.gaussians.edits[self.selection_choices[self.selection_choice]]
+        if self.edits is not None and self.selection_choice != 0:
+            self.edit = self.edits[self.selection_choices[self.selection_choice]]
 
     # def reset_brdf_edit_settings(self):
     #     self.edit = Edit() 
@@ -557,7 +560,6 @@ class GaussianViewer(Viewer):
                     avg_z = (bbox["min"][2] + bbox["max"][2]) / 2
                     pose =  Matrix16([
                         1.0, 0.0, 0.0,0.0, 
-                    
                         0.0, 1.0, 0.0, 0.0, 
                         0.0, 0.0, 1.0, 0.0,
                          avg_x, avg_y, avg_z, 1.0]) # self.selected_object_transform
@@ -588,7 +590,7 @@ class GaussianViewer(Viewer):
             "ray_choice": self.ray_choice,
             "selection_choice": self.selection_choice,
             "hovering_over": self.hovering_over,
-            **dataclasses.asdict(self.edit)
+            "edits": { key: dataclasses.asdict(edit) for key, edit in self.edits.items() } if self.edits is not None else None,
         }
     
     def server_recv(self, _, text):
@@ -599,8 +601,9 @@ class GaussianViewer(Viewer):
         self.exposure = text["exposure"]
         self.hovering_over = text["hovering_over"]
         
-        for field in dataclasses.fields(self.edit):
-            setattr(self.edit, field.name, text[field.name])
+        if text["edits"] is not None:
+            for key, edit in text["edits"].items():
+                self.edits[key] = dataclasses.replace(self.edits[key], **edit)
 
     def server_send(self):
         if self.first_send:
@@ -631,6 +634,7 @@ class GaussianViewer(Viewer):
             self.selection_choices = text["selection_choices"]
         if "bounding_boxes" in text:
             self.bounding_boxes = text["bounding_boxes"]
+            self.edits = { bbox_name: Edit() for bbox_name in self.bounding_boxes.keys() }
         if "selection_masks" in text:
             self.selection_masks = {
                 k: np.array(v) for k, v in text["selection_masks"].items()
