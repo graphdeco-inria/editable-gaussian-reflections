@@ -164,7 +164,8 @@ class GaussianRaytracer:
         target_roughness=None,
         target_f0=None,
         target_brdf=None,
-        edits=None
+        edits=None,
+        force_update_bvh=False
     ):
         """
         Render the scene.
@@ -247,7 +248,7 @@ class GaussianRaytracer:
                 else:
                     self.cuda_module.target_brdf.zero_()
 
-        if torch.is_grad_enabled():
+        if torch.is_grad_enabled() or force_update_bvh:
             self.cuda_module.update_bvh()
         self.cuda_module.raytrace()
 

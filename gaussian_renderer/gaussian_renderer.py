@@ -41,7 +41,8 @@ def render(
     iteration=None,
     blur_sigma=None,
     edits=None,
-    targets_available=True
+    targets_available=True,
+    force_update_bvh=False
 ):
     
     do_backprop = torch.is_grad_enabled()
@@ -129,7 +130,8 @@ def render(
             target_roughness=_target_roughness,
             target_f0=_target_f0,
             target_brdf=_target_brdf,
-            edits=edits
+            edits=edits,
+            force_update_bvh=force_update_bvh
         )
         # if blur_sigma is not None:
         raytracer.cuda_module.init_blur_sigma.fill_(0.0)

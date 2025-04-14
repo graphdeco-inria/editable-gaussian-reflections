@@ -39,12 +39,14 @@ class EditableGaussianModel(GaussianModel):
 
         self.is_dirty = True
         self.last_edits = None
+        self.last_scaling_modifier = 1.0
 
     # ----------------------------------------------------------------
 
-    def dirty_check(self):
-        if self.last_edits is None or self.edits != self.last_edits:
+    def dirty_check(self, scaling_modifier):
+        if self.last_edits is None or self.edits != self.last_edits or self.last_scaling_modifier != scaling_modifier:
             self.last_edits = copy.deepcopy(self.edits)
+            self.last_scaling_modifier = scaling_modifier
             self.is_dirty = True
         else:
             self.is_dirty = False 

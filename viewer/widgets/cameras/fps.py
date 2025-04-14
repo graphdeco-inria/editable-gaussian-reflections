@@ -18,7 +18,17 @@ class FPSCamera(Camera):
         self.radians_per_pixel = np.pi / 150
         self.invert_mouse = False
         self.current_type = "FPS"
-    
+        
+        self.dirty = False
+        self.last_state = self.to_json()
+
+    def dirty_check(self):
+        if self.to_json() != self.last_state:
+            self.last_state = self.to_json()
+            self.is_dirty = True
+        else:
+            self.is_dirty = False 
+
     def setup(self):
         self.movement_keys = {
             "w": imgui.Key[glfw.get_key_name(glfw.KEY_UNKNOWN, glfw.get_key_scancode(glfw.KEY_W))],

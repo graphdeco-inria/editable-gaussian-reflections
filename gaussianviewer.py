@@ -72,6 +72,8 @@ class GaussianViewer(Viewer):
         self.raytracer = raytracer
         if self.raytracer is not None:
             self.ray_count = self.raytracer.config.MAX_BOUNCES + 1
+            self.accumulated_rgb = torch.zeros_like(raytracer.cuda_module.output_rgb[:-2])
+            self.current_sample_count = 0
         else:
             self.ray_count = 4
         self.init_pose = None
@@ -91,8 +93,9 @@ class GaussianViewer(Viewer):
         self.selected_object_transform = Matrix16([1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0])
         self.selection_mode_counter = 0
         self.last_rendered_selection_mask_id = -1
-        self.cumulative_passes = False
+        self.sum_rgb_passes = False
         self.denoise = True
+        self.accumulate_samples = True
 
     def import_server_modules(self):
         global torch
@@ -265,11 +268,17 @@ class GaussianViewer(Viewer):
             start.record()
             with torch.no_grad():
                 with self.gaussian_lock:
-                    self.gaussians.dirty_check()
+                    self.gaussians.dirty_check(self.scaling_modifier)
+                    self.camera.dirty_check()
 
                     if self.tool == "select" and self.last_rendered_selection_mask_id != self.selection_mode_counter:
                         # Render masks for point and click selection
                         self.gaussians.is_dirty = True
+                        self.raytracer.cuda_module.accumulate.copy_(False)
+                        accum_rgb_backup = self.raytracer.cuda_module.accumulated_rgb.clone()
+                        accum_sample_count_backup = self.raytracer.cuda_module.accumulated_sample_count.clone()
+                        self.raytracer.cuda_module.accumulated_rgb.zero_()
+                        self.raytracer.cuda_module.accumulated_sample_count.zero_()
                         for obj_name in self.bounding_boxes.keys():
                             if obj_name == "everything":
                                 continue
@@ -282,6 +291,8 @@ class GaussianViewer(Viewer):
                             self.selection_masks[obj_name] = mask_render
                             self.gaussians._diffuse.copy_(rgb_backup)
                         self.last_rendered_selection_mask_id = self.selection_mode_counter
+                        self.raytracer.cuda_module.accumulated_rgb.copy_(accum_rgb_backup)
+                        self.raytracer.cuda_module.accumulated_sample_count.copy_(accum_sample_count_backup)
 
                     for key in self.edits.keys():
                         # Duplicates are produced here
@@ -289,26 +300,25 @@ class GaussianViewer(Viewer):
                             self.gaussians.duplicate_selected(key.replace("_copy", "", 1), DUPLICATION_OFFSET)
                             self.selection_choices.append(key)
                             self.raytracer.rebuild_bvh()
-
-                    self.raytracer.cuda_module.global_scale_factor.copy_(self.scaling_modifier)
-                    if self.gaussians.is_dirty:
-                        self.raytracer.cuda_module.update_bvh()
-
-                    self.update_bbox_selection() 
-
-                    package = render(camera, self.raytracer, self.pipe, self.background, blur_sigma=None, targets_available=False)
                     
+                    self.update_bbox_selection() 
+                    
+                    if self.gaussians.is_dirty or self.camera.is_dirty or not self.accumulate_samples:
+                        self.raytracer.cuda_module.accumulated_rgb.zero_()
+                        self.raytracer.cuda_module.accumulated_sample_count.zero_()
+
+                    self.raytracer.cuda_module.accumulate.copy_(self.accumulate_samples)
+                    self.raytracer.cuda_module.denoise.copy_(self.denoise)
+                    self.raytracer.cuda_module.global_scale_factor.copy_(self.scaling_modifier)
+                    package = render(camera, self.raytracer, self.pipe, self.background, blur_sigma=None, targets_available=False, force_update_bvh=self.gaussians.is_dirty)
                     self.raytracer.cuda_module.global_scale_factor.copy_(1.0)
 
                     mode_name = self.render_modes[self.render_mode]
                     nth_ray = self.ray_choice - 1
                     if mode_name == "RGB":
                         if nth_ray == -1:
-                            if self.denoise:
-                                net_image = package.rgb[-1] 
-                            else:
-                                net_image = tonemap(untonemap(package.rgb[:-1]).sum(dim=0))
-                        elif self.cumulative_passes:
+                            net_image = package.rgb[-1] 
+                        elif self.sum_rgb_passes:
                             net_image = tonemap(untonemap(package.rgb[:nth_ray + 1]).sum(dim=0))
                         else:
                             net_image = package.rgb[nth_ray]
@@ -351,9 +361,8 @@ class GaussianViewer(Viewer):
 
             _, self.render_mode = imgui.list_box("Render Mode", self.render_mode, self.render_modes)
             _, self.ray_choice = imgui.list_box("Displayed Rays", self.ray_choice, self.ray_choices)
-            _, self.cumulative_passes = imgui.checkbox("Cumulative RGB", self.cumulative_passes)
-            imgui.same_line()
-            _, self.denoise = imgui.checkbox("Denoiser", self.denoise)
+            _, self.sum_rgb_passes = imgui.checkbox("Cumulative Total RGB", self.sum_rgb_passes)
+            
 
             imgui.separator_text("Render Settings")
 
@@ -366,6 +375,10 @@ class GaussianViewer(Viewer):
                 _, self.scaling_modifier = imgui.drag_float("Scaling Factor", self.scaling_modifier, v_min=0, v_max=10, v_speed=0.01)
                 
                 _, self.exposure = imgui.drag_float("Exposure", self.exposure, v_min=0, v_max=6, v_speed=0.01)
+
+            _, self.accumulate_samples = imgui.checkbox("Accumulate Samples", self.accumulate_samples)
+            imgui.same_line()
+            _, self.denoise = imgui.checkbox("Denoise", self.denoise)
 
             imgui.separator_text("Camera Settings")
 
@@ -625,6 +638,16 @@ class GaussianViewer(Viewer):
             else:
                 image_top_left_corner = imgui.get_cursor_screen_pos()
                 self.point_view.show_gui()
+
+                if self.selection_choice == 0:
+                    cam_changed_from_mouse = imgui.is_item_hovered() and self.camera.process_mouse_input()
+                else:
+                    cam_changed_from_mouse = False
+            
+                cam_changed_from_keyboard = (imgui.is_item_focused() or imgui.is_item_hovered()) and self.camera.process_keyboard_input()
+                if cam_changed_from_mouse or cam_changed_from_keyboard:
+                    self.current_train_cam = -1
+                    self.current_test_cam = -1
                 
                 toolbar_width = 75
                 toolbar_height = self.camera.res_y
@@ -774,15 +797,7 @@ class GaussianViewer(Viewer):
                         # self.edit.scale_y = float(pose.values[5])
                         # self.edit.scale_z = float(pose.values[10])
 
-            if self.selection_choice == 0:
-                cam_changed_from_mouse = imgui.is_item_hovered() and self.camera.process_mouse_input()
-            else:
-                cam_changed_from_mouse = False
-        
-            cam_changed_from_keyboard = (imgui.is_item_focused() or imgui.is_item_hovered()) and self.camera.process_keyboard_input()
-            if cam_changed_from_mouse or cam_changed_from_keyboard:
-                self.current_train_cam = -1
-                self.current_test_cam = -1
+            
         
         with imgui_ctx.begin("Performance"):
             self.monitor.show_gui()
@@ -809,7 +824,7 @@ class GaussianViewer(Viewer):
             "edits": { key: dataclasses.asdict(edit) for key, edit in self.edits.items() } if self.edits is not None else None,
             "tool": self.tool,
             "selection_mode_counter": self.selection_mode_counter,
-            "cumulative_passes": self.cumulative_passes
+            "sum_rgb_passes": self.sum_rgb_passes
         }
     
     def server_recv(self, _, text):
@@ -821,7 +836,7 @@ class GaussianViewer(Viewer):
         self.hovering_over = text["hovering_over"]
         self.tool = text["tool"]
         self.selection_mode_counter = text["selection_mode_counter"]
-        self.cumulative_passes = text["cumulative_passes"]
+        self.sum_rgb_passes = text["sum_rgb_passes"]
         
         if text["edits"] is not None:
             for key, edit in text["edits"].items():
