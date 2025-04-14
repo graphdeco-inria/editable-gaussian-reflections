@@ -73,6 +73,7 @@ class GaussianViewer(Viewer):
         self.train_transforms = None 
         self.test_transforms = None
         self.current_train_cam = -1 
+    
         self.current_test_cam = -1
 
         self.blender_to_opengl = np.array([
@@ -83,8 +84,8 @@ class GaussianViewer(Viewer):
         ], dtype=float)
 
         self.selected_object_transform = Matrix16([1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0])
-
-
+        self.selection_mode_counter = 0
+        self.last_rendered_selection_mask_id = -1
     def import_server_modules(self):
         global torch
         import torch
@@ -150,15 +151,11 @@ class GaussianViewer(Viewer):
         self.train_transforms = json.load(open(os.path.join(source_path, "transforms_train.json"), "r"))
         self.test_transforms = json.load(open(os.path.join(source_path, "transforms_test.json"), "r"))
 
-        
         self.bounding_boxes = json.load(open(os.path.join(source_path, "bounding_boxes.json"), "r"))
         
         self.edits = { bbox_name: Edit() for bbox_name in self.bounding_boxes.keys() }
         
         self.selection_masks = {}
-        for bbox_name, bbox in self.bounding_boxes.items():
-            mask = (np.array(Image.open(os.path.join(source_path, f"selection_masks/{bbox_name}.png")).convert("RGB")).mean(axis=2) > 0.5).astype(bool)
-            self.selection_masks[bbox_name] = mask
 
         self.gaussians.make_editable(self.edits, self.bounding_boxes)
 
@@ -201,7 +198,6 @@ class GaussianViewer(Viewer):
         self.scaling_modifier = 1.0
 
         self.in_selection_mode = False
-
         self.hovering_over = None
 
         # Editing
@@ -260,17 +256,19 @@ class GaussianViewer(Viewer):
             with torch.no_grad():
                 with self.gaussian_lock:
 
-                    if self.in_selection_mode:
-                        for bbox_name, bbox in self.bounding_boxes.items():
+                    if self.in_selection_mode and self.last_rendered_selection_mask_id != self.selection_mode_counter:
+                        for obj_name in self.bounding_boxes.keys():
+                            if obj_name == "everything":
+                                continue
                             rgb_backup = self.gaussians._diffuse.clone()
                             rgb = self.gaussians._diffuse
                             rgb *= 0 
-                            # todo set bounces to 0
-                            rgb[self.selections[bbox_name].squeeze(1)] += 1
+                            rgb[self.gaussians.selections[obj_name].squeeze(1)] += 1
                             package = render(camera, self.raytracer, self.pipe, self.background, blur_sigma=None, targets_available=False)
-                            mask_render = package.rgb[0].cpu().numpy()
+                            mask_render = package.rgb[0].mean(dim=0).cpu().numpy()
+                            self.selection_masks[obj_name] = mask_render
                             self.gaussians._diffuse.copy_(rgb_backup)
-                            print(bbox_name)
+                        self.last_rendered_selection_mask_id = self.selection_mode_counter
 
                     for key in self.edits.keys():
                         if key not in self.gaussians.created_objects:
@@ -645,6 +643,11 @@ class GaussianViewer(Viewer):
             color = imgui.color_convert_float4_to_u32((1.0, 1.0, 0.0, 0.7))  
             draw_list.add_circle_filled((mouse_pos[0], mouse_pos[1]), 3.0, color)
     
+    def enter_selection_mode(self):
+        self.in_selection_mode = not self.in_selection_mode
+        self.selection_choice = 0
+        self.selection_mode_counter += 1
+
     def client_send(self):
         return None, {
             "scaling_modifier": self.scaling_modifier,
@@ -654,7 +657,8 @@ class GaussianViewer(Viewer):
             "selection_choice": self.selection_choice,
             "hovering_over": self.hovering_over,
             "edits": { key: dataclasses.asdict(edit) for key, edit in self.edits.items() } if self.edits is not None else None,
-            "in_selection_mode": self.in_selection_mode
+            "in_selection_mode": self.in_selection_mode,
+            "selection_mode_counter": self.selection_mode_counter
         }
     
     def server_recv(self, _, text):
@@ -665,6 +669,7 @@ class GaussianViewer(Viewer):
         self.exposure = text["exposure"]
         self.hovering_over = text["hovering_over"]
         self.in_selection_mode = text["in_selection_mode"]
+        self.selection_mode_counter = text["selection_mode_counter"]
         
         if text["edits"] is not None:
             for key, edit in text["edits"].items():
@@ -673,7 +678,6 @@ class GaussianViewer(Viewer):
     def server_send(self):
         if self.first_send:
             data = {
-                # "cameras": self.cameras,
                 "ray_count": self.ray_count,
                 "selection_choices": self.selection_choices,
                 "train_transforms": self.train_transforms,

@@ -26,7 +26,8 @@ class EditableGaussianModel(GaussianModel):
                 self.selections[key] = within_bbox.unsqueeze(1)
             self.selections["everything"] = torch.ones(self._xyz.shape[0], 1, device="cuda", dtype=torch.bool)
         
-        self.ready_for_editing = True 
+        self.ready_for_editing = True
+        self.dirty = False 
 
     # ----------------------------------------------------------------
 
