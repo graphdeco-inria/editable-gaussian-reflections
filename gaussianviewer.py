@@ -199,7 +199,7 @@ class GaussianViewer(Viewer):
         self.exposure = 1.0
         self.scaling_modifier = 1.0
 
-        self.in_selection_mode = False
+        self.tool = "pan" # pan, select, move, scale, or rotate
         self.hovering_over = None
 
         # Editing
@@ -261,7 +261,7 @@ class GaussianViewer(Viewer):
                 with self.gaussian_lock:
                     self.gaussians.dirty_check()
 
-                    if self.in_selection_mode and self.last_rendered_selection_mask_id != self.selection_mode_counter:
+                    if self.tool == "select" and self.last_rendered_selection_mask_id != self.selection_mode_counter:
                         # Render masks for point and click selection
                         self.gaussians.is_dirty = True
                         for obj_name in self.bounding_boxes.keys():
@@ -336,13 +336,13 @@ class GaussianViewer(Viewer):
 
         with imgui_ctx.begin(f"Point View Settings"):
             did_disable = False
-            if self.in_selection_mode:
+            if self.tool == "select":
                 imgui.begin_disabled()
                 did_disable = True
 
             _, self.render_mode = imgui.list_box("Render Mode", self.render_mode, self.render_modes)
             _, self.ray_choice = imgui.list_box("Displayed Rays", self.ray_choice, self.ray_choices)
-            _, self.cumulative_passes = imgui.checkbox("Cumulative", self.cumulative_passes)
+            _, self.cumulative_passes = imgui.checkbox("Cumulative RGB", self.cumulative_passes)
 
             imgui.separator_text("Render Settings")
 
@@ -400,7 +400,7 @@ class GaussianViewer(Viewer):
 
         with imgui_ctx.begin(f"Editing Settings"):
             did_disable = False
-            if self.in_selection_mode:
+            if self.tool == "select":
                 imgui.begin_disabled()
                 did_disable = True
 
@@ -412,11 +412,9 @@ class GaussianViewer(Viewer):
             
             if did_disable:
                 imgui.end_disabled()
-            clicked = imgui.button("Point and Click", size=(240, 24))
-            if clicked:
-                self.enter_selection_mode()
-            if clicked:
-                pass
+            # clicked = imgui.button("Point and Click", size=(240, 24))
+            # if clicked:
+            #     self.enter_selection_mode()
 
             if did_disable:
                 imgui.begin_disabled()
@@ -584,7 +582,54 @@ class GaussianViewer(Viewer):
             else:
                 image_top_left_corner = imgui.get_cursor_screen_pos()
                 self.point_view.show_gui()
-                if self.in_selection_mode:
+                
+                toolbar_width = 75
+                toolbar_height = self.camera.res_y
+                toolbar_x = image_top_left_corner.x + self.camera.res_x + 10
+                toolbar_y = image_top_left_corner.y
+
+                imgui.set_cursor_screen_pos((toolbar_x, toolbar_y))
+                imgui.begin_child("Toolbar", (toolbar_width, toolbar_height))
+
+                init_tool = self.tool
+                if init_tool == "pan":
+                    imgui.push_style_color(imgui.Col_.button, (0.2, 0.5, 0.2, 1.0))  # Highlight color
+                if imgui.button("Pan", size=(toolbar_width - 10, 40)):
+                    self.tool = "pan"
+                if init_tool == "pan":
+                    imgui.pop_style_color()
+
+                if init_tool == "select":
+                    imgui.push_style_color(imgui.Col_.button, (0.2, 0.5, 0.2, 1.0))  # Highlight color
+                if imgui.button("Select", size=(toolbar_width - 10, 40)):
+                    self.enter_selection_mode()
+                if init_tool == "select":
+                    imgui.pop_style_color()
+
+                if init_tool == "move":
+                    imgui.push_style_color(imgui.Col_.button, (0.2, 0.5, 0.2, 1.0))  # Highlight color
+                if imgui.button("Move", size=(toolbar_width - 10, 40)):
+                    self.tool = "move"
+                if init_tool == "move":
+                    imgui.pop_style_color()
+
+                if init_tool == "scale":
+                    imgui.push_style_color(imgui.Col_.button, (0.2, 0.5, 0.2, 1.0))  # Highlight color
+                if imgui.button("Scale", size=(toolbar_width - 10, 40)):
+                    self.tool = "scale"
+                if init_tool == "scale":
+                    imgui.pop_style_color()
+
+                if init_tool == "rotate":
+                    imgui.push_style_color(imgui.Col_.button, (0.2, 0.5, 0.2, 1.0))  # Highlight color
+                if imgui.button("Rotate", size=(toolbar_width - 10, 40)):
+                    self.tool = "rotate"
+                if init_tool == "rotate":
+                    imgui.pop_style_color()
+
+                imgui.end_child()
+
+                if self.tool == "select":
                     mouse_pos = imgui.get_mouse_pos()
                     window_pos = imgui.get_window_pos()
                     j, i = int(mouse_pos[0] - window_pos.x), int(mouse_pos[1] - window_pos.y - 30)
@@ -603,37 +648,40 @@ class GaussianViewer(Viewer):
                             if mask[i, j]:
                                 self.selection_choice = self.selection_choices.index(bbox_name)
                                 self.update_bbox_selection()
-                        self.in_selection_mode = False
+                        self.tool = "move"
                     elif imgui.is_mouse_clicked(imgui.MouseButton_.right):
-                        self.in_selection_mode = False
+                        self.tool = "pan"
                 else:
                     self.hovering_over = None
 
-                if self.selection_choice != 0 and self.selection_choice != len(self.selection_choices) - 1:
-                    gizmo.set_drawlist()
+                if self.tool in ["move", "scale", "rotate"] and self.selection_choice != len(self.selection_choices) - 1:
+                    if self.selection_choice == 0:
+                        self.tool = "pan"
+                    else:
+                        gizmo.set_drawlist()
 
-                    gizmo.set_rect(image_top_left_corner.x, image_top_left_corner.y, self.camera.res_x, self.camera.res_y)
+                        gizmo.set_rect(image_top_left_corner.x, image_top_left_corner.y, self.camera.res_x, self.camera.res_y)
 
-                    to_camera = self.camera.to_camera
-                    to_camera[1] *= -1
+                        to_camera = self.camera.to_camera
+                        to_camera[1] *= -1
 
-                    view_mat = Matrix16((to_camera.T).flatten().tolist())
-                    proj_mat = Matrix16((self.camera.projection.T).flatten().tolist())
-                    bbox = self.bounding_boxes[self.selection_choices[self.selection_choice]]
-                    original_x = (bbox["min"][0] + bbox["max"][0]) / 2
-                    original_y = (bbox["min"][1] + bbox["max"][1]) / 2
-                    original_z = (bbox["min"][2] + bbox["max"][2]) / 2
-                    pose = Matrix16([
-                        1.0, 0.0, 0.0,0.0, 
-                        0.0, 1.0, 0.0, 0.0, 
-                        0.0, 0.0, 1.0, 0.0,
-                            original_x + self.edit.translate_x,
-                            original_y + self.edit.translate_y,
-                            original_z + self.edit.translate_z, 1.0]) # self.selected_object_transform
-                    gizmo.manipulate(view_mat, proj_mat, gizmo.OPERATION.translate, gizmo.MODE.local, pose, None, None, None, None)
-                    self.edit.translate_x = float(pose.values[12] - original_x)
-                    self.edit.translate_y = float(pose.values[13] - original_y)
-                    self.edit.translate_z = float(pose.values[14] - original_z)
+                        view_mat = Matrix16((to_camera.T).flatten().tolist())
+                        proj_mat = Matrix16((self.camera.projection.T).flatten().tolist())
+                        bbox = self.bounding_boxes[self.selection_choices[self.selection_choice]]
+                        original_x = (bbox["min"][0] + bbox["max"][0]) / 2
+                        original_y = (bbox["min"][1] + bbox["max"][1]) / 2
+                        original_z = (bbox["min"][2] + bbox["max"][2]) / 2
+                        pose = Matrix16([
+                            1.0, 0.0, 0.0,0.0, 
+                            0.0, 1.0, 0.0, 0.0, 
+                            0.0, 0.0, 1.0, 0.0,
+                                original_x + self.edit.translate_x,
+                                original_y + self.edit.translate_y,
+                                original_z + self.edit.translate_z, 1.0]) # self.selected_object_transform
+                        gizmo.manipulate(view_mat, proj_mat, gizmo.OPERATION.translate, gizmo.MODE.local, pose, None, None, None, None)
+                        self.edit.translate_x = float(pose.values[12] - original_x)
+                        self.edit.translate_y = float(pose.values[13] - original_y)
+                        self.edit.translate_z = float(pose.values[14] - original_z)
 
             if self.selection_choice == 0:
                 cam_changed_from_mouse = imgui.is_item_hovered() and self.camera.process_mouse_input()
@@ -648,14 +696,14 @@ class GaussianViewer(Viewer):
         with imgui_ctx.begin("Performance"):
             self.monitor.show_gui()
 
-        if self.in_selection_mode:
+        if self.tool == "select":
             mouse_pos = imgui.get_mouse_pos()
             draw_list = imgui.get_foreground_draw_list()
             color = imgui.color_convert_float4_to_u32((1.0, 1.0, 0.0, 0.7))  
             draw_list.add_circle_filled((mouse_pos[0], mouse_pos[1]), 3.0, color)
     
     def enter_selection_mode(self):
-        self.in_selection_mode = not self.in_selection_mode
+        self.tool = "select"
         self.selection_choice = 0
         self.selection_mode_counter += 1
 
@@ -668,7 +716,7 @@ class GaussianViewer(Viewer):
             "selection_choice": self.selection_choice,
             "hovering_over": self.hovering_over,
             "edits": { key: dataclasses.asdict(edit) for key, edit in self.edits.items() } if self.edits is not None else None,
-            "in_selection_mode": self.in_selection_mode,
+            "tool": self.tool,
             "selection_mode_counter": self.selection_mode_counter,
             "cumulative_passes": self.cumulative_passes
         }
@@ -680,7 +728,7 @@ class GaussianViewer(Viewer):
         self.selection_choice = text["selection_choice"]
         self.exposure = text["exposure"]
         self.hovering_over = text["hovering_over"]
-        self.in_selection_mode = text["in_selection_mode"]
+        self.tool = text["tool"]
         self.selection_mode_counter = text["selection_mode_counter"]
         self.cumulative_passes = text["cumulative_passes"]
         
