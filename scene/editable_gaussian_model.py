@@ -48,7 +48,7 @@ class EditableGaussianModel(GaussianModel):
             self.is_dirty = True
         else:
             self.is_dirty = False 
-            
+
     @property
     def get_roughness(self):
         roughness = super().get_roughness.clone()
@@ -62,8 +62,10 @@ class EditableGaussianModel(GaussianModel):
         for key, edit in self.edits.items():
             if edit.use_roughness_override:
                 base_roughness = torch.lerp(roughness, torch.tensor(1.0).cuda(), edit.roughness_override)
-                modified_roughness = (edit.roughness_mult * (base_roughness + edit.roughness_shift)).clamp(0, 1)
-                roughness = torch.where(self.selections[key], modified_roughness, roughness)
+            else:
+                base_roughness = roughness
+            modified_roughness = (edit.roughness_mult * (base_roughness + edit.roughness_shift)).clamp(0, 1)
+            roughness = torch.where(self.selections[key], modified_roughness, roughness)
 
         self.roughness = roughness
         return roughness
@@ -165,10 +167,13 @@ class EditableGaussianModel(GaussianModel):
     # ----------------------------------------------------------------
 
     @torch.no_grad()
-    def duplicate_selected(self, selection_name: str, offset: float):
-        target_selection = self.selections[selection_name].squeeze(1).cuda()
+    def duplicate_selected(self, obj_name: str, offset: float):
+        target_selection = self.selections[obj_name].squeeze(1).cuda()
+        edit = self.edits[obj_name]
 
-        new_xyz = self._xyz[target_selection].clone() + offset
+        delta_xyz = torch.tensor([edit.translate_x, edit.translate_y, edit.translate_z], device="cuda")
+
+        new_xyz = self._xyz[target_selection].clone() + offset + delta_xyz
         new_position = self._position[target_selection].clone()
         new_rotation = self._rotation[target_selection].clone()
         new_scaling = self._scaling[target_selection].clone()
@@ -194,10 +199,10 @@ class EditableGaussianModel(GaussianModel):
         self._lod_scale = torch.cat((self._lod_scale, new_lod_scale), dim=0)
         self._round_counter = torch.cat((self._round_counter, new_round_counter), dim=0)
 
-        self.selections[selection_name + "_copy"] = torch.zeros_like(self.selections[selection_name], dtype=torch.bool)
+        self.selections[obj_name + "_copy"] = torch.zeros_like(self.selections[obj_name], dtype=torch.bool)
         xtra = target_selection[target_selection].unsqueeze(1)
         for key, selection in self.selections.items():
-            new_selection = torch.cat((selection, xtra if key in ["Everything", selection_name + "_copy"] else ~xtra), dim=0)
+            new_selection = torch.cat((selection, xtra if key in ["Everything", obj_name + "_copy"] else ~xtra), dim=0)
             self.selections[key] = new_selection
 
-        self.created_objects.append(selection_name + "_copy")
+        self.created_objects.append(obj_name + "_copy")

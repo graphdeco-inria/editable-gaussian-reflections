@@ -223,10 +223,12 @@ class GaussianViewer(Viewer):
         new_key = old_key + "_copy"
         self.selection_choices.insert(self.selection_choices.index(old_key) + 1, new_key)
         self.edits[new_key] = Edit()
+        old_edit = self.edits[old_key]
         self.bounding_boxes[new_key] = self.bounding_boxes[old_key]
-        for x in ["min", "max"]:
-            for i in range(3):
-                self.bounding_boxes[new_key][x][i] += DUPLICATION_OFFSET
+        for j in ["min", "max"]:
+            self.bounding_boxes[new_key][j][0] += DUPLICATION_OFFSET + old_edit.translate_x
+            self.bounding_boxes[new_key][j][1] += DUPLICATION_OFFSET + old_edit.translate_y
+            self.bounding_boxes[new_key][j][2] += DUPLICATION_OFFSET + old_edit.translate_z
         self.selection_choice = self.selection_choices.index(new_key)
         self.update_bbox_selection()
 
@@ -259,6 +261,7 @@ class GaussianViewer(Viewer):
                     self.gaussians.dirty_check()
 
                     if self.in_selection_mode and self.last_rendered_selection_mask_id != self.selection_mode_counter:
+                        # Render masks for point and click selection
                         self.gaussians.is_dirty = True
                         for obj_name in self.bounding_boxes.keys():
                             if obj_name == "everything":
@@ -274,14 +277,15 @@ class GaussianViewer(Viewer):
                         self.last_rendered_selection_mask_id = self.selection_mode_counter
 
                     for key in self.edits.keys():
+                        # Duplicates are produced here
                         if key not in self.gaussians.created_objects:
                             self.gaussians.duplicate_selected(key.replace("_copy", "", 1), DUPLICATION_OFFSET)
                             self.selection_choices.append(key)
                             self.raytracer.rebuild_bvh()
 
                     self.raytracer.cuda_module.global_scale_factor.copy_(self.scaling_modifier)
-                    # if self.scaling_modifier != 1.0:
-                    self.raytracer.cuda_module.update_bvh() #!!!!! dont do every frame
+                    if self.gaussians.is_dirty:
+                        self.raytracer.cuda_module.update_bvh()
 
                     self.update_bbox_selection() 
 
