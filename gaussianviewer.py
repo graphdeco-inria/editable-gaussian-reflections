@@ -477,7 +477,14 @@ class GaussianViewer(Viewer):
             imgui.spacing() 
 
             clicked = imgui.button("Reset Selection BRDF", size=(240, 24))
+            if clicked and self.edits is not None and self.selection_choice != 0:
+                for key, value in dataclasses.asdict(Edit()).items():
+                    setattr(self.edits[self.selection_choices[self.selection_choice]], key, value)
             clicked = imgui.button("Reset All BRDFs", size=(240, 24))
+            if clicked and self.edits is not None:
+                for edit in self.edits.values():
+                    for key, value in dataclasses.asdict(Edit()).items():
+                        setattr(edit, key, value)
             imgui.spacing() 
             imgui.spacing() 
 
