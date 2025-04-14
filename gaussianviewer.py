@@ -256,7 +256,10 @@ class GaussianViewer(Viewer):
             with torch.no_grad():
                 with self.gaussian_lock:
 
+                    self.gaussians.dirty_check()
+
                     if self.in_selection_mode and self.last_rendered_selection_mask_id != self.selection_mode_counter:
+                        self.gaussians.is_dirty = True
                         for obj_name in self.bounding_boxes.keys():
                             if obj_name == "everything":
                                 continue
@@ -403,8 +406,7 @@ class GaussianViewer(Viewer):
                 imgui.end_disabled()
             clicked = imgui.button("Point and Click", size=(240, 24))
             if clicked:
-                self.in_selection_mode = not self.in_selection_mode
-                self.selection_choice = 0
+                self.enter_selection_mode()
             if clicked:
                 pass
             if did_disable:

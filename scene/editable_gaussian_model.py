@@ -3,6 +3,7 @@ from scene.gaussian_model import GaussianModel
 from dataclasses import dataclass
 import kornia
 import math 
+import copy 
 
 class EditableGaussianModel(GaussianModel):
 
@@ -27,17 +28,36 @@ class EditableGaussianModel(GaussianModel):
             self.selections["everything"] = torch.ones(self._xyz.shape[0], 1, device="cuda", dtype=torch.bool)
         
         self.ready_for_editing = True
-        self.dirty = False 
+        self.previous_edits = None
+
+        self.last_roughness = None
+        self.last_diffuse = None
+        self.last_f0 = None
+        self.last_xyz = None 
+        self.last_scaling = None 
+        self.last_rotation = None
+
+        self.is_dirty = True
+        self.last_edits = None
 
     # ----------------------------------------------------------------
 
-    
+    def dirty_check(self):
+        if self.last_edits is None or self.edits != self.last_edits:
+            self.last_edits = copy.deepcopy(self.edits)
+            self.is_dirty = True
+        else:
+            self.is_dirty = False 
+            
     @property
     def get_roughness(self):
         roughness = super().get_roughness.clone()
 
         if not self.ready_for_editing:
             return roughness
+        
+        if not self.is_dirty:
+            return self.roughness
 
         for key, edit in self.edits.items():
             if edit.use_roughness_override:
@@ -45,6 +65,7 @@ class EditableGaussianModel(GaussianModel):
                 modified_roughness = (edit.roughness_mult * (base_roughness + edit.roughness_shift)).clamp(0, 1)
                 roughness = torch.where(self.selections[key], modified_roughness, roughness)
 
+        self.roughness = roughness
         return roughness
 
     @property
@@ -53,6 +74,9 @@ class EditableGaussianModel(GaussianModel):
 
         if not self.ready_for_editing:
             return diffuse
+        
+        if not self.is_dirty:
+            return self.diffuse
             
         for key, edit in self.edits.items():
             base_diffuse = torch.lerp(diffuse, torch.tensor(edit.diffuse_override)[:3].cuda(), edit.diffuse_override[-1])
@@ -63,6 +87,7 @@ class EditableGaussianModel(GaussianModel):
             modified_diffuse = kornia.color.hsv_to_rgb(hsv.T[None, :, :, None])[0, :, :, 0].T
             diffuse = torch.where(self.selections[key], modified_diffuse, diffuse)
         
+        self.diffuse = diffuse
         return diffuse
     
     @property
@@ -71,6 +96,9 @@ class EditableGaussianModel(GaussianModel):
         
         if not self.ready_for_editing:
             return f0
+        
+        if not self.is_dirty:
+            return self.f0
 
         for key, edit in self.edits.items():
             base_f0 = torch.lerp(f0, torch.tensor(edit.glossy_override)[:3].cuda(), edit.glossy_override[-1])
@@ -81,6 +109,7 @@ class EditableGaussianModel(GaussianModel):
             modified_f0 = kornia.color.hsv_to_rgb(hsv.T[None, :, :, None])[0, :, :, 0].T
             f0 = torch.where(self.selections[key], modified_f0, f0)
 
+        self.f0 = f0
         return f0
 
     # ----------------------------------------------------------------
@@ -92,9 +121,13 @@ class EditableGaussianModel(GaussianModel):
         if not self.ready_for_editing:
             return xyz
         
+        if not self.is_dirty:
+            return self.xyz
+        
         for key, edit in self.edits.items():
             xyz[self.selections[key].squeeze(1)] += torch.tensor([edit.translate_x, edit.translate_y, edit.translate_z], device=xyz.device)
         
+        self.xyz = xyz
         return xyz 
 
     @property
@@ -104,9 +137,13 @@ class EditableGaussianModel(GaussianModel):
         if not self.ready_for_editing:
             return scaling
         
+        if not self.is_dirty:
+            return self.scaling
+        
         for key, edit in self.edits.items():
             scaling[self.selections[key].squeeze(1)] *= torch.tensor([edit.scale_x, edit.scale_y, edit.scale_z], device=scaling.device)
         
+        self.scaling = scaling
         return scaling
 
     @property
@@ -116,7 +153,13 @@ class EditableGaussianModel(GaussianModel):
         if not self.ready_for_editing:
             return rotation
         
-        return super().get_rotation # todo
+        if not self.is_dirty:
+            return self.diffuse
+        
+        # todo
+        
+        self.rotation = rotation
+        return rotation
 
 
     # ----------------------------------------------------------------
@@ -156,9 +199,5 @@ class EditableGaussianModel(GaussianModel):
         for key, selection in self.selections.items():
             new_selection = torch.cat((selection, xtra if key in ["Everything", selection_name + "_copy"] else ~xtra), dim=0)
             self.selections[key] = new_selection
-            print("newsize", new_selection.size())
-
-        print(list(self.selections.keys()))
 
         self.created_objects.append(selection_name + "_copy")
-        print("ADDED", selection_name + "_copy")
