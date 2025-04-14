@@ -128,10 +128,12 @@ class GaussianViewer(Viewer):
         test_transforms = json.load(open(os.path.join(source_path, "transforms_test.json"), "r"))
         bounding_boxes = json.load(open(os.path.join(source_path, "bounding_boxes.json"), "r"))
         selection_masks = {}
-        for bbox_name in bounding_boxes.keys():
+        poses = {}
+        for bbox_name, bbox in bounding_boxes.items():
             mask = (np.array(Image.open(os.path.join(source_path, f"selection_masks/{bbox_name}.png")).convert("RGB")).mean(axis=2) > 0.5).astype(bool)
             selection_masks[bbox_name] = mask
         bounding_boxes["everything"] = {"min": [-1000, 1000, -1000], "max": [1000, 1000, 1000] }
+        
 
         # 
         edits = { bbox_name: Edit() for bbox_name in bounding_boxes.keys() }
@@ -170,7 +172,7 @@ class GaussianViewer(Viewer):
         return viewer
 
     def create_widgets(self):
-        self.camera = FPSCamera(self.mode, self.raytracer.image_width if self.raytracer is not None else 800, self.raytracer.image_height if self.raytracer is not None else 600, 47, 0.001, 100)
+        self.camera = FPSCamera(self.mode, self.raytracer.image_width if self.raytracer is not None else 600, self.raytracer.image_height if self.raytracer is not None else 400, 47, 0.001, 100)
         self.point_view = TorchImage(self.mode)
         self.ellipsoid_viewer = EllipsoidViewer(self.mode)
         self.monitor = PerformanceMonitor(self.mode, ["Render"], add_other=False)
@@ -541,6 +543,7 @@ class GaussianViewer(Viewer):
             if self.render_modes[self.render_mode] == "Ellipsoids":
                self.ellipsoid_viewer.show_gui()
             else:
+                image_top_left_corner = imgui.get_cursor_screen_pos()
                 self.point_view.show_gui()
                 if self.in_selection_mode:
                     mouse_pos = imgui.get_mouse_pos()
@@ -567,30 +570,37 @@ class GaussianViewer(Viewer):
                 else:
                     self.hovering_over = None
 
-                if self.selection_choice != 0:
+                if self.selection_choice != 0 and self.selection_choice != len(self.selection_choices) - 1:
                     gizmo.set_drawlist()
-                    gizmo.set_rect(imgui.get_window_pos().x, imgui.get_window_pos().y, 600, 400) # ! tmp
+
+                    gizmo.set_rect(image_top_left_corner.x, image_top_left_corner.y, self.camera.res_x, self.camera.res_y)
 
                     to_camera = self.camera.to_camera
                     to_camera[1] *= -1
 
                     view_mat = Matrix16((to_camera.T).flatten().tolist())
                     proj_mat = Matrix16((self.camera.projection.T).flatten().tolist())
-
                     bbox = self.bounding_boxes[self.selection_choices[self.selection_choice]]
-                    avg_x = (bbox["min"][0] + bbox["max"][0]) / 2
-                    avg_y = (bbox["min"][1] + bbox["max"][1]) / 2
-                    avg_z = (bbox["min"][2] + bbox["max"][2]) / 2
-                    pose =  Matrix16([
+                    original_x = (bbox["min"][0] + bbox["max"][0]) / 2
+                    original_y = (bbox["min"][1] + bbox["max"][1]) / 2
+                    original_z = (bbox["min"][2] + bbox["max"][2]) / 2
+                    pose = Matrix16([
                         1.0, 0.0, 0.0,0.0, 
                         0.0, 1.0, 0.0, 0.0, 
                         0.0, 0.0, 1.0, 0.0,
-                         avg_x, avg_y, avg_z, 1.0]) # self.selected_object_transform
-
-
+                            original_x + self.edit.translate_x,
+                            original_y + self.edit.translate_y,
+                            original_z + self.edit.translate_z, 1.0]) # self.selected_object_transform
                     gizmo.manipulate(view_mat, proj_mat, gizmo.OPERATION.translate, gizmo.MODE.local, pose, None, None, None, None)
+                    self.edit.translate_x = float(pose.values[12] - original_x)
+                    self.edit.translate_y = float(pose.values[13] - original_y)
+                    self.edit.translate_z = float(pose.values[14] - original_z)
 
-            cam_changed_from_mouse = imgui.is_item_hovered() and self.camera.process_mouse_input()
+            if self.selection_choice == 0:
+                cam_changed_from_mouse = imgui.is_item_hovered() and self.camera.process_mouse_input()
+            else:
+                cam_changed_from_mouse = False
+        
             cam_changed_from_keyboard = (imgui.is_item_focused() or imgui.is_item_hovered()) and self.camera.process_keyboard_input()
             if cam_changed_from_mouse or cam_changed_from_keyboard:
                 self.current_train_cam = -1
