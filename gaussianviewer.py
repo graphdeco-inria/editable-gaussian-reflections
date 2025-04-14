@@ -86,6 +86,8 @@ class GaussianViewer(Viewer):
         self.selected_object_transform = Matrix16([1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0])
         self.selection_mode_counter = 0
         self.last_rendered_selection_mask_id = -1
+        self.cumulative_passes = False
+
     def import_server_modules(self):
         global torch
         import torch
@@ -257,7 +259,6 @@ class GaussianViewer(Viewer):
             start.record()
             with torch.no_grad():
                 with self.gaussian_lock:
-
                     self.gaussians.dirty_check()
 
                     if self.in_selection_mode and self.last_rendered_selection_mask_id != self.selection_mode_counter:
@@ -297,7 +298,9 @@ class GaussianViewer(Viewer):
                     nth_ray = self.ray_choice - 1
                     if mode_name == "RGB":
                         if nth_ray == -1:
-                            net_image = package.rgb[-1]
+                            net_image = package.rgb[-1] 
+                        elif self.cumulative_passes:
+                            net_image = tonemap(untonemap(package.rgb[:nth_ray + 1]).sum(dim=0))
                         else:
                             net_image = package.rgb[nth_ray]
                     elif mode_name == "Diffuse":
@@ -339,6 +342,7 @@ class GaussianViewer(Viewer):
 
             _, self.render_mode = imgui.list_box("Render Mode", self.render_mode, self.render_modes)
             _, self.ray_choice = imgui.list_box("Displayed Rays", self.ray_choice, self.ray_choices)
+            _, self.cumulative_passes = imgui.checkbox("Cumulative", self.cumulative_passes)
 
             imgui.separator_text("Render Settings")
 
@@ -413,6 +417,7 @@ class GaussianViewer(Viewer):
                 self.enter_selection_mode()
             if clicked:
                 pass
+
             if did_disable:
                 imgui.begin_disabled()
 
@@ -664,7 +669,8 @@ class GaussianViewer(Viewer):
             "hovering_over": self.hovering_over,
             "edits": { key: dataclasses.asdict(edit) for key, edit in self.edits.items() } if self.edits is not None else None,
             "in_selection_mode": self.in_selection_mode,
-            "selection_mode_counter": self.selection_mode_counter
+            "selection_mode_counter": self.selection_mode_counter,
+            "cumulative_passes": self.cumulative_passes
         }
     
     def server_recv(self, _, text):
@@ -676,6 +682,7 @@ class GaussianViewer(Viewer):
         self.hovering_over = text["hovering_over"]
         self.in_selection_mode = text["in_selection_mode"]
         self.selection_mode_counter = text["selection_mode_counter"]
+        self.cumulative_passes = text["cumulative_passes"]
         
         if text["edits"] is not None:
             for key, edit in text["edits"].items():
@@ -691,7 +698,7 @@ class GaussianViewer(Viewer):
                 "bounding_boxes": self.bounding_boxes,
                 "selection_masks": {
                     k: v.tolist() for k, v in self.selection_masks.items()
-                }
+                },
             }
         else:
             data = {}
