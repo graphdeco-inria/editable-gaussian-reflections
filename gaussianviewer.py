@@ -29,7 +29,7 @@ class Dummy(object):
 
 DUPLICATION_OFFSET = 0.08
 
-@dataclass
+@dataclass(eq=True)
 class Edit:
     roughness_shift: float = 0.0
     roughness_mult: float = 1.0
@@ -92,6 +92,7 @@ class GaussianViewer(Viewer):
         self.selection_mode_counter = 0
         self.last_rendered_selection_mask_id = -1
         self.cumulative_passes = False
+        self.denoise = True
 
     def import_server_modules(self):
         global torch
@@ -303,7 +304,10 @@ class GaussianViewer(Viewer):
                     nth_ray = self.ray_choice - 1
                     if mode_name == "RGB":
                         if nth_ray == -1:
-                            net_image = package.rgb[-1] 
+                            if self.denoise:
+                                net_image = package.rgb[-1] 
+                            else:
+                                net_image = tonemap(untonemap(package.rgb[:-1]).sum(dim=0))
                         elif self.cumulative_passes:
                             net_image = tonemap(untonemap(package.rgb[:nth_ray + 1]).sum(dim=0))
                         else:
@@ -348,6 +352,8 @@ class GaussianViewer(Viewer):
             _, self.render_mode = imgui.list_box("Render Mode", self.render_mode, self.render_modes)
             _, self.ray_choice = imgui.list_box("Displayed Rays", self.ray_choice, self.ray_choices)
             _, self.cumulative_passes = imgui.checkbox("Cumulative RGB", self.cumulative_passes)
+            imgui.same_line()
+            _, self.denoise = imgui.checkbox("Denoiser", self.denoise)
 
             imgui.separator_text("Render Settings")
 
@@ -439,13 +445,13 @@ class GaussianViewer(Viewer):
 
             clicked = imgui.button("Reset Selection", size=(240, 24))
             if clicked and self.edits is not None and self.selection_choice != 0:
-                for key, value in dataclasses.asdict(Edit()).items():
-                    setattr(self.edits[self.selection_choices[self.selection_choice]], key, value)
+                for key, default_value in dataclasses.asdict(Edit()).items():
+                    setattr(self.edits[self.selection_choices[self.selection_choice]], key, default_value)
             clicked = imgui.button("Reset Everything", size=(240, 24))
             if clicked and self.edits is not None:
                 for edit in self.edits.values():
-                    for key, value in dataclasses.asdict(Edit()).items():
-                        setattr(edit, key, value)
+                    for key, default_value in dataclasses.asdict(Edit()).items():
+                        setattr(edit, key, default_value)
             
             imgui.separator_text("BRDF Editing")
 
