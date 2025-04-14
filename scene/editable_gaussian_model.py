@@ -121,10 +121,10 @@ class EditableGaussianModel(GaussianModel):
     # ----------------------------------------------------------------
 
     @torch.no_grad()
-    def duplicate_selected(self, selection_name: str):
+    def duplicate_selected(self, selection_name: str, offset: float):
         target_selection = self.selections[selection_name].squeeze(1).cuda()
 
-        new_xyz = self._xyz[target_selection].clone() + 0.2
+        new_xyz = self._xyz[target_selection].clone() + offset
         new_position = self._position[target_selection].clone()
         new_rotation = self._rotation[target_selection].clone()
         new_scaling = self._scaling[target_selection].clone()

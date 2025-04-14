@@ -27,6 +27,8 @@ Matrix16 = gizmo.Matrix16
 class Dummy(object):
     pass
 
+DUPLICATION_OFFSET = 0.08
+
 @dataclass
 class Edit:
     roughness_shift: float = 0.0
@@ -218,14 +220,24 @@ class GaussianViewer(Viewer):
         if self.edits is not None and self.selection_choice != 0:
             self.edit = self.edits[self.selection_choices[self.selection_choice]]
 
-    # def reset_brdf_edit_settings(self):
-    #     self.edit = Edit() 
+    def duplicate_selection(self):
+        # For this to work with the remote client, this doesn't actually produce the copy, 
+        # just adds the object to the list which the server notices
+        old_key = self.selection_choices[self.selection_choice] 
+        new_key = old_key + "_copy"
+        self.selection_choices.insert(self.selection_choices.index(old_key) + 1, new_key)
+        self.edits[new_key] = Edit()
+        self.bounding_boxes[new_key] = self.bounding_boxes[old_key]
+        for x in ["min", "max"]:
+            for i in range(3):
+                self.bounding_boxes[new_key][x][i] += DUPLICATION_OFFSET
+        self.selection_choice = self.selection_choices.index(new_key)
+        self.update_bbox_selection()
 
     def step(self):
         world_to_view = torch.from_numpy(self.camera.to_camera).cuda().transpose(0, 1)
         full_proj_transform = torch.from_numpy(self.camera.full_projection).cuda().transpose(0, 1)
         
-        # self.train_transforms["camera_angle_y"]
         camera = MiniCam(self.camera.res_x, self.camera.res_y, self.camera.fov_y, self.camera.fov_x, self.camera.z_near, self.camera.z_far, world_to_view, full_proj_transform)
 
         if self.ellipsoid_viewer.num_gaussians is None:
@@ -262,7 +274,7 @@ class GaussianViewer(Viewer):
 
                     for key in self.edits.keys():
                         if key not in self.gaussians.created_objects:
-                            self.gaussians.duplicate_selected(key.replace("_copy", "", 1))
+                            self.gaussians.duplicate_selected(key.replace("_copy", "", 1), DUPLICATION_OFFSET)
                             self.selection_choices.append(key)
                             self.raytracer.rebuild_bvh()
 
@@ -410,13 +422,8 @@ class GaussianViewer(Viewer):
 
             clicked = imgui.button("Duplicate Selection", size=(240, 24))
             if clicked:
-                old_key = self.selection_choices[self.selection_choice] 
-                new_key = old_key + "_copy"
-                self.selection_choices.insert(self.selection_choices.index(old_key) + 1, new_key)
-                self.edits[new_key] = Edit()
-                self.bounding_boxes[new_key] = self.bounding_boxes[old_key]
-                self.selection_choice = self.selection_choices.index(new_key)
-                self.update_bbox_selection()
+                self.duplicate_selection()
+                
 
             clicked = imgui.button("Reset Selection", size=(240, 24))
             if clicked and self.edits is not None and self.selection_choice != 0:
