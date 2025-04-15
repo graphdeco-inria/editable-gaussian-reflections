@@ -295,11 +295,13 @@ class GaussianModel:
         self._position = nn.Parameter(fused_point_cloud.clone())
         self._normal = nn.Parameter(fused_normal.clone())
         self._roughness = nn.Parameter(
-            torch.ones((fused_point_cloud.shape[0], 1), device="cuda") * self.model_params.init_roughness
+            torch.ones((fused_point_cloud.shape[0], 1), device="cuda")
+            * self.model_params.init_roughness
         )
         self._f0 = nn.Parameter(
-            torch.ones((fused_point_cloud.shape[0], 3), device="cuda") * self.model_params.init_f0
-        )  
+            torch.ones((fused_point_cloud.shape[0], 3), device="cuda")
+            * self.model_params.init_f0
+        )
         if "SKIP_TONEMAPPING" not in os.environ:
             self._diffuse = nn.Parameter(untonemap(fused_color.clone()).clamp(0, 1))
         else:
@@ -428,8 +430,10 @@ class GaussianModel:
                     "name": "brdf_lut_residual",
                 }
             )
-        
-        self.optimizer = torch.optim.Adam(l, lr=0.0, eps=1e-15, betas=(training_args.beta_1, training_args.beta_2))
+
+        self.optimizer = torch.optim.Adam(
+            l, lr=0.0, eps=1e-15, betas=(training_args.beta_1, training_args.beta_2)
+        )
         self.xyz_scheduler_args = get_expon_lr_func(
             lr_init=training_args.position_lr_init * self.spatial_lr_scale,
             lr_final=training_args.position_lr_final * self.spatial_lr_scale,

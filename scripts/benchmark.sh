@@ -18,6 +18,7 @@ do
         -m $OUTPUT_DIR/$SCENE \
         -r $RESOLUTION \
         --eval \
+        --num_farfield_init_points 100_000 \
         --raytracer_version $RAYTRACER_VERSION
 
     python render.py \
