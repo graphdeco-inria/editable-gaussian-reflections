@@ -671,6 +671,7 @@ if args.viewer:
     viewer = GaussianViewer.from_gaussians(
         raytracer, model_params, opt_params, gaussians, SPARSE_ADAM_AVAILABLE, mode
     )
+    viewer.accumulate_samples = False
     if args.viewer_mode != "none":
         viewer_thd = Thread(target=viewer.run, daemon=True)
         viewer_thd.start()

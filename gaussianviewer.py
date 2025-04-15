@@ -118,7 +118,6 @@ class GaussianViewer(Viewer):
 
     @classmethod
     def from_ply(cls, model_path, iter, mode: ViewerMode):
-        global EditableGaussianModel
         from scene import EditableGaussianModel
         from gaussian_renderer import GaussianRaytracer
 
@@ -155,10 +154,11 @@ class GaussianViewer(Viewer):
         viewer.background = background
 
         viewer.load_metadata(model_params)
-
         return viewer
     
     def load_metadata(self, model_params):
+        from scene import EditableGaussianModel
+
         source_path = model_params.source_path
         
         self.train_transforms = json.load(open(os.path.join(source_path, "transforms_train.json"), "r"))
@@ -171,7 +171,8 @@ class GaussianViewer(Viewer):
         
         self.selection_masks = {}
 
-        self.gaussians.make_editable(self.edits, self.bounding_boxes, model_params.model_path)
+        if isinstance(self.gaussians, EditableGaussianModel):
+            self.gaussians.make_editable(self.edits, self.bounding_boxes, model_params.model_path)
 
     @classmethod
     def from_gaussians(cls, raytracer, dataset, pipe, gaussians, separate_sh, mode: ViewerMode):
@@ -181,7 +182,8 @@ class GaussianViewer(Viewer):
         viewer.gaussians = gaussians
         viewer.separate_sh = separate_sh
         viewer.background = torch.tensor([0,0,0], dtype=torch.float32, device="cuda")
-        # viewer.camera_poses = json.load(open(os.path.join(model_path, "cameras.json"), "r")) # todo fix
+
+        viewer.load_metadata(gaussians.model_params)
         return viewer
 
     def create_widgets(self):
@@ -223,7 +225,7 @@ class GaussianViewer(Viewer):
         self.camera.fov_x = transforms["camera_angle_x"]
         self.camera.fov_y = transforms["camera_angle_y"]    
 
-    def update_active_edits(self):
+    def update_active_edit(self):
         if self.edits is not None and self.selection_choice != 0:
             self.edit = self.edits[self.selection_choices[self.selection_choice]]
 
@@ -241,9 +243,11 @@ class GaussianViewer(Viewer):
             self.bounding_boxes[new_key][j][1] += DUPLICATION_OFFSET + old_edit.translate_y
             self.bounding_boxes[new_key][j][2] += DUPLICATION_OFFSET + old_edit.translate_z
         self.selection_choice = self.selection_choices.index(new_key)
-        self.update_active_edits()
+        self.update_active_edit()
 
     def step(self):
+        from scene import EditableGaussianModel
+
         world_to_view = torch.from_numpy(self.camera.to_camera).cuda().transpose(0, 1)
         full_proj_transform = torch.from_numpy(self.camera.full_projection).cuda().transpose(0, 1)
         
@@ -267,51 +271,59 @@ class GaussianViewer(Viewer):
             start.record()
             with torch.no_grad():
                 with self.gaussian_lock:
-                    self.gaussians.dirty_check(self.scaling_modifier)
                     self.camera.dirty_check()
 
-                    if self.tool == "select" and self.last_rendered_selection_mask_id != self.selection_mode_counter:
-                        # Render masks for point and click selection
-                        self.gaussians.is_dirty = True
-                        self.raytracer.cuda_module.accumulate.copy_(False)
-                        accum_rgb_backup = self.raytracer.cuda_module.accumulated_rgb.clone()
-                        accum_sample_count_backup = self.raytracer.cuda_module.accumulated_sample_count.clone()
-                        self.raytracer.cuda_module.accumulated_rgb.zero_()
-                        self.raytracer.cuda_module.accumulated_sample_count.zero_()
-                        for obj_name in self.bounding_boxes.keys():
-                            if obj_name == "everything":
-                                continue
-                            rgb_backup = self.gaussians._diffuse.clone()
-                            rgb = self.gaussians._diffuse
-                            rgb *= 0 
-                            rgb[self.gaussians.selections[obj_name].squeeze(1)] += 1
-                            package = render(camera, self.raytracer, self.pipe, self.background, blur_sigma=None, targets_available=False)
-                            mask_render = package.rgb[0].mean(dim=0).cpu().numpy()
-                            self.selection_masks[obj_name] = mask_render
-                            self.gaussians._diffuse.copy_(rgb_backup)
-                        self.last_rendered_selection_mask_id = self.selection_mode_counter
-                        self.raytracer.cuda_module.accumulated_rgb.copy_(accum_rgb_backup)
-                        self.raytracer.cuda_module.accumulated_sample_count.copy_(accum_sample_count_backup)
+                    if isinstance(self.gaussians, EditableGaussianModel):
+                        self.gaussians.dirty_check(self.scaling_modifier)
+                        if self.tool == "select" and self.last_rendered_selection_mask_id != self.selection_mode_counter:
+                            # Render masks for point and click selection
+                            self.gaussians.is_dirty = True
+                            self.raytracer.cuda_module.accumulate.copy_(False)
+                            accum_rgb_backup = self.raytracer.cuda_module.accumulated_rgb.clone()
+                            accum_sample_count_backup = self.raytracer.cuda_module.accumulated_sample_count.clone()
+                            self.raytracer.cuda_module.accumulated_rgb.zero_()
+                            self.raytracer.cuda_module.accumulated_sample_count.zero_()
+                            for obj_name in self.bounding_boxes.keys():
+                                if obj_name == "everything":
+                                    continue
+                                rgb_backup = self.gaussians._diffuse.clone()
+                                rgb = self.gaussians._diffuse
+                                rgb *= 0 
+                                rgb[self.gaussians.selections[obj_name].squeeze(1)] += 1
+                                package = render(camera, self.raytracer, self.pipe, self.background, blur_sigma=None, targets_available=False)
+                                mask_render = package.rgb[0].mean(dim=0).cpu().numpy()
+                                self.selection_masks[obj_name] = mask_render
+                                self.gaussians._diffuse.copy_(rgb_backup)
+                            self.last_rendered_selection_mask_id = self.selection_mode_counter
+                            self.raytracer.cuda_module.accumulated_rgb.copy_(accum_rgb_backup)
+                            self.raytracer.cuda_module.accumulated_sample_count.copy_(accum_sample_count_backup)
 
-                    for key in self.edits.keys():
-                        # Duplicates are produced here
-                        if key not in self.gaussians.created_objects:
-                            self.gaussians.duplicate_object(key.replace("_copy", "", 1), DUPLICATION_OFFSET)
-                            self.raytracer.rebuild_bvh()
-                    
-                    self.update_active_edits() 
+                        for key in self.edits.keys():
+                            # Duplicates are produced here
+                            if key not in self.gaussians.created_objects:
+                                self.gaussians.duplicate_object(key.replace("_copy", "", 1), DUPLICATION_OFFSET)
+                                self.raytracer.rebuild_bvh()
+                        
+                        self.update_active_edit() 
                     
                     if self.gaussians.is_dirty or self.camera.is_dirty or not self.accumulate_samples or self.is_dirty:
                         self.raytracer.cuda_module.accumulated_rgb.zero_()
                         self.raytracer.cuda_module.accumulated_sample_count.zero_()
                         self.is_dirty = False
 
+                    bkp_accumulate = self.raytracer.cuda_module.accumulate
+                    bkp_denoise = self.raytracer.cuda_module.denoise 
+                    bkp_num_bounces = self.raytracer.cuda_module.num_bounces
+                    bkp_global_scale_factor = self.raytracer.cuda_module.global_scale_factor
                     self.raytracer.cuda_module.accumulate.copy_(self.accumulate_samples)
                     self.raytracer.cuda_module.denoise.copy_(self.denoise)
                     self.raytracer.cuda_module.num_bounces.copy_(self.max_bounces)
                     self.raytracer.cuda_module.global_scale_factor.copy_(self.scaling_modifier)
                     package = render(camera, self.raytracer, self.pipe, self.background, blur_sigma=None, targets_available=False, force_update_bvh=self.gaussians.is_dirty)
-                    self.raytracer.cuda_module.global_scale_factor.copy_(1.0)
+                    self.raytracer.cuda_module.accumulate.copy_(bkp_accumulate)
+                    self.raytracer.cuda_module.denoise.copy_(bkp_denoise)
+                    self.raytracer.cuda_module.num_bounces.copy_(bkp_num_bounces)
+                    self.raytracer.cuda_module.global_scale_factor.copy_(bkp_global_scale_factor)
 
                     mode_name = self.render_modes[self.render_mode]
                     nth_ray = self.ray_choice - 1
@@ -439,7 +451,7 @@ class GaussianViewer(Viewer):
 
             clicked, self.selection_choice = imgui.combo("Object List", self.selection_choice, self.selection_choices)
             if clicked:
-                self.update_active_edits()    
+                self.update_active_edit()    
                 if self.selection_choice == 0:
                     self.tool = "pan"
                 else:
@@ -713,7 +725,7 @@ class GaussianViewer(Viewer):
                         for bbox_name, mask in self.selection_masks.items():
                             if mask[i, j]:
                                 self.selection_choice = self.selection_choices.index(bbox_name)
-                                self.update_active_edits()
+                                self.update_active_edit()
                         self.tool = "move"
                     elif imgui.is_mouse_clicked(imgui.MouseButton_.right):
                         self.tool = "pan"

@@ -51,6 +51,8 @@ class GaussianModel:
 
         self.diffuse_activation = lambda x: x
 
+        self.is_dirty = False # for viewer
+
     def __init__(self, model_params: ModelParams):
         self.model_params = model_params
         self._xyz = torch.empty(0)
@@ -66,7 +68,9 @@ class GaussianModel:
         self._lod_scale = torch.empty(0)
         self._round_counter = torch.empty(0)
         self.max_radii2D = torch.empty(0)
-        self.xyz_gradient_accum = torch.empty(0)
+        self.xyz_gradient_accum_diffuse = torch.empty(0)
+        self.xyz_gradient_accum_glossy = torch.empty(0)
+        self.comes_from_colmap_pc = torch.empty(0)
         self.denom = torch.empty(0)
         self.optimizer = None
         self.percent_dense = 0
@@ -103,7 +107,9 @@ class GaussianModel:
             self._lod_scale,
             self._round_counter,
             self.max_radii2D,
-            self.xyz_gradient_accum,
+            self.xyz_gradient_accum_diffuse,
+            self.xyz_gradient_accum_glossy,
+            self.comes_from_colmap_pc,
             self.denom,
             self.optimizer.state_dict(),
             self.spatial_lr_scale,
@@ -124,13 +130,17 @@ class GaussianModel:
             self._lod_scale,
             self._round_counter,
             self.max_radii2D,
-            xyz_gradient_accum,
+            xyz_gradient_accum_diffuse,
+            xyz_gradient_accum_glossy,
+            comes_from_colmap_pc,
             denom,
             opt_dict,
             self.spatial_lr_scale,
         ) = model_args
         self.training_setup(training_args)
-        self.xyz_gradient_accum = xyz_gradient_accum
+        self.xyz_gradient_accum_diffuse = xyz_gradient_accum_diffuse
+        self.xyz_gradient_accum_glossy = xyz_gradient_accum_glossy
+        self.comes_from_colmap_pc = comes_from_colmap_pc
         self.denom = denom
         self.optimizer.load_state_dict(opt_dict)
 
@@ -161,10 +171,18 @@ class GaussianModel:
     @property
     def get_scaling(self):
         return self.scaling_activation(self._scaling)
+    
+    @property
+    def _get_scaling(self):
+        return self._scaling # for override for the viewer
+    
+    @property
+    def _get_rotation(self):
+        return self._rotation # for override for the viewer
 
     @property
     def get_diffuse(self):
-        return self.diffuse_activation(self._diffuse)
+        return self._diffuse
 
     @property
     def get_rotation(self):
@@ -339,7 +357,9 @@ class GaussianModel:
 
     def training_setup(self, training_args):
         self.percent_dense = training_args.percent_dense
-        self.xyz_gradient_accum = torch.zeros((self.get_xyz.shape[0], 1), device="cuda")
+        self.xyz_gradient_accum_diffuse = torch.zeros((self.get_xyz.shape[0], 1), device="cuda")
+        self.xyz_gradient_accum_glossy = torch.zeros((self.get_xyz.shape[0], 1), device="cuda")
+        self.comes_from_colmap_pc = torch.zeros((self.get_xyz.shape[0], 1), device="cuda") #!!!!! mark properly
         self.denom = torch.zeros((self.get_xyz.shape[0], 1), device="cuda")
 
         self._xyz.grad = torch.zeros_like(self._xyz)
@@ -408,7 +428,6 @@ class GaussianModel:
                     "name": "brdf_lut_residual",
                 }
             )
-
         
         self.optimizer = torch.optim.Adam(l, lr=0.0, eps=1e-15, betas=(training_args.beta_1, training_args.beta_2))
         self.xyz_scheduler_args = get_expon_lr_func(
@@ -597,6 +616,10 @@ class GaussianModel:
         )
         self._f0 = nn.Parameter(torch.tensor(f0, dtype=torch.float, device="cuda"))
 
+        self._round_counter = torch.zeros(
+            (xyz.shape[0], 1), dtype=torch.float, device="cuda"
+        )
+
         if self.model_params.brdf_mode == "finetuned_lut":
             self._brdf_lut_residual = nn.Parameter(
                 torch.load(path.replace("point_cloud.ply", "brdf_lut_residuals.pt")).to(
@@ -676,7 +699,9 @@ class GaussianModel:
         self._rotation = optimizable_tensors["rotation"]
         self._rotation.grad = torch.zeros_like(self._rotation)
 
-        self.xyz_gradient_accum = self.xyz_gradient_accum[valid_points_mask]
+        self.xyz_gradient_accum_diffuse = self.xyz_gradient_accum_diffuse[valid_points_mask]
+        self.xyz_gradient_accum_glossy = self.xyz_gradient_accum_glossy[valid_points_mask]
+        self.comes_from_colmap_pc = self.comes_from_colmap_pc[valid_points_mask]
 
         self._round_counter = self._round_counter[valid_points_mask]
 
@@ -748,7 +773,7 @@ class GaussianModel:
             "lod_mean": new_lod_mean,
             "lod_scale": new_lod_scale,
         }
-
+        
         optimizable_tensors = self.cat_tensors_to_optimizer(d)
 
         optimizable_tensors["xyz"].grad = torch.zeros_like(optimizable_tensors["xyz"])
@@ -801,11 +826,13 @@ class GaussianModel:
         self._rotation = optimizable_tensors["rotation"]
 
         self._round_counter = torch.cat((self._round_counter, new_round_counter), dim=0)
+        self.comes_from_colmap_pc = torch.cat(
+            (self.comes_from_colmap_pc, torch.zeros_like(new_round_counter)), dim=0
+        ) #!!! fix this to update properly
 
         if reset_params:
-            self.xyz_gradient_accum = torch.zeros(
-                (self.get_xyz.shape[0], 1), device="cuda"
-            )
+            self.xyz_gradient_accum_diffuse = torch.zeros((self.get_xyz.shape[0], 1), device="cuda")
+            self.xyz_gradient_accum_glossy = torch.zeros((self.get_xyz.shape[0], 1), device="cuda")
             self.denom = torch.zeros((self.get_xyz.shape[0], 1), device="cuda")
             self.max_radii2D = torch.zeros((self.get_xyz.shape[0]), device="cuda")
 
@@ -937,8 +964,12 @@ class GaussianModel:
             prune_mask |= scene.select_points_to_prune_near_cameras(self._xyz.data)
 
         self.prune_points(prune_mask)
-
+    
     def densify_and_prune_top_k(self, scene, opt, min_opacity, extent):
+        return self._densify_and_prune_top_k(scene, opt, min_opacity, extent, "diffuse")
+        # return self._densify_and_prune_top_k(scene, opt, min_opacity, extent, "glossy")
+    
+    def _densify_and_prune_top_k(self, scene, opt, min_opacity, extent, mode: str):
         if "CHECK_NAN" in os.environ:
             if torch.isnan(self._xyz).any():
                 print("NaN in xyz")
@@ -962,8 +993,10 @@ class GaussianModel:
                 print("NaN in position")
             if torch.isnan(self._normal).any():
                 print("NaN in normal")
-            if torch.isnan(self.xyz_gradient_accum).any():
+            if torch.isnan(self.xyz_gradient_accum_diffuse).any():
                 print("NaN in xyz_gradient_accum")
+            if torch.isnan(self.xyz_gradient_accum_glossy).any():
+                print("NaN in xyz_gradient_accum_glossy")
 
         self.num_densification_steps += 1
         num_gaussians_before_pruning = self.get_xyz.shape[0]
@@ -972,12 +1005,12 @@ class GaussianModel:
         # Densify
         if self.schedule is None:
             self.schedule = get_count_array(self._xyz.shape[0], opt)
-            num_gaussians_before_pruning = self._xyz.shape[
-                0
-            ]  # * start the schedule after the first prune, in case the first prune is very agressive depending on init opacity
+            num_gaussians_before_pruning = self._xyz.shape[0]  
+            # * start the schedule after the first prune, in case the first prune is very agressive depending on init opacity
 
+        gradient_accum = self.xyz_gradient_accum_diffuse if mode == "diffuse" else self.xyz_gradient_accum_glossy
         num_gaussians_before_densification = self.get_xyz.shape[0]
-        grads = self.xyz_gradient_accum / self.denom
+        grads = gradient_accum / self.denom
         grads[grads.isnan()] = 0.0
         padded_grad = torch.zeros((num_gaussians_before_densification), device="cuda")
         padded_grad[: grads.shape[0]] = grads.squeeze()
@@ -1070,36 +1103,8 @@ class GaussianModel:
     def add_densification_stats_3d(self, gradient_diffuse, gradient_glossy):
         update_filter = self._opacity.grad[:, 0] != 0
 
-        if "DIFFUSE_DENS_ONLY" in os.environ:
-            gradient_diffuse = gradient_diffuse[update_filter]
-            score_diffuse = gradient_diffuse.norm(dim=-1, keepdim=True)
-            self.xyz_gradient_accum[update_filter] += score_diffuse
-        elif "GLOSSY_DENS_ONLY" in os.environ:
-            gradient_glossy = gradient_glossy[update_filter]
-            print(gradient_glossy.mean(), gradient_glossy.std())
-            score_glossy = gradient_glossy.norm(dim=-1, keepdim=True)
-            self.xyz_gradient_accum[update_filter] += score_glossy
-        elif "DBG_FALLBACK_DENS" in os.environ:
-            self.xyz_gradient_accum[update_filter] += self._xyz.grad[
-                update_filter
-            ].norm(dim=-1, keepdim=True)
-        else: 
-            # todo disable glossy if the total gradient is zero
-            gradient_diffuse = gradient_diffuse[update_filter]
-            gradient_glossy = gradient_glossy[update_filter]
-            normalize_grad_diffuse = (
-                gradient_diffuse - gradient_diffuse.mean()
-            ) / gradient_diffuse.std()
-            normalize_grad_glossy = (
-                gradient_glossy - gradient_glossy.mean()
-            ) / gradient_glossy.std()
-            normalize_score_diffuse = normalize_grad_diffuse.norm(dim=-1, keepdim=True)
-            normalize_score_glossy = normalize_grad_glossy.norm(
-                dim=-1, keepdim=True
-            ).nan_to_num(0.0)
-            self.xyz_gradient_accum[update_filter] += (
-                normalize_score_diffuse + normalize_score_glossy
-            )
+        self.xyz_gradient_accum_diffuse[update_filter] += gradient_diffuse[update_filter].norm(dim=-1, keepdim=True)
+        self.xyz_gradient_accum_glossy[update_filter] += gradient_glossy[update_filter].norm(dim=-1, keepdim=True)
 
         self.denom[update_filter] += 1
 
