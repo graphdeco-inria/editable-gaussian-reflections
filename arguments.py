@@ -98,7 +98,7 @@ class ModelParams(ParamGroup):
 
         self.keep_every_kth_view = 1
         self.max_images = 9999999
-        self.num_farfield_init_points = 500_000  # 100_000
+        self.num_farfield_init_points = 300_000  # 100_000
 
         self.min_opacity = 0.005
 
