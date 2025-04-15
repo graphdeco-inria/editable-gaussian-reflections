@@ -6,6 +6,7 @@ from pathlib import Path
 import cv2
 import numpy as np
 import torch
+from einops import repeat
 from PIL import Image
 
 from arguments import ModelParams
@@ -31,8 +32,6 @@ class BlenderPriorDataset:
         self.model_params = model_params
         self.data_dir = data_dir
         self.split = split
-        self.do_fallback = True
-        self.fallback_dir = f"./data/renders/{self.data_dir.split('/')[-1]}"
         self._point_cloud = self.get_point_cloud()
 
         transform_path = os.path.join(data_dir, f"transforms_{split}.json")
@@ -55,6 +54,10 @@ class BlenderPriorDataset:
         frame = self.frames[idx]
         frame_name = frame["file_path"]
         image_name = Path(frame_name).stem
+        fovx = self.fovx
+        fovy = self.fovy
+        width = self.width
+        height = self.height
 
         # NeRF 'transform_matrix' is a camera-to-world transform
         c2w = np.array(frame["transform_matrix"])
@@ -69,59 +72,53 @@ class BlenderPriorDataset:
 
         image = self._get_buffer(frame_name, "image")
         albedo_image = self._get_buffer(frame_name, "albedo")
-        irradiance_image = self._get_buffer(frame_name, "irradiance")
-        normal_image = self._get_buffer(frame_name, "normal")
+        # irradiance_image = self._get_buffer(frame_name, "irradiance")
+        diffuse_image = self._get_buffer(frame_name, "diffuse")
+        glossy_image = self._get_buffer(frame_name, "glossy")
+        roughness_image = self._get_buffer(frame_name, "roughness")
+        metalness_image = self._get_buffer(frame_name, "metalness")
         depth_image = self._get_buffer(frame_name, "depth")
-        diffuse_image = (albedo_image * irradiance_image).clip(0.0, 1.0)
-        glossy_image = (image - diffuse_image).clip(0.0, 1.0)
-        if self.do_fallback:
-            roughness_image = self._get_buffer_fallback(frame_name, "roughness")
-            specular_image = self._get_buffer_fallback(frame_name, "specular")
-            metalness_image = self._get_buffer_fallback(frame_name, "metalness")
-            brdf_image = self._get_buffer_fallback(frame_name, "glossy_brdf")
-        else:
-            roughness_image = torch.zeros_like(image)
-            metalness_image = torch.zeros_like(image)
-            specular_image = torch.zeros_like(image)
-            brdf_image = torch.zeros_like(image)
-
-        # Postprocess buffers
-        R_tensor = torch.tensor(R, dtype=torch.float32)
-        c2w_tensor = torch.tensor(c2w, dtype=torch.float32)
-        w2c_tensor = torch.tensor(w2c, dtype=torch.float32)
-        normal_image = transform_normals_to_world(normal_image, R_tensor)
-
-        points_tensor = torch.tensor(self._point_cloud.points, dtype=torch.float32)
-        points_tensor = transform_points(points_tensor, w2c_tensor)
-        points_image = project_pointcloud_to_depth_map(
-            points_tensor, self.fovx, self.fovy, depth_image.shape
-        )
-        valid_mask = points_image != 0
-        xs = depth_image[valid_mask]
-        ys = points_image[valid_mask]
-        a, b = linear_least_squares_1d(xs, ys)
-        depth_image = depth_image * a + b
-        position_image = transform_depth_to_position_image(
-            depth_image, self.fovx, self.fovy
-        )
-        position_image = transform_points(position_image, c2w_tensor)
+        normal_image = self._get_buffer(frame_name, "normal")
+        specular_image = torch.zeros_like(image)
+        brdf_image = torch.zeros_like(image)
 
         # Manually adjust exposure
-        image *= 0.5
-        diffuse_image *= 0.5
-        glossy_image *= 0.5
+        image /= 3.5
+        diffuse_image /= 3.5
+        glossy_image /= 3.5
+
+        # Postprocess normal_image
+        R_tensor = torch.tensor(R, dtype=torch.float32)
+        normal_image = transform_normals_to_world(normal_image, R_tensor)
+
+        # Postprocess position_image
+        c2w_tensor = torch.tensor(c2w, dtype=torch.float32)
+        w2c_tensor = torch.tensor(w2c, dtype=torch.float32)
+        points_tensor = torch.tensor(self._point_cloud.points, dtype=torch.float32)
+        points_tensor = transform_points(points_tensor, w2c_tensor)
+        depth_image = depth_image[:, :, 0]
+        depth_points_image = project_pointcloud_to_depth_map(
+            points_tensor, fovx, fovy, depth_image.shape
+        )
+        a, b = linear_least_squares_1d(
+            depth_image[depth_points_image != 0],
+            depth_points_image[depth_points_image != 0],
+        )
+        depth_image = depth_image * a + b
+        position_image = transform_depth_to_position_image(depth_image, fovx, fovy)
+        position_image = transform_points(position_image, c2w_tensor)
 
         cam_info = CameraInfo(
             uid=idx,
             R=R,
             T=T,
-            FovY=self.fovy,
-            FovX=self.fovx,
+            FovY=fovy,
+            FovX=fovx,
             image=image,
             image_path=os.path.join(self.data_dir, frame_name + ".png"),
             image_name=image_name,
-            width=self.width,
-            height=self.height,
+            width=width,
+            height=height,
             diffuse_image=diffuse_image,
             glossy_image=glossy_image,
             position_image=position_image,
@@ -139,21 +136,21 @@ class BlenderPriorDataset:
         buffer_path = os.path.join(
             self.data_dir, self.split, buffer_name, buffer_file_name + ".png"
         )
-        buffer = np.array(Image.open(buffer_path), dtype=np.float32) / 255.0
-        buffer = torch.tensor(buffer)
+        buffer = _from_pil_image(Image.open(buffer_path))
 
-        if buffer_name in ["image", "albedo"]:
+        if buffer_name == "image":
             buffer = buffer**2.2
-        elif buffer_name in ["roughness", "metalness"]:
+        elif buffer_name == "albedo":
             pass
-        elif buffer_name == "depth":
-            buffer /= 255.0
+        elif buffer_name in ["irradiance", "diffuse", "glossy"]:
+            buffer = buffer / (1.0 - buffer + 1e-6)
+        elif buffer_name in ["roughness", "metalness", "depth"]:
+            buffer = repeat(buffer, "h w 1 -> h w 3")
         elif buffer_name == "normal":
-            buffer = 2.0 * buffer - 1.0
-        elif buffer_name == "irradiance":
-            buffer = 1.0 / (1.0 - buffer + 1e-6) - 1.0
+            buffer = buffer * 2.0 - 1.0
         else:
             raise ValueError(f"Buffer name not recognized: {buffer_name}")
+        buffer = torch.tensor(buffer)
         return buffer
 
     def _get_buffer_fallback(self, frame_name: str, buffer_name: str, R=None):
@@ -177,3 +174,13 @@ class BlenderPriorDataset:
             normals=np.zeros_like(xyz),
         )
         return pcd
+
+
+def _from_pil_image(img: Image.Image) -> np.ndarray:
+    arr = np.array(img, dtype=np.float32)
+    if arr.ndim == 3:
+        arr = arr / (2**8 - 1)
+    elif arr.ndim == 2:
+        arr = arr / (2**16 - 1)
+        arr = arr[:, :, None]
+    return arr

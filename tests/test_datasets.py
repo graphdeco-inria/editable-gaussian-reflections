@@ -5,6 +5,7 @@ from dataclasses import asdict
 import numpy as np
 import torch
 from PIL import Image
+from tqdm import tqdm
 
 from arguments import ModelParams
 from scene.dataset import BlenderDataset, BlenderPriorDataset
@@ -22,12 +23,19 @@ def vis_tensor(image, image_path):
 
 
 def test_blender_prior_dataset():
-    model_params = ModelParams(parser=argparse.ArgumentParser())
+    scene_list = ["shiny_kitchen", "shiny_livingroom", "shiny_office", "shiny_bedroom"]
     output_dir = "./output/tests"
     os.makedirs(output_dir, exist_ok=True)
 
-    scene_list = ["shiny_kitchen", "shiny_livingroom", "shiny_office", "shiny_bedroom"]
-    for scene_name in scene_list:
+    max_tolerances = {
+        "image": 0.05,
+        "diffuse": 0.05,
+        "glossy": 0.01,
+        "position": 0.05,
+    }
+
+    for scene_name in tqdm(scene_list):
+        model_params = ModelParams(parser=argparse.ArgumentParser())
         data_dir = f"data/renders/{scene_name}"
         dataset0 = BlenderDataset(model_params, data_dir)
         data_dir = f"data/shiny_dataset_priors/{scene_name}"
@@ -35,24 +43,19 @@ def test_blender_prior_dataset():
         cam_info0 = dataset0[0]
         cam_info1 = dataset1[0]
 
-        for key, value in asdict(cam_info0).items():
-            if not isinstance(value, torch.Tensor):
+        for k, v in asdict(cam_info0).items():
+            if "image" not in k:
                 continue
-            if "image" not in key:
+            if not isinstance(v, torch.Tensor):
                 continue
 
-            image0 = getattr(cam_info0, key)
-            image1 = getattr(cam_info1, key)
-            vis_tensor(image0, os.path.join(output_dir, scene_name, f"{key}_0.png"))
-            vis_tensor(image1, os.path.join(output_dir, scene_name, f"{key}_1.png"))
+            image0 = getattr(cam_info0, k)
+            image1 = getattr(cam_info1, k)
+            assert image0.shape == image1.shape
 
-        image_diff = cam_info0.image - cam_info1.image
-        assert image_diff.abs().mean() < 0.05, "image is not close"
+            vis_tensor(image0, os.path.join(output_dir, scene_name, f"{k}_0.png"))
+            vis_tensor(image1, os.path.join(output_dir, scene_name, f"{k}_1.png"))
 
-        diffuse_diff = cam_info0.diffuse_image - cam_info1.diffuse_image
-        assert diffuse_diff.abs().mean() < 0.05, "diffuse is not close"
-        glossy_diff = cam_info0.glossy_image - cam_info1.glossy_image
-        assert glossy_diff.abs().mean() < 0.05, "glossy is not close"
-
-        position_diff = cam_info0.position_image - cam_info1.position_image
-        assert position_diff.abs().mean() < 0.1, "position is not close"
+            mean_diff = (image0 - image1).abs().mean()
+            if k in max_tolerances:
+                assert mean_diff < max_tolerances[k], f"{k} is not close"
