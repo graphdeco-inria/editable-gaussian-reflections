@@ -4,8 +4,10 @@ import torch
 # exposure = 3.5
 gamma = 1.3
 
+
 def tonemap(x):  # filmic tonemapping
     return ((x * (6.2 * x + 0.5)) / (x * (6.2 * x + 1.7) + 0.06)) ** gamma
+
 
 def untonemap(y):
     _sqrt = np.sqrt if isinstance(y, np.ndarray) else torch.sqrt

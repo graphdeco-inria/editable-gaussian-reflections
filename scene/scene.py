@@ -65,7 +65,9 @@ class Scene:
 
         data_dir = model_params.source_path
         if os.path.exists(os.path.join(data_dir, "transforms_train.json")):
-            shutil.copy(os.path.join(data_dir, "transforms_train.json"), self.model_path)
+            shutil.copy(
+                os.path.join(data_dir, "transforms_train.json"), self.model_path
+            )
             test_json_path = os.path.join(data_dir, "transforms_test.json")
             if os.path.exists(test_json_path):
                 shutil.copy(test_json_path, self.model_path)
@@ -101,7 +103,9 @@ class Scene:
             # take every kth cameras where k = args.sparseness
             scene_info.train_cameras = cameras[:: model_params.sparseness]
 
-        scene_info.train_cameras = scene_info.train_cameras[model_params.skip_n_images:]
+        scene_info.train_cameras = scene_info.train_cameras[
+            model_params.skip_n_images :
+        ]
 
         if shuffle:
             random.shuffle(
@@ -130,6 +134,7 @@ class Scene:
             self.autoadjust_zplanes()
 
         import sys
+
         sys.path.append(gaussians.model_params.raytracer_version)
         import raytracer_config
 
@@ -164,7 +169,6 @@ class Scene:
             )
 
         self.autoadjust_zplanes()
-        
 
         if self.loaded_iter:
             self.gaussians.load_ply(
