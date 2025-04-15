@@ -9,6 +9,7 @@ from tqdm import tqdm
 
 from arguments import ModelParams
 from scene.dataset import BlenderDataset, BlenderPriorDataset
+from scene.dataset.points_utils import get_point_cloud
 
 
 def vis_tensor(image, image_path):
@@ -37,9 +38,10 @@ def test_blender_prior_dataset():
     for scene_name in tqdm(scene_list):
         model_params = ModelParams(parser=argparse.ArgumentParser())
         data_dir = f"data/renders/{scene_name}"
-        dataset0 = BlenderDataset(model_params, data_dir)
+        point_cloud = get_point_cloud(data_dir)
+        dataset0 = BlenderDataset(model_params, data_dir, point_cloud)
         data_dir = f"data/shiny_dataset_priors/{scene_name}"
-        dataset1 = BlenderPriorDataset(model_params, data_dir)
+        dataset1 = BlenderPriorDataset(model_params, data_dir, point_cloud)
         cam_info0 = dataset0[0]
         cam_info1 = dataset1[0]
 
