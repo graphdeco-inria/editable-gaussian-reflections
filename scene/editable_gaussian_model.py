@@ -4,14 +4,14 @@ from dataclasses import dataclass
 import kornia
 import math 
 import copy 
+import os
 
 class EditableGaussianModel(GaussianModel):
-
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.ready_for_editing = False
 
-    def make_editable(self, edits, bounding_boxes):
+    def make_editable(self, edits, bounding_boxes, model_path):
         assert set(edits.keys()) == set(bounding_boxes.keys()), "Edits and bounding boxes must have the same keys"
         self.edits = edits 
         self.bounding_boxes = bounding_boxes
@@ -20,13 +20,17 @@ class EditableGaussianModel(GaussianModel):
         
         with torch.no_grad():
             for key in self.edits.keys():
-                bounding_box = self.bounding_boxes[key]
-                dist1 = self._xyz - (torch.tensor(bounding_box["min"], device="cuda"))
-                dist2 = self._xyz - (torch.tensor(bounding_box["max"], device="cuda"))
-                within_bbox = (dist1 >= 0).all(dim=-1) & (dist2 <= 0).all(dim=-1)
-                self.selections[key] = within_bbox.unsqueeze(1)
+                saved_selection_path = model_path + f"/selections/{key}.pt"
+                if os.path.exists(saved_selection_path):
+                    self.selections[key] = torch.load(saved_selection_path)
+                else:
+                    bounding_box = self.bounding_boxes[key]
+                    dist1 = self._xyz - (torch.tensor(bounding_box["min"], device="cuda"))
+                    dist2 = self._xyz - (torch.tensor(bounding_box["max"], device="cuda"))
+                    within_bbox = (dist1 >= 0).all(dim=-1) & (dist2 <= 0).all(dim=-1)
+                    self.selections[key] = within_bbox.unsqueeze(1)
             self.selections["everything"] = torch.ones(self._xyz.shape[0], 1, device="cuda", dtype=torch.bool)
-        
+
         self.ready_for_editing = True
         self.previous_edits = None
 
@@ -50,7 +54,7 @@ class EditableGaussianModel(GaussianModel):
             self.is_dirty = True
         else:
             self.is_dirty = False 
-
+ 
     @property
     def get_roughness(self):
         roughness = super().get_roughness.clone()
@@ -63,10 +67,10 @@ class EditableGaussianModel(GaussianModel):
 
         for key, edit in self.edits.items():
             if edit.use_roughness_override:
-                base_roughness = torch.lerp(roughness, torch.tensor(1.0).cuda(), edit.roughness_override)
+                base_roughness = roughness * 0 + edit.roughness_override**2
             else:
                 base_roughness = roughness
-            modified_roughness = (edit.roughness_mult * (base_roughness + edit.roughness_shift)).clamp(0, 1)
+            modified_roughness = (edit.roughness_mult * (base_roughness +  math.copysign(edit.roughness_shift, edit.roughness_shift**2))).clamp(0, 1)
             roughness = torch.where(self.selections[key], modified_roughness, roughness)
 
         self.roughness = roughness
@@ -134,13 +138,11 @@ class EditableGaussianModel(GaussianModel):
             bbox_center = torch.tensor([(bounding_box["min"][i] + bounding_box["max"][i]) / 2 for i in range(3)], device=xyz.device)
             object_center = bbox_center + torch.tensor([edit.translate_x, edit.translate_y, edit.translate_z], device=xyz.device)
             xyz[self.selections[key].squeeze(1)] = (
-                (xyz[self.selections[key].squeeze(1)] - object_center) * torch.tensor(
-                    [edit.scale_x, edit.scale_y, edit.scale_z], device=xyz.device
-                ) + object_center
+                (xyz[self.selections[key].squeeze(1)] - object_center) * edit.scale + object_center
             )
             rotation_angles = torch.tensor([edit.rotate_x, edit.rotate_y, edit.rotate_z], device=xyz.device)
             rotation_angles = torch.deg2rad(rotation_angles) 
-            rotation_matrix = kornia.geometry.axis_angle_to_rotation_matrix(-rotation_angles[None])[0]
+            rotation_matrix = kornia.geometry.axis_angle_to_rotation_matrix(rotation_angles[None])[0]
 
             xyz[self.selections[key].squeeze(1)] = (
                 torch.matmul(
@@ -155,47 +157,42 @@ class EditableGaussianModel(GaussianModel):
     @property
     def _get_scaling(self): # no activation
         scaling = torch.exp(self._scaling)
-
+        
         if not self.ready_for_editing:
             return torch.log(scaling)
         
         if not self.is_dirty:
             return self.scaling
         
-        rotation_quaternion = torch.nn.functional.normalize(self._rotation, dim=-1)
-        rotation_matrix = kornia.geometry.conversions.quaternion_to_rotation_matrix(rotation_quaternion)
-        world_scales = torch.matmul(rotation_matrix, scaling.unsqueeze(-1)).squeeze(-1)
-
         for key, edit in self.edits.items():
-            world_scales[self.selections[key].squeeze(1)] *= torch.tensor([edit.scale_x, edit.scale_y, edit.scale_z], device=scaling.device)
-        
-        scaling = torch.matmul(rotation_matrix.mT, world_scales.unsqueeze(-1)).squeeze(-1)
+            scaling[self.selections[key].squeeze(1)] *= edit.scale # torch.tensor([edit.scale_x, edit.scale_y, edit.scale_z], device=scaling.device)
 
         self.scaling = torch.log(scaling)
         return self.scaling
 
     @property
     def _get_rotation(self): # no activation
-        rotation = self._rotation 
-        return rotation
+        rotation = self._rotation.clone()
 
         if not self.ready_for_editing:
             return rotation
         
         if not self.is_dirty:
-            return self.diffuse
+            return self.rotation 
         
         for key, edit in self.edits.items():
-            pass # todo 
+            rotation_angles = torch.deg2rad(torch.tensor([edit.rotate_x, edit.rotate_y, edit.rotate_z], device=rotation.device)).unsqueeze(0)
+            rotation_matrix = kornia.geometry.conversions.quaternion_to_rotation_matrix(rotation[self.selections[key].squeeze(1)])
+            rotation_matrix = kornia.geometry.axis_angle_to_rotation_matrix(rotation_angles)[0] @ rotation_matrix
+            rotation[self.selections[key].squeeze(1)] = kornia.geometry.conversions.rotation_matrix_to_quaternion(rotation_matrix)
         
         self.rotation = rotation
         return rotation
 
-
     # ----------------------------------------------------------------
 
     @torch.no_grad()
-    def duplicate_selected(self, obj_name: str, offset: float):
+    def duplicate_object(self, obj_name: str, offset: float):
         target_selection = self.selections[obj_name].squeeze(1).cuda()
         edit = self.edits[obj_name]
 
@@ -234,3 +231,9 @@ class EditableGaussianModel(GaussianModel):
             self.selections[key] = new_selection
 
         self.created_objects.append(obj_name + "_copy")
+
+    @torch.no_grad()
+    def remove_object(self, obj_name: str):
+        target_selection = self.selections[obj_name].squeeze(1).cuda()
+        self._opacity[target_selection] *= 0.0
+        self._opacity[target_selection] -= 100000000.0 # its a sigmoid

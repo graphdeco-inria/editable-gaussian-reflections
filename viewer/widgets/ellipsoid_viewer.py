@@ -224,7 +224,7 @@ class EllipsoidViewer(Widget):
     def __init__(self, mode):
         super().__init__(mode)
         self.limit = 0.2
-        self.scaling_modifier = 1
+        self.scaling_modifier = 0.5
         self.render_floaters = False
         self.num_gaussians = None
         self.step_called = False

@@ -18,6 +18,7 @@ from PIL import Image
 from viewer.widgets.ellipsoid_viewer import EllipsoidViewer
 from dataclasses import dataclass
 import dataclasses
+from scipy.spatial.transform import Rotation
 
 gizmo = imguizmo.im_guizmo
 Matrix3 = gizmo.Matrix3
@@ -55,14 +56,11 @@ class Edit:
     translate_y: float = 0.0
     translate_z: float = 0.0
 
-    scale_x: float = 1.0
-    scale_y: float = 1.0
-    scale_z: float = 1.0
+    scale: float = 1.0
 
     rotate_x: float = 0.0
     rotate_y: float = 0.0 
     rotate_z: float = 0.0
-    
 
 class GaussianViewer(Viewer):
     def __init__(self, mode: ViewerMode, raytracer: "GaussianRaytracer"):
@@ -76,6 +74,7 @@ class GaussianViewer(Viewer):
             self.current_sample_count = 0
         else:
             self.ray_count = 4
+        self.max_bounces = self.ray_count - 1
         self.init_pose = None
         self.train_transforms = None 
         self.test_transforms = None
@@ -85,8 +84,8 @@ class GaussianViewer(Viewer):
 
         self.blender_to_opengl = np.array([
             [1,  0,  0,  0],
-            [0,  -1,  0,  0],
-            [0, 0,  -1,  0],
+            [0, -1,  0,  0],
+            [0,  0, -1,  0],
             [0,  0,  0,  1]
         ], dtype=float)
 
@@ -96,6 +95,7 @@ class GaussianViewer(Viewer):
         self.sum_rgb_passes = False
         self.denoise = True
         self.accumulate_samples = True
+        self.is_dirty = True
 
     def import_server_modules(self):
         global torch
@@ -140,7 +140,9 @@ class GaussianViewer(Viewer):
         gaussians = EditableGaussianModel(model_params)
         ply_path = os.path.join(model_path, "point_cloud", f"iteration_{iter}", "point_cloud.ply")
         gaussians.load_ply(ply_path)
-        raytracer = GaussianRaytracer(gaussians, int(model_params.resolution*1.5), model_params.resolution) #!!! hard-coded aspect ratio
+        metadata = json.load(open(os.path.join(model_params.source_path, "transforms_train.json"), "r"))
+        downsampling = metadata["height"] / model_params.resolution
+        raytracer = GaussianRaytracer(gaussians, int(metadata["width"] / downsampling), model_params.resolution)
 
         viewer = cls(mode, raytracer)
         viewer.separate_sh = False
@@ -164,14 +166,12 @@ class GaussianViewer(Viewer):
 
         self.bounding_boxes = json.load(open(os.path.join(source_path, "bounding_boxes.json"), "r"))
         
+        self.bounding_boxes["everything"] = {"min": [-1000, 1000, -1000], "max": [1000, 1000, 1000] }
         self.edits = { bbox_name: Edit() for bbox_name in self.bounding_boxes.keys() }
         
         self.selection_masks = {}
 
-        self.gaussians.make_editable(self.edits, self.bounding_boxes)
-
-        self.bounding_boxes["everything"] = {"min": [-1000, 1000, -1000], "max": [1000, 1000, 1000] }
-        
+        self.gaussians.make_editable(self.edits, self.bounding_boxes, model_params.model_path)
 
     @classmethod
     def from_gaussians(cls, raytracer, dataset, pipe, gaussians, separate_sh, mode: ViewerMode):
@@ -191,7 +191,7 @@ class GaussianViewer(Viewer):
         self.monitor = PerformanceMonitor(self.mode, ["Render"], add_other=False)
 
         # Render modes
-        self.render_modes = ["RGB", "Normals", "Position", "F0", "Roughness", "Illumination", "Ellipsoids"]
+        self.render_modes = ["RGB", "Normals", "Hit Position", "F0", "Roughness", "Illumination", "Ellipsoids"]
         self.render_mode = 0
         
         self.ray_choices = ["All/Default"] + ["Ray " + str(i) for i in range(self.ray_count)] 
@@ -221,9 +221,9 @@ class GaussianViewer(Viewer):
     def set_camera_pose(self, transforms, i: int):
         self.camera.update_pose(np.array(transforms["frames"][i]["transform_matrix"]) @ self.blender_to_opengl)
         self.camera.fov_x = transforms["camera_angle_x"]
-        self.camera.fov_y = transforms["camera_angle_y"]
+        self.camera.fov_y = transforms["camera_angle_y"]    
 
-    def update_bbox_selection(self):
+    def update_active_edits(self):
         if self.edits is not None and self.selection_choice != 0:
             self.edit = self.edits[self.selection_choices[self.selection_choice]]
 
@@ -241,27 +241,26 @@ class GaussianViewer(Viewer):
             self.bounding_boxes[new_key][j][1] += DUPLICATION_OFFSET + old_edit.translate_y
             self.bounding_boxes[new_key][j][2] += DUPLICATION_OFFSET + old_edit.translate_z
         self.selection_choice = self.selection_choices.index(new_key)
-        self.update_bbox_selection()
+        self.update_active_edits()
 
     def step(self):
         world_to_view = torch.from_numpy(self.camera.to_camera).cuda().transpose(0, 1)
         full_proj_transform = torch.from_numpy(self.camera.full_projection).cuda().transpose(0, 1)
         
         camera = MiniCam(self.camera.res_x, self.camera.res_y, self.camera.fov_y, self.camera.fov_x, self.camera.z_near, self.camera.z_far, world_to_view, full_proj_transform)
-
-        if self.ellipsoid_viewer.num_gaussians is None:
-           self.ellipsoid_viewer.upload(
-               self.gaussians.get_xyz.detach().cpu().numpy(),
-               self.gaussians.get_rotation.detach().cpu().numpy(),
-               self.gaussians.get_scaling.detach().cpu().numpy(),
-               self.gaussians.get_opacity.detach().cpu().numpy(),
-               self.gaussians.get_diffuse.detach().cpu().numpy()
-           )
         
         #if self.render_mode == 0:
         if self.render_modes[self.render_mode] == "Ellipsoids":
-           self.ellipsoid_viewer.step(self.camera)
-           render_time = glGetQueryObjectuiv(self.ellipsoid_viewer.query, GL_QUERY_RESULT) / 1e6
+            if self.ellipsoid_viewer.num_gaussians is None:
+                self.ellipsoid_viewer.upload(
+                    self.gaussians.get_xyz.detach().cpu().numpy(),
+                    self.gaussians.get_rotation.detach().cpu().numpy(),
+                    self.gaussians.get_scaling.detach().cpu().numpy(),
+                    self.gaussians.get_opacity.detach().cpu().numpy(),
+                    self.gaussians.get_diffuse.detach().cpu().numpy()
+                )
+            self.ellipsoid_viewer.step(self.camera)
+            render_time = glGetQueryObjectuiv(self.ellipsoid_viewer.query, GL_QUERY_RESULT) / 1e6
         else:
             start = torch.cuda.Event(enable_timing=True)
             end = torch.cuda.Event(enable_timing=True)
@@ -297,18 +296,19 @@ class GaussianViewer(Viewer):
                     for key in self.edits.keys():
                         # Duplicates are produced here
                         if key not in self.gaussians.created_objects:
-                            self.gaussians.duplicate_selected(key.replace("_copy", "", 1), DUPLICATION_OFFSET)
-                            self.selection_choices.append(key)
+                            self.gaussians.duplicate_object(key.replace("_copy", "", 1), DUPLICATION_OFFSET)
                             self.raytracer.rebuild_bvh()
                     
-                    self.update_bbox_selection() 
+                    self.update_active_edits() 
                     
-                    if self.gaussians.is_dirty or self.camera.is_dirty or not self.accumulate_samples:
+                    if self.gaussians.is_dirty or self.camera.is_dirty or not self.accumulate_samples or self.is_dirty:
                         self.raytracer.cuda_module.accumulated_rgb.zero_()
                         self.raytracer.cuda_module.accumulated_sample_count.zero_()
+                        self.is_dirty = False
 
                     self.raytracer.cuda_module.accumulate.copy_(self.accumulate_samples)
                     self.raytracer.cuda_module.denoise.copy_(self.denoise)
+                    self.raytracer.cuda_module.num_bounces.copy_(self.max_bounces)
                     self.raytracer.cuda_module.global_scale_factor.copy_(self.scaling_modifier)
                     package = render(camera, self.raytracer, self.pipe, self.background, blur_sigma=None, targets_available=False, force_update_bvh=self.gaussians.is_dirty)
                     self.raytracer.cuda_module.global_scale_factor.copy_(1.0)
@@ -328,7 +328,7 @@ class GaussianViewer(Viewer):
                         net_image = package.F0[max(nth_ray, 0)]
                     elif mode_name == "Normals":
                         net_image = package.normal[max(nth_ray, 0)] / 2 + 0.5
-                    elif mode_name == "Position":
+                    elif mode_name == "Hit Position":
                         net_image = package.position[max(nth_ray, 0)]
                     elif mode_name == "Illumination":
                         net_image = self.raytracer.cuda_module.output_incident_radiance[max(nth_ray, 0)].moveaxis(-1, 0)
@@ -363,18 +363,25 @@ class GaussianViewer(Viewer):
             _, self.ray_choice = imgui.list_box("Displayed Rays", self.ray_choice, self.ray_choices)
             _, self.sum_rgb_passes = imgui.checkbox("Cumulative Total RGB", self.sum_rgb_passes)
             
-
             imgui.separator_text("Render Settings")
 
+            clicked, self.max_bounces = imgui.input_int("Max Bounces", self.max_bounces, step=1)
+            self.max_bounces = max(0, min(self.max_bounces, self.ray_count - 1))
+            if clicked and self.raytracer is not None:
+                self.is_dirty = True
+
             if self.render_modes[self.render_mode] == "Ellipsoids":
-                _, self.ellipsoid_viewer.scaling_modifier = imgui.drag_float("Scaling Factor", self.ellipsoid_viewer.scaling_modifier, v_min=0, v_max=10, v_speed=0.01)
-                
+                _, self.ellipsoid_viewer.scaling_modifier = imgui.drag_float("Scaling Modifier", self.ellipsoid_viewer.scaling_modifier, v_min=0, v_max=10, v_speed=0.01)
                 _, self.ellipsoid_viewer.render_floaters = imgui.checkbox("Render Floaters", self.ellipsoid_viewer.render_floaters)
                 _, self.ellipsoid_viewer.limit = imgui.drag_float("Alpha Threshold", self.ellipsoid_viewer.limit, v_min=0, v_max=1, v_speed=0.01)
             else:
-                _, self.scaling_modifier = imgui.drag_float("Scaling Factor", self.scaling_modifier, v_min=0, v_max=10, v_speed=0.01)
+                _, self.scaling_modifier = imgui.drag_float("Scaling Modifier", self.scaling_modifier, v_min=0, v_max=10, v_speed=0.01)
+                if imgui.is_item_hovered() and imgui.is_mouse_clicked(imgui.MouseButton_.right):
+                    self.scaling_modifier = 1.0
                 
                 _, self.exposure = imgui.drag_float("Exposure", self.exposure, v_min=0, v_max=6, v_speed=0.01)
+                if imgui.is_item_hovered() and imgui.is_mouse_clicked(imgui.MouseButton_.right):
+                    self.exposure = 1.0
 
             _, self.accumulate_samples = imgui.checkbox("Accumulate Samples", self.accumulate_samples)
             imgui.same_line()
@@ -432,7 +439,11 @@ class GaussianViewer(Viewer):
 
             clicked, self.selection_choice = imgui.combo("Object List", self.selection_choice, self.selection_choices)
             if clicked:
-                self.update_bbox_selection()    
+                self.update_active_edits()    
+                if self.selection_choice == 0:
+                    self.tool = "pan"
+                else:
+                    self.tool = "move"
             
             if did_disable:
                 imgui.end_disabled()
@@ -462,10 +473,13 @@ class GaussianViewer(Viewer):
                     setattr(self.edits[self.selection_choices[self.selection_choice]], key, default_value)
             clicked = imgui.button("Reset Everything", size=(240, 24))
             if clicked and self.edits is not None:
-                for edit in self.edits.values():
+                for obj_name, edit in self.edits.items():
+                    if "_copy" in obj_name:
+                        self.gaussians.remove_object(obj_name) # hacky, just hides them for now
+        
                     for key, default_value in dataclasses.asdict(Edit()).items():
                         setattr(edit, key, default_value)
-            
+                self.selection_choice = 0
             imgui.separator_text("BRDF Editing")
 
             imgui.set_cursor_pos_x((imgui.get_content_region_avail().x - imgui.calc_text_size("Roughness").x) * 0.35)
@@ -608,21 +622,11 @@ class GaussianViewer(Viewer):
             imgui.text("Rotation")
             imgui.pop_item_width()
 
-            imgui.push_item_width(imgui.get_content_region_avail().x * 0.21)
-            _, self.edit.scale_x = imgui.drag_float("##Scale X", self.edit.scale_x, v_min=0.01, v_max=10.0, v_speed=0.01, format="x%.2f")
+            _, self.edit.scale = imgui.drag_float("##Scale X", self.edit.scale, v_min=0.01, v_max=10.0, v_speed=0.01, format="x%.2f")
             if imgui.is_item_hovered() and imgui.is_mouse_clicked(imgui.MouseButton_.right):
-                self.edit.scale_x = 1.0
-            imgui.same_line()
-            _, self.edit.scale_y = imgui.drag_float("##Scale Y", self.edit.scale_y, v_min=0.01, v_max=10.0, v_speed=0.01, format="x%.2f")
-            if imgui.is_item_hovered() and imgui.is_mouse_clicked(imgui.MouseButton_.right):
-                self.edit.scale_y = 1.0
-            imgui.same_line()
-            _, self.edit.scale_z = imgui.drag_float("##Scale Z", self.edit.scale_z, v_min=0.01, v_max=10.0, v_speed=0.01, format="x%.2f")
-            if imgui.is_item_hovered() and imgui.is_mouse_clicked(imgui.MouseButton_.right):
-                self.edit.scale_z = 1.0
+                self.edit.scale = 1.0
             imgui.same_line()
             imgui.text("Scale")
-            imgui.pop_item_width()
 
             imgui.spacing() 
         
@@ -633,22 +637,22 @@ class GaussianViewer(Viewer):
                 imgui.end_disabled()
 
         with imgui_ctx.begin("Point View"):
+            image_top_left_corner = imgui.get_cursor_screen_pos()
             if self.render_modes[self.render_mode] == "Ellipsoids":
                self.ellipsoid_viewer.show_gui()
             else:
-                image_top_left_corner = imgui.get_cursor_screen_pos()
                 self.point_view.show_gui()
 
-                if self.selection_choice == 0:
-                    cam_changed_from_mouse = imgui.is_item_hovered() and self.camera.process_mouse_input()
-                else:
-                    cam_changed_from_mouse = False
+            if self.selection_choice == 0:
+                cam_changed_from_mouse = imgui.is_item_hovered() and self.camera.process_mouse_input()
+            else:
+                cam_changed_from_mouse = False
+            cam_changed_from_keyboard = (imgui.is_item_focused() or imgui.is_item_hovered()) and self.camera.process_keyboard_input()
+            if cam_changed_from_mouse or cam_changed_from_keyboard:
+                self.current_train_cam = -1
+                self.current_test_cam = -1
             
-                cam_changed_from_keyboard = (imgui.is_item_focused() or imgui.is_item_hovered()) and self.camera.process_keyboard_input()
-                if cam_changed_from_mouse or cam_changed_from_keyboard:
-                    self.current_train_cam = -1
-                    self.current_test_cam = -1
-                
+            if self.render_modes[self.render_mode] != "Ellipsoids":
                 toolbar_width = 75
                 toolbar_height = self.camera.res_y
                 toolbar_x = image_top_left_corner.x + self.camera.res_x + 10
@@ -679,12 +683,12 @@ class GaussianViewer(Viewer):
                 if init_tool == "move":
                     imgui.pop_style_color()
 
-                if init_tool == "scale":
-                    imgui.push_style_color(imgui.Col_.button, (0.2, 0.5, 0.2, 1.0))  # Highlight color
-                if imgui.button("Scale", size=(toolbar_width - 10, 40)):
-                    self.tool = "scale"
-                if init_tool == "scale":
-                    imgui.pop_style_color()
+                #if init_tool == "scale":
+                #    imgui.push_style_color(imgui.Col_.button, (0.2, 0.5, 0.2, 1.0))  # Highlight color
+                #if imgui.button("Scale", size=(toolbar_width - 10, 40)):
+                #    self.tool = "scale"
+                #if init_tool == "scale":
+                #   imgui.pop_style_color()
 
                 if init_tool == "rotate":
                     imgui.push_style_color(imgui.Col_.button, (0.2, 0.5, 0.2, 1.0))  # Highlight color
@@ -699,12 +703,8 @@ class GaussianViewer(Viewer):
                     mouse_pos = imgui.get_mouse_pos()
                     window_pos = imgui.get_window_pos()
                     j, i = int(mouse_pos[0] - window_pos.x), int(mouse_pos[1] - window_pos.y - 30)
-                    IMAGE_HEIGHT = 400 
-                    IMAGE_WIDTH = 600 
-                    i = min(max(0, i), IMAGE_HEIGHT - 1)
-                    j = min(max(0, j), IMAGE_WIDTH - 1)
-                    if False:
-                        print(f"Mouse at pixel position: ({i}, {j})")
+                    i = min(max(0, i), self.camera.res_y - 1)
+                    j = min(max(0, j), self.camera.res_x - 1)
                     self.hovering_over = None
                     for bbox_name, mask in self.selection_masks.items():
                         if mask[i, j]:
@@ -713,7 +713,7 @@ class GaussianViewer(Viewer):
                         for bbox_name, mask in self.selection_masks.items():
                             if mask[i, j]:
                                 self.selection_choice = self.selection_choices.index(bbox_name)
-                                self.update_bbox_selection()
+                                self.update_active_edits()
                         self.tool = "move"
                     elif imgui.is_mouse_clicked(imgui.MouseButton_.right):
                         self.tool = "pan"
@@ -738,66 +738,29 @@ class GaussianViewer(Viewer):
                         original_y = (bbox["min"][1] + bbox["max"][1]) / 2
                         original_z = (bbox["min"][2] + bbox["max"][2]) / 2
 
-                        rotation_x_matrix = np.array([
-                            [1.0, 0.0, 0.0, 0.0],
-                            [0.0, math.cos(math.radians(self.edit.rotate_x)), -math.sin(math.radians(self.edit.rotate_x)), 0.0],
-                            [0.0, math.sin(math.radians(self.edit.rotate_x)), math.cos(math.radians(self.edit.rotate_x)), 0.0],
-                            [0.0, 0.0, 0.0, 1.0]
-                        ])
-                        rotation_y_matrix = np.array([
-                            [math.cos(math.radians(self.edit.rotate_y)), 0.0, math.sin(math.radians(self.edit.rotate_y)), 0.0],
-                            [0.0, 1.0, 0.0, 0.0],
-                            [-math.sin(math.radians(self.edit.rotate_y)), 0.0, math.cos(math.radians(self.edit.rotate_y)), 0.0],
-                            [0.0, 0.0, 0.0, 1.0]
-                        ])
-                        rotation_z_matrix = np.array([
-                            [math.cos(math.radians(self.edit.rotate_z)), -math.sin(math.radians(self.edit.rotate_z)), 0.0, 0.0],
-                            [math.sin(math.radians(self.edit.rotate_z)), math.cos(math.radians(self.edit.rotate_z)), 0.0, 0.0],
-                            [0.0, 0.0, 1.0, 0.0],
-                            [0.0, 0.0, 0.0, 1.0]
-                        ])
+                        rotation_matrix = Rotation.from_euler('xyz', (self.edit.rotate_x, self.edit.rotate_y, self.edit.rotate_z), degrees=True).as_matrix()
 
-                        rotation_matrix = rotation_x_matrix @ rotation_y_matrix @ rotation_z_matrix
-
-                        pose = Matrix16([
-                            self.edit.scale_x * rotation_matrix[0, 0], self.edit.scale_x * rotation_matrix[0, 1], self.edit.scale_x * rotation_matrix[0, 2], 0.0,
-                            self.edit.scale_y * rotation_matrix[1, 0], self.edit.scale_y * rotation_matrix[1, 1], self.edit.scale_y * rotation_matrix[1, 2], 0.0,
-                            self.edit.scale_z * rotation_matrix[2, 0], self.edit.scale_z * rotation_matrix[2, 1], self.edit.scale_z * rotation_matrix[2, 2], 0.0,
+                        pose = Matrix16([ # transposing like this is correct
+                            rotation_matrix[0, 0], rotation_matrix[1, 0], rotation_matrix[2, 0], 0.0,
+                            rotation_matrix[0, 1], rotation_matrix[1, 1], rotation_matrix[2, 1], 0.0,
+                            rotation_matrix[0, 2], rotation_matrix[1, 2], rotation_matrix[2, 2], 0.0,
                             original_x + self.edit.translate_x, original_y + self.edit.translate_y, original_z + self.edit.translate_z, 1.0
                         ])
 
-                        gizmo_mode = dict(move=gizmo.OPERATION.translate, scale=gizmo.OPERATION.scale, rotate=gizmo.OPERATION.rotate)[self.tool]
+                        gizmo_mode = dict(move=gizmo.OPERATION.translate, scale=gizmo.OPERATION.scaleu, rotate=gizmo.OPERATION.rotate)[self.tool]
                         gizmo.manipulate(view_mat, proj_mat, gizmo_mode, gizmo.MODE.local, pose, None, None, None, None)
-                        
-                        scale_x, scale_y, scale_z = np.linalg.norm(pose.values[0:3]), np.linalg.norm(pose.values[4:7]), np.linalg.norm(pose.values[8:11])
+                        R = np.array(pose.values).reshape(4, 4)[:3, :3].T
 
-                        rotation_matrix = np.array(pose.values).reshape(4, 4)[:3, :3] / [scale_x, scale_y, scale_z]
+                        Rx, Ry, Rz = Rotation.from_matrix(R).as_euler('xyz', degrees=True)
+                        self.edit.rotate_x = float(Rx)
+                        self.edit.rotate_y = float(Ry)
+                        self.edit.rotate_z = float(Rz)
 
                         translate_x, translate_y, translate_z = pose.values[12], pose.values[13], pose.values[14]
-
-                        rotate_x, rotate_y, rotate_z = np.degrees(np.arctan2(
-                            [rotation_matrix[2, 1], -rotation_matrix[2, 0], rotation_matrix[1, 0]],
-                            [rotation_matrix[2, 2], np.sqrt(rotation_matrix[2, 1]**2 + rotation_matrix[2, 2]**2), rotation_matrix[0, 0]]
-                        ))
-
+                        
                         self.edit.translate_x = float(translate_x - original_x)
                         self.edit.translate_y = float(translate_y - original_y)
                         self.edit.translate_z = float(translate_z - original_z)
-                        self.edit.scale_x = float(scale_x)
-                        self.edit.scale_y = float(scale_y)
-                        self.edit.scale_z = float(scale_z)
-                        self.edit.rotate_x = float(rotate_x)
-                        self.edit.rotate_y = float(rotate_y)
-                        self.edit.rotate_z = float(rotate_z)
-
-                        # self.edit.translate_x = float(pose.values[12] - original_x)
-                        # self.edit.translate_y = float(pose.values[13] - original_y)
-                        # self.edit.translate_z = float(pose.values[14] - original_z)
-                        # self.edit.scale_x = float(pose.values[0])
-                        # self.edit.scale_y = float(pose.values[5])
-                        # self.edit.scale_z = float(pose.values[10])
-
-            
         
         with imgui_ctx.begin("Performance"):
             self.monitor.show_gui()
@@ -824,7 +787,8 @@ class GaussianViewer(Viewer):
             "edits": { key: dataclasses.asdict(edit) for key, edit in self.edits.items() } if self.edits is not None else None,
             "tool": self.tool,
             "selection_mode_counter": self.selection_mode_counter,
-            "sum_rgb_passes": self.sum_rgb_passes
+            "sum_rgb_passes": self.sum_rgb_passes,
+            "is_dirty": self.is_dirty,
         }
     
     def server_recv(self, _, text):
@@ -837,6 +801,7 @@ class GaussianViewer(Viewer):
         self.tool = text["tool"]
         self.selection_mode_counter = text["selection_mode_counter"]
         self.sum_rgb_passes = text["sum_rgb_passes"]
+        self.is_dirty = text["is_dirty"]
         
         if text["edits"] is not None:
             for key, edit in text["edits"].items():
@@ -850,6 +815,8 @@ class GaussianViewer(Viewer):
                 "train_transforms": self.train_transforms,
                 "test_transforms": self.test_transforms,
                 "bounding_boxes": self.bounding_boxes,
+                "image_width": self.raytracer.image_width,
+                "image_height": self.raytracer.image_height,
                 "selection_masks": {
                     k: v.tolist() for k, v in self.selection_masks.items()
                 },
@@ -862,6 +829,9 @@ class GaussianViewer(Viewer):
         if "ray_count" in text and self.ray_count != text["ray_count"]:
             self.ray_count = text["ray_count"]
             self.ray_choices = ["All/Default"] + ["Ray " + str(i) for i in range(self.ray_count)]
+        if "image_width" in text:
+            self.camera.res_x = text["image_width"]
+            self.camera.res_y = text["image_height"]
         if "train_transforms" in text:
             self.train_transforms = text["train_transforms"]
             self.test_transforms = text["test_transforms"]
@@ -870,7 +840,7 @@ class GaussianViewer(Viewer):
             self.selection_choices = text["selection_choices"]
         if "bounding_boxes" in text:
             self.bounding_boxes = text["bounding_boxes"]
-            self.edits = { bbox_name: Edit() for bbox_name in self.bounding_boxes.keys() }
+            self.edits = { bbox_name: Edit() for bbox_name in list(self.bounding_boxes.keys()) + "everything" }
         if "selection_masks" in text:
             self.selection_masks = {
                 k: np.array(v) for k, v in text["selection_masks"].items()
