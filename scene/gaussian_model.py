@@ -399,7 +399,7 @@ class GaussianModel:
                 "lr": training_args.opacity_lr,
                 "name": "opacity",
             },
-            {"params": [self._diffuse], "lr": training_args.feature_lr, "name": "f_dc"},
+            {"params": [self._diffuse], "lr": training_args.diffuse_lr, "name": "f_dc"},
             {
                 "params": [self._scaling],
                 "lr": training_args.scaling_lr,

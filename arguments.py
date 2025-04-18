@@ -164,7 +164,7 @@ class ModelParams(ParamGroup):
         self.sparseness = -1
         self.warmup_until_iter = 0
         self.no_bounces_until_iter = 0
-        self.max_one_bounce_until_iter = 15_000
+        self.max_one_bounce_until_iter = 7_000
         self.diffuse_loss_weight_after_rebalance = 1.0
         self.glossy_loss_weight_after_rebalance = 1.0
         self.rebalance_losses_at_iter = 22500
@@ -210,7 +210,7 @@ class OptimizationParams(ParamGroup):
         self.position_lr = 0.0025
         self.roughness_lr = 0.0025
         self.f0_lr = 0.0025
-        self.feature_lr = 0.0025
+        self.diffuse_lr = 0.0025
 
         self.lod_mean_lr = 0.005 / 100
         self.lod_scale_lr = 0.005 / 100 * 5
@@ -241,7 +241,7 @@ class OptimizationParams(ParamGroup):
             100  # # was 100 in 3dgs, 500 to fix LOD densification
         )
         self.opacity_reset_interval = 999999999999 # Doesn't change metrics in 3dgs, may cause issues
-        self.densify_from_iter = 500  # was 500 in 3dgs, 1500 when doing LOD
+        self.densify_from_iter = 999999999999  # was 500 in 3dgs, 1500 when doing LOD
         self.densify_until_iter = 15_000  # was 25k in mcmc
         self.densify_grad_threshold = 0.0002
 
