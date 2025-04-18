@@ -51,7 +51,7 @@ class GaussianModel:
 
         self.diffuse_activation = lambda x: x
 
-        self.is_dirty = False # for viewer
+        self.is_dirty = False  # for viewer
 
     def __init__(self, model_params: ModelParams):
         self.model_params = model_params
@@ -171,14 +171,14 @@ class GaussianModel:
     @property
     def get_scaling(self):
         return self.scaling_activation(self._scaling)
-    
+
     @property
     def _get_scaling(self):
-        return self._scaling # for override for the viewer
-    
+        return self._scaling  # for override for the viewer
+
     @property
     def _get_rotation(self):
-        return self._rotation # for override for the viewer
+        return self._rotation  # for override for the viewer
 
     @property
     def get_diffuse(self):
@@ -359,9 +359,15 @@ class GaussianModel:
 
     def training_setup(self, training_args):
         self.percent_dense = training_args.percent_dense
-        self.xyz_gradient_accum_diffuse = torch.zeros((self.get_xyz.shape[0], 1), device="cuda")
-        self.xyz_gradient_accum_glossy = torch.zeros((self.get_xyz.shape[0], 1), device="cuda")
-        self.comes_from_colmap_pc = torch.zeros((self.get_xyz.shape[0], 1), device="cuda") #!!!!! mark properly
+        self.xyz_gradient_accum_diffuse = torch.zeros(
+            (self.get_xyz.shape[0], 1), device="cuda"
+        )
+        self.xyz_gradient_accum_glossy = torch.zeros(
+            (self.get_xyz.shape[0], 1), device="cuda"
+        )
+        self.comes_from_colmap_pc = torch.zeros(
+            (self.get_xyz.shape[0], 1), device="cuda"
+        )  #!!!!! mark properly
         self.denom = torch.zeros((self.get_xyz.shape[0], 1), device="cuda")
 
         self._xyz.grad = torch.zeros_like(self._xyz)
@@ -703,8 +709,12 @@ class GaussianModel:
         self._rotation = optimizable_tensors["rotation"]
         self._rotation.grad = torch.zeros_like(self._rotation)
 
-        self.xyz_gradient_accum_diffuse = self.xyz_gradient_accum_diffuse[valid_points_mask]
-        self.xyz_gradient_accum_glossy = self.xyz_gradient_accum_glossy[valid_points_mask]
+        self.xyz_gradient_accum_diffuse = self.xyz_gradient_accum_diffuse[
+            valid_points_mask
+        ]
+        self.xyz_gradient_accum_glossy = self.xyz_gradient_accum_glossy[
+            valid_points_mask
+        ]
         self.comes_from_colmap_pc = self.comes_from_colmap_pc[valid_points_mask]
 
         self._round_counter = self._round_counter[valid_points_mask]
@@ -777,7 +787,7 @@ class GaussianModel:
             "lod_mean": new_lod_mean,
             "lod_scale": new_lod_scale,
         }
-        
+
         optimizable_tensors = self.cat_tensors_to_optimizer(d)
 
         optimizable_tensors["xyz"].grad = torch.zeros_like(optimizable_tensors["xyz"])
@@ -832,11 +842,15 @@ class GaussianModel:
         self._round_counter = torch.cat((self._round_counter, new_round_counter), dim=0)
         self.comes_from_colmap_pc = torch.cat(
             (self.comes_from_colmap_pc, torch.zeros_like(new_round_counter)), dim=0
-        ) #!!! fix this to update properly
+        )  #!!! fix this to update properly
 
         if reset_params:
-            self.xyz_gradient_accum_diffuse = torch.zeros((self.get_xyz.shape[0], 1), device="cuda")
-            self.xyz_gradient_accum_glossy = torch.zeros((self.get_xyz.shape[0], 1), device="cuda")
+            self.xyz_gradient_accum_diffuse = torch.zeros(
+                (self.get_xyz.shape[0], 1), device="cuda"
+            )
+            self.xyz_gradient_accum_glossy = torch.zeros(
+                (self.get_xyz.shape[0], 1), device="cuda"
+            )
             self.denom = torch.zeros((self.get_xyz.shape[0], 1), device="cuda")
             self.max_radii2D = torch.zeros((self.get_xyz.shape[0]), device="cuda")
 
@@ -968,11 +982,11 @@ class GaussianModel:
             prune_mask |= scene.select_points_to_prune_near_cameras(self._xyz.data)
 
         self.prune_points(prune_mask)
-    
+
     def densify_and_prune_top_k(self, scene, opt, min_opacity, extent):
         return self._densify_and_prune_top_k(scene, opt, min_opacity, extent, "diffuse")
         # return self._densify_and_prune_top_k(scene, opt, min_opacity, extent, "glossy")
-    
+
     def _densify_and_prune_top_k(self, scene, opt, min_opacity, extent, mode: str):
         if "CHECK_NAN" in os.environ:
             if torch.isnan(self._xyz).any():
@@ -1009,10 +1023,14 @@ class GaussianModel:
         # Densify
         if self.schedule is None:
             self.schedule = get_count_array(self._xyz.shape[0], opt)
-            num_gaussians_before_pruning = self._xyz.shape[0]  
+            num_gaussians_before_pruning = self._xyz.shape[0]
             # * start the schedule after the first prune, in case the first prune is very agressive depending on init opacity
 
-        gradient_accum = self.xyz_gradient_accum_diffuse if mode == "diffuse" else self.xyz_gradient_accum_glossy
+        gradient_accum = (
+            self.xyz_gradient_accum_diffuse
+            if mode == "diffuse"
+            else self.xyz_gradient_accum_glossy
+        )
         num_gaussians_before_densification = self.get_xyz.shape[0]
         grads = gradient_accum / self.denom
         grads[grads.isnan()] = 0.0
@@ -1107,8 +1125,12 @@ class GaussianModel:
     def add_densification_stats_3d(self, gradient_diffuse, gradient_glossy):
         update_filter = self._opacity.grad[:, 0] != 0
 
-        self.xyz_gradient_accum_diffuse[update_filter] += gradient_diffuse[update_filter].norm(dim=-1, keepdim=True)
-        self.xyz_gradient_accum_glossy[update_filter] += gradient_glossy[update_filter].norm(dim=-1, keepdim=True)
+        self.xyz_gradient_accum_diffuse[update_filter] += gradient_diffuse[
+            update_filter
+        ].norm(dim=-1, keepdim=True)
+        self.xyz_gradient_accum_glossy[update_filter] += gradient_glossy[
+            update_filter
+        ].norm(dim=-1, keepdim=True)
 
         self.denom[update_filter] += 1
 
