@@ -64,9 +64,9 @@ def read_dataset(dataset, num_workers=16):
         dataset,
         batch_size=1,
         shuffle=False,
-        num_workers=max_workers,
+        num_workers=0 if "NO_WORKERS" in os.environ else max_workers,
         collate_fn=lambda x: x,
-        persistent_workers=True,
+        persistent_workers=False if "NO_WORKERS" in os.environ else True,
     )
     cam_infos = []
     for cam_info_batch in tqdm(dataloader):
@@ -145,22 +145,43 @@ def readBlenderPriorSceneInfo(model_params: ModelParams, data_dir: str) -> Scene
     point_cloud = get_point_cloud(data_dir)
     extra_point_cloud = make_random_point_cloud(model_params)
 
-    train_dataset = BlenderPriorDataset(
-        model_params,
-        data_dir,
-        point_cloud,
-        split="train",
-    )
-    test_dataset = BlenderPriorDataset(
-        model_params,
-        data_dir,
-        point_cloud,
-        split="test",
-    )
-    print("Reading Training Transforms")
-    train_cam_infos = read_dataset(train_dataset)
-    print("Reading Test Transforms")
-    test_cam_infos = read_dataset(test_dataset)
+    if "PRIOR_DATASET_TRAIN_ONLY" in os.environ:
+        train_dataset = BlenderPriorDataset(
+            model_params,
+            data_dir,
+            point_cloud,
+            split="train",
+            dirname="priors"
+        )
+        train_cam_infos = read_dataset(train_dataset)
+
+        scene_info = SceneInfo(
+            point_cloud=point_cloud,
+            extra_point_cloud=extra_point_cloud,
+            train_cameras=train_cam_infos,
+            test_cameras=train_cam_infos, #!!!
+            nerf_normalization=getNerfppNorm(train_cam_infos),
+            ply_path=os.path.join(data_dir, "sparse/0/points3D.ply"),
+        )
+
+        return scene_info
+    else:
+        train_dataset = BlenderPriorDataset(
+            model_params,
+            data_dir,
+            point_cloud,
+            split="train",
+        )
+        test_dataset = BlenderPriorDataset(
+            model_params,
+            data_dir,
+            point_cloud,
+            split="test",
+        )
+        print("Reading Training Transforms")
+        train_cam_infos = read_dataset(train_dataset)
+        print("Reading Test Transforms")
+        test_cam_infos = read_dataset(test_dataset)
 
     scene_info = SceneInfo(
         point_cloud=point_cloud,

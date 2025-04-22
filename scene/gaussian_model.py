@@ -302,8 +302,8 @@ class GaussianModel:
             torch.ones((fused_point_cloud.shape[0], 3), device="cuda")
             * self.model_params.init_f0
         )
-        if "SKIP_TONEMAPPING" not in os.environ:
-            self._diffuse = nn.Parameter(untonemap(fused_color.clone()).clamp(0, 1))
+        if "SKIP_TONEMAPPING" not in os.environ and "DIRECT_INIT" not in os.environ:
+            self._diffuse = nn.Parameter(untonemap(fused_color.clone()).clamp(0, 1)) # should be used even when targets aren't tonemapped, since colmap was run on tonemapped
         else:
             self._diffuse = nn.Parameter(fused_color.clone())
         self._scaling = nn.Parameter(scales.requires_grad_(True))
@@ -356,6 +356,53 @@ class GaussianModel:
         self._diffuse.grad = torch.zeros_like(self._diffuse)
         self._scaling.grad = torch.zeros_like(self._scaling)
         self._rotation.grad = torch.zeros_like(self._rotation)
+
+    @torch.no_grad()
+    def add_farfield_points(self, scene):
+        print(f"Generating random point cloud ({self.model_params.num_farfield_init_points})...")
+        new_xyz = (torch.rand((self.model_params.num_farfield_init_points, 3), device="cuda") * 2.6 - 1.3) * self.model_params.glossy_bbox_size_mult
+        mask = scene.select_points_to_prune_near_cameras(new_xyz, torch.zeros_like(new_xyz))
+        new_xyz = new_xyz[~mask]
+        
+        dist2 = torch.clamp_min(
+            distCUDA2(new_xyz.float().cuda()),
+            0.0000001,
+        )
+        new_scaling = torch.log(torch.sqrt(dist2) * self.model_params.init_scale_factor_farfield)[
+            ..., None
+        ].repeat(1, 3)
+        new_rotation = torch.zeros((new_xyz.shape[0], 4), device="cuda")
+        new_rotation[:, 0] = 1
+        new_opacity = inverse_sigmoid(
+            self.model_params.init_opacity * torch.ones((new_xyz.shape[0], 1), dtype=torch.float, device="cuda")
+        )
+        new_diffuse = torch.ones_like(new_xyz) * self.model_params.init_extra_point_diffuse
+        new_normal = torch.zeros_like(new_xyz)
+        new_position = torch.zeros_like(new_xyz)
+        new_f0 = torch.ones_like(new_xyz) * 0.04
+
+        new_roughness = torch.zeros_like(new_xyz)[:, :1]
+
+        new_lod_mean = torch.ones_like(new_roughness) # tmp, for future
+        new_lod_scale = torch.ones_like(new_roughness) # tmp, for future
+            
+        new_round_counter = torch.zeros(new_xyz.shape[0], 1, dtype=torch.int, device="cuda")
+
+        self.densification_postfix(
+            new_xyz,
+            new_position,
+            new_normal,
+            new_roughness,
+            new_f0,
+            new_diffuse,
+            new_opacity,
+            new_lod_mean,
+            new_lod_scale,
+            new_scaling,
+            new_rotation,
+            new_round_counter,
+            reset_params=True,
+        )
 
     def training_setup(self, training_args):
         self.percent_dense = training_args.percent_dense
@@ -763,8 +810,8 @@ class GaussianModel:
         new_xyz,
         new_position,
         new_normal,
-        new_roughness_params,
-        new_f0_params,
+        new_roughness,
+        new_f0,
         new_diffuse,
         new_opacity,
         new_lod_mean,
@@ -778,8 +825,8 @@ class GaussianModel:
             "xyz": new_xyz,
             "position": new_position,
             "normal": new_normal,
-            "roughness": new_roughness_params,
-            "f0": new_f0_params,
+            "roughness": new_roughness,
+            "f0": new_f0,
             "f_dc": new_diffuse,  # keep the same name for compat
             "opacity": new_opacity,
             "scaling": new_scaling,
@@ -965,7 +1012,7 @@ class GaussianModel:
         )
 
     def prune_znear_only(self, scene):
-        prune_mask = scene.select_points_to_prune_near_cameras(self._xyz.data)
+        prune_mask = scene.select_points_to_prune_near_cameras(self._xyz.data, self.get_scaling)
         self.prune_points(prune_mask)
 
     def prune(self, scene, opt, min_opacity, extent):
@@ -1020,11 +1067,11 @@ class GaussianModel:
         num_gaussians_before_pruning = self.get_xyz.shape[0]
         self.prune(scene, opt, min_opacity, extent)
 
-        # Densify
-        if self.schedule is None:
-            self.schedule = get_count_array(self._xyz.shape[0], opt)
-            num_gaussians_before_pruning = self._xyz.shape[0]
-            # * start the schedule after the first prune, in case the first prune is very agressive depending on init opacity
+        # # Densify
+        # if self.schedule is None:
+        #     self.schedule = get_count_array(self._xyz.shape[0], opt)
+        #     num_gaussians_before_pruning = self._xyz.shape[0]
+        #     # * start the schedule after the first prune, in case the first prune is very agressive depending on init opacity
 
         gradient_accum = (
             self.xyz_gradient_accum_diffuse
@@ -1083,8 +1130,9 @@ class GaussianModel:
                 ] = 0.0
                 # log(quantile(grad_score)) + w * log(quantile(-lod_score))
 
-            target = self.schedule[self.num_densification_steps]
-            k = target - num_gaussians_before_densification
+            # target = self.schedule[self.num_densification_steps]
+            # k = target - num_gaussians_before_densification
+            k = opt.densif_num_gaussians_per_step
 
             target = num_gaussians_before_densification + k
 

@@ -98,7 +98,7 @@ class ModelParams(ParamGroup):
 
         self.keep_every_kth_view = 1
         self.max_images = 9999999
-        self.num_farfield_init_points = 500_000  # 100_000
+        self.num_farfield_init_points = 25_000  # 100_000
 
         self.min_opacity = 0.005
 
@@ -118,6 +118,7 @@ class ModelParams(ParamGroup):
 
         self.use_opacity_resets = False
         self.init_scale_factor = 1.0  # 1.0 for 3dgs, 0.1 for mcmc
+        self.init_scale_factor_farfield = 0.1
         self.init_opacity = 0.1  # 0.1 for 3dgs, 0.5 for mcmc
         self.init_roughness = 0.1
         if "CHROME_BALL" in os.environ:
@@ -163,10 +164,10 @@ class ModelParams(ParamGroup):
 
         self.sparseness = -1
         self.warmup_until_iter = 0
-        self.no_bounces_until_iter = 0
-        self.max_one_bounce_until_iter = 7_000
-        self.diffuse_loss_weight_after_rebalance = 1.0
-        self.glossy_loss_weight_after_rebalance = 1.0
+        self.no_bounces_until_iter = 5_000
+        self.max_one_bounce_until_iter = 10_000
+        self.diffuse_loss_weight_after_rebalance = 5.0
+        self.glossy_loss_weight_after_rebalance = 5.0
         self.rebalance_losses_at_iter = 22500
         self.enable_regular_loss_at_iter = -1
 
@@ -176,9 +177,9 @@ class ModelParams(ParamGroup):
         else:
             self.skip_n_images = 0
 
-        self.a_thresh = 0.05
-        self.t_thresh = 0.01
-        self.exp_power = 2
+        # self.a_thresh = 0.05
+        # self.t_thresh = 0.1
+        # self.exp_power = 4
 
         super().__init__(parser, "Loading Parameters", sentinel)
 
@@ -199,12 +200,12 @@ class PipelineParams(ParamGroup):
 
 class OptimizationParams(ParamGroup):
     def __init__(self, parser):
-        self.iterations = 30_000
+        self.iterations = 15_000
+        self.position_lr_max_steps = 15_000
         self.position_lr_init = 0.00016
         self.position_lr_final = 0.0000016
         self.position_lr_delay_mult = 0.01
-        self.position_lr_max_steps = 30_000
-        self.slowdown = 1
+        self.timestretch = 0.5
 
         self.normal_lr = 0.0025
         self.position_lr = 0.0025
@@ -237,22 +238,23 @@ class OptimizationParams(ParamGroup):
         self.densif_scaledown_clones = False
         self.densif_jitter_clones = False
 
-        self.densification_interval = (
-            100  # # was 100 in 3dgs, 500 to fix LOD densification
-        )
+        self.densification_interval = 100
         self.opacity_reset_interval = 999999999999 # Doesn't change metrics in 3dgs, may cause issues
         self.densify_from_iter = 999999999999  # was 500 in 3dgs, 1500 when doing LOD
-        self.densify_until_iter = 15_000  # was 25k in mcmc
+        self.densify_until_iter = 3500  # was 25k in mcmc
         self.densify_grad_threshold = 0.0002
 
         self.densif_use_top_k = True
-        self.densif_final_num_gaussians = 500_000 
+        self.densif_final_num_gaussians = 800_000 
         self.densif_size_ranking_weight = 0.0
         self.densif_opacity_ranking_weight = 0.0
         self.densif_lod_ranking_weight = 0.0
         self.densif_no_pruning_large_radii = False
         self.densif_use_fixed_split_clone_ratio = True
         self.densif_split_clone_ratio = 0.5
+        self.densif_num_gaussians_per_step = 1_000
+
+        self.prune_even_without_densification = True
 
         self.densif_no_pruning = False
         self.densif_no_cloning = False

@@ -30,14 +30,15 @@ class BlenderPriorDataset:
         data_dir: str,
         point_cloud: BasicPointCloud,
         split: str = "train",
+        dirname: str = None
     ):
         self.model_params = model_params
         self.data_dir = data_dir
         self.point_cloud = point_cloud
         self.split = split
         self.size = (1536, 1024)  # Hardcoded to match blender for now
-
-        self.buffers_dir = os.path.join(self.data_dir, self.split)
+        self.dirname = split if dirname is None else dirname
+        self.buffers_dir = os.path.join(self.data_dir, self.dirname)
         transform_path = os.path.join(data_dir, f"transforms_{split}.json")
         with open(transform_path) as json_file:
             self.contents = json.load(json_file)
@@ -68,24 +69,34 @@ class BlenderPriorDataset:
 
         # Camera intrinsics
         height, width = image.shape[0], image.shape[1]
-        fovx = self.contents["camera_angle_x"]
-        fovy = focal2fov(fov2focal(fovx, width), height)
+        if "camera_angle_y" in self.contents:
+            fovy = self.contents["camera_angle_y"]
+            fovx = self.contents["camera_angle_x"]
+        else:
+            fovx = self.contents["camera_angle_x"]
+            fovy = focal2fov(fov2focal(fovx, width), height)
 
         # Camera extrinsics
         # NeRF 'transform_matrix' is a camera-to-world transform
         c2w = np.array(frame["transform_matrix"])
         # change from OpenGL/Blender camera axes (Y up, Z back) to COLMAP (Y down, Z forward)
-        c2w[:3, 1:3] *= -1
+        if "SKIP_FLIP" not in os.environ:
+            c2w[:3, 1:3] *= -1
         # get the world-to-camera transform and set R, T
         w2c = np.linalg.inv(c2w)
         # R is stored transposed due to 'glm' in CUDA code
-        R = np.transpose(w2c[:3, :3])
+        if "SKIP_T" in os.environ:
+            R = w2c[:3, :3]
+        else:
+            R = np.transpose(w2c[:3, :3])
+        
         T = w2c[:3, 3]
 
         # Align exposure
-        image /= 3.5
-        diffuse_image /= 3.5
-        glossy_image /= 3.5
+        if "ALIGN_EXPOSURE" in os.environ:
+            image /= 3.5
+            diffuse_image /= 3.5
+            glossy_image /= 3.5
 
         # Postprocess normal_image
         R_tensor = torch.tensor(R, dtype=torch.float32)

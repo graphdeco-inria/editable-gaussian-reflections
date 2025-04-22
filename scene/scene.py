@@ -65,7 +65,8 @@ class Scene:
 
         data_dir = model_params.source_path
         if os.path.exists(os.path.join(data_dir, "transforms_train.json")):
-            if os.path.isdir(os.path.join(data_dir, "train", "preview")):
+            
+            if os.path.isdir(os.path.join(data_dir, "train", "preview")) or os.path.isdir(os.path.join(data_dir, "priors", "preview")):
                 scene_info = readBlenderPriorSceneInfo(model_params, data_dir)
             else:
                 scene_info = readBlenderSceneInfo(model_params, data_dir)
@@ -127,41 +128,40 @@ class Scene:
             self.autoadjust_zplanes()
 
         import sys
-
         sys.path.append(gaussians.model_params.raytracer_version)
         import raytracer_config
 
-        if raytracer_config.MAX_BOUNCES > 0 and "SKIP_EXTRA_INIT" not in os.environ:
-            scene_info.point_cloud = BasicPointCloud(
-                np.concatenate(
-                    [scene_info.point_cloud.points, scene_info.extra_point_cloud.points]
-                ),
-                np.concatenate(
-                    [scene_info.point_cloud.colors, scene_info.extra_point_cloud.colors]
-                ),
-                np.concatenate(
-                    [
-                        scene_info.point_cloud.normals,
-                        scene_info.extra_point_cloud.normals,
-                    ]
-                ),
-            )
+        # if raytracer_config.MAX_BOUNCES > 0 and "SKIP_EXTRA_INIT" not in os.environ and not "INIT_POINTS_LATER" in os.environ:
+        #     scene_info.point_cloud = BasicPointCloud(
+        #         np.concatenate(
+        #             [scene_info.point_cloud.points, scene_info.extra_point_cloud.points]
+        #         ),
+        #         np.concatenate(
+        #             [scene_info.point_cloud.colors, scene_info.extra_point_cloud.colors]
+        #         ),
+        #         np.concatenate(
+        #             [
+        #                 scene_info.point_cloud.normals,
+        #                 scene_info.extra_point_cloud.normals,
+        #             ]
+        #         ),
+        #     )
 
-        if gaussians.model_params.znear_init_pruning:
-            points = torch.from_numpy(scene_info.point_cloud.points).cuda().float()
-            points_to_prune = (
-                self.select_points_to_prune_near_cameras(points).cpu().numpy()
-            )
-            print(
-                f"Pruned {points_to_prune.mean() * 100:.2f}% of the init points since they are too close to the cameras."
-            )
-            scene_info.point_cloud = BasicPointCloud(
-                points=scene_info.point_cloud.points[~points_to_prune],
-                colors=scene_info.point_cloud.colors[~points_to_prune],
-                normals=scene_info.point_cloud.normals[~points_to_prune],
-            )
+        # if gaussians.model_params.znear_init_pruning:
+        #     points = torch.from_numpy(scene_info.point_cloud.points).cuda().float()
+        #     points_to_prune = (
+        #         self.select_points_to_prune_near_cameras(points, torch.zeros_like(points)).cpu().numpy()
+        #     )
+        #     print(
+        #         f"Pruned {points_to_prune.mean() * 100:.2f}% of the init points since they are too close to the cameras."
+        #     )
+        #     scene_info.point_cloud = BasicPointCloud(
+        #         points=scene_info.point_cloud.points[~points_to_prune],
+        #         colors=scene_info.point_cloud.colors[~points_to_prune],
+        #         normals=scene_info.point_cloud.normals[~points_to_prune],
+        #     )
 
-        self.autoadjust_zplanes()
+        # self.autoadjust_zplanes()
 
         if self.loaded_iter:
             self.gaussians.load_ply(
@@ -183,7 +183,7 @@ class Scene:
 
         self.gaussians.scene = self
 
-    def select_points_to_prune_near_cameras(self, points):
+    def select_points_to_prune_near_cameras(self, points, scales):
         points_to_prune = torch.zeros(points.shape[0], dtype=torch.bool, device="cuda")
 
         if "SKIPZNEAR" in os.environ:
@@ -198,9 +198,9 @@ class Scene:
                 T = camera.camera_center
             else:
                 T = torch.from_numpy(camera.camera_center)
-
+            
             points_dist_to_camera = (points - T).norm(dim=1)
-            too_close = points_dist_to_camera < camera.znear
+            too_close = points_dist_to_camera - scales.amax(dim=1) < camera.znear
 
             points_to_prune |= too_close
 
@@ -220,22 +220,13 @@ class Scene:
 
         # Assert that for all cameras, image_height is equal and FoVy is equal
         train_cameras = self.train_cameras[1.0]
-        test_cameras = self.test_cameras[1.0]
         first_train_camera = train_cameras[0]
-        first_test_camera = test_cameras[0]
         for camera in train_cameras:
             assert camera.image_height == first_train_camera.image_height, (
                 "All train cameras must have the same image_height"
             )
             assert camera.FoVy == first_train_camera.FoVy, (
                 "All train cameras must have the same FoVy"
-            )
-        for camera in test_cameras:
-            assert camera.image_height == first_test_camera.image_height, (
-                "All test cameras must have the same image_height"
-            )
-            assert camera.FoVy == first_test_camera.FoVy, (
-                "All test cameras must have the same FoVy"
             )
 
         self.max_zfar = max([x.zfar for x in self.train_cameras[1.0]]).item()

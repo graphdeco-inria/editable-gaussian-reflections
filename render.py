@@ -239,21 +239,27 @@ def render_set(
                     blur_sigma = alpha * scene.max_pixel_blur_sigma
                 else:
                     blur_sigma = blur_sigma
-                package = render(
-                    view, raytracer, pipeline, background, blur_sigma=blur_sigma
-                )
-
-                diffuse_gt_image = view.diffuse_image.clamp(0.0, 1.0)
-                glossy_gt_image = view.glossy_image.clamp(0.0, 1.0)
-                gt_image = view.original_image.clamp(0.0, 1.0)
+                
+                package = render(view, raytracer, pipeline, background, blur_sigma=blur_sigma)
+                if model_params.num_samples > 1:
+                    rgb = package.rgb.clone() / model_params.num_samples
+                    for i in range(model_params.num_samples - 1):
+                        package = render(view, raytracer, pipeline, background, blur_sigma=blur_sigma)
+                        rgb += package.rgb / model_params.num_samples
+                    rgb[-1] = rgb[:-1].sum(dim=0, keepdim=True)
+                    package.rgb = rgb
+                    
+                diffuse_gt_image = tonemap(view.diffuse_image).clamp(0.0, 1.0)
+                glossy_gt_image = tonemap(view.glossy_image).clamp(0.0, 1.0)
+                gt_image = tonemap(view.original_image).clamp(0.0, 1.0)
                 position_gt_image = view.position_image
                 normal_gt_image = view.normal_image
                 roughness_gt_image = view.roughness_image
                 F0_gt_image = view.F0_image
 
-                diffuse_image = package.rgb[0].clamp(0, 1)
-                glossy_image = package.rgb[1:-1].sum(dim=0).clamp(0, 1)
-                pred_image = package.rgb[-1].clamp(0, 1)
+                diffuse_image = tonemap(package.rgb[0]).clamp(0, 1)
+                glossy_image = tonemap(package.rgb[1:-1].sum(dim=0)).clamp(0, 1)
+                pred_image = tonemap(package.rgb[-1]).clamp(0, 1)
 
                 psnr_test += psnr(pred_image, gt_image).mean() / len(views)
                 l1_test += F.l1_loss(pred_image, gt_image) / len(views)
@@ -285,7 +291,7 @@ def render_set(
                     )
 
                     torchvision.utils.save_image(
-                        package.rgb[0],
+                        diffuse_image,
                         os.path.join(
                             diffuse_render_path, "{0:05d}".format(idx) + "_diffuse.png"
                         ),
@@ -367,13 +373,13 @@ def render_set(
                     )
 
                 all_renders.append(format_image(pred_image))
-                all_gts.append(format_image(package.target))
+                all_gts.append(format_image(tonemap(package.target)))
 
-                all_diffuse_renders.append(format_image(package.rgb[0]))
-                all_diffuse_gts.append(format_image(package.target_diffuse))
+                all_diffuse_renders.append(format_image(diffuse_image))
+                all_diffuse_gts.append(format_image(tonemap(package.target_diffuse)))
 
                 all_glossy_renders.append(format_image(glossy_image))
-                all_glossy_gts.append(format_image(package.target_glossy))
+                all_glossy_gts.append(format_image(tonemap(package.target_glossy)))
 
                 all_position_renders.append(format_image(package.position[0]))
                 all_position_gts.append(format_image(package.target_position))
@@ -592,7 +598,8 @@ def render_sets(model_params: ModelParams, iteration: int, pipeline: PipelinePar
     raytracer = GaussianRaytracer(
         gaussians, viewpoint_stack[0].image_width, viewpoint_stack[0].image_height
     )
-    raytracer.cuda_module.num_samples.fill_(model_params.num_samples)
+    if model_params.num_samples > 1:
+        raytracer.cuda_module.denoise.fill_(False)
 
     if args.train_views:
         render_set(
@@ -688,6 +695,7 @@ if __name__ == "__main__":
 
     args = get_combined_args(parser)
     print("Rendering " + args.model_path)
+    
 
     # if not args.train_views:
     #     args.max_images = min(100, args.max_images)

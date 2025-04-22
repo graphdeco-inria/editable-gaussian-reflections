@@ -329,13 +329,13 @@ class GaussianViewer(Viewer):
                     nth_ray = self.ray_choice - 1
                     if mode_name == "RGB":
                         if nth_ray == -1:
-                            net_image = package.rgb[-1] 
+                            net_image = tonemap(package.rgb[-1])
                         elif self.sum_rgb_passes:
-                            net_image = tonemap(untonemap(package.rgb[:nth_ray + 1]).sum(dim=0))
+                            net_image = tonemap(package.rgb[:nth_ray + 1].sum(dim=0))
                         else:
-                            net_image = package.rgb[nth_ray]
+                            net_image = tonemap(package.rgb[nth_ray])
                     elif mode_name == "Diffuse":
-                        net_image = package.rgb[max(nth_ray, 0)]
+                        net_image = tonemap(package.rgb[max(nth_ray, 0)])
                     elif mode_name == "F0":
                         net_image = package.F0[max(nth_ray, 0)]
                     elif mode_name == "Normals":

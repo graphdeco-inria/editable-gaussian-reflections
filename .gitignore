@@ -19,3 +19,5 @@ renders
 /dump/
 *.ignore.*
 /data
+/cache 
+/colmap

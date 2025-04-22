@@ -107,8 +107,8 @@ def training_report(tb_writer, iteration):
                         tb_writer.log_dir + "/" + f"{config['name']}_view",
                         exist_ok=True,
                     )
-
-                    if "DONT_TONEMAP_AT_OUTPUT" in os.environ:
+                    
+                    if "SKIP_TONEMAPPING_OUTPUT" in os.environ:
                         diffuse_image = package.rgb[0].clamp(0, 1)
                         glossy_image = package.rgb[1:-1].sum(dim=0)
                         pred_image = package.rgb[-1].clamp(0, 1)
@@ -136,9 +136,9 @@ def training_report(tb_writer, iteration):
                         diffuse_image = tonemap(package.rgb[0]).clamp(0, 1)
                         glossy_image = tonemap(package.rgb[1:-1].sum(dim=0)).clamp(0, 1)
                         pred_image = tonemap(package.rgb[-1]).clamp(0, 1)
-                        pred_image_without_denoising = tonemap(package.rgb[:-1]).sum(
+                        pred_image_without_denoising = tonemap(package.rgb[:-1].sum(
                             dim=0
-                        )
+                        ))
                         diffuse_gt_image = tonemap(viewpoint.diffuse_image).clamp(0, 1)
                         glossy_gt_image = tonemap(viewpoint.glossy_image).clamp(0, 1)
                         gt_image = tonemap(viewpoint.original_image).clamp(0, 1)
@@ -603,19 +603,15 @@ parser.add_argument("--viewer", action="store_true")
 parser.add_argument("--viewer_mode", type=str, default="local")
 parser.add_argument("--detect_anomaly", action="store_true", default=False)
 parser.add_argument("--flip_camera", action="store_true", default=False)
-parser.add_argument("--val_views", action="append", type=int, default=[75])
-# parser.add_argument("--test_iterations", nargs="+", type=int, default=[100, 500, 1_000, 2_500, 5_000, 10_000, 20_000, 30_000, 60_000, 90_000])
-# parser.add_argument("--test_iterations", nargs="+", type=int, default=[1_000, 2_000, 3_000, 5_000, 10_000, 20_000, 30_000, 60_000, 90_000])
-# parser.add_argument("--test_iterations", nargs="+", type=int, default=[1_000, 3_000, 7_000, 15_000, 22_500, 30_000, 60_000, 90_000])
-# parser.add_argument("--save_iterations", nargs="+", type=int, default=[1_000, 3_000, 7_000, 15_000, 22_500, 30_000, 60_000, 90_000])
+parser.add_argument("--val_views",  nargs='+', type=int, default=[75])
 parser.add_argument(
     "--test_iterations",
     nargs="+",
     type=int,
-    default=[1, 1_000, 3_000, 7_000, 15_000, 30_000],
+    default=[1, 5_000, 10_000, 15_000],
 )
 parser.add_argument(
-    "--save_iterations", nargs="+", type=int, default=[1_000, 7_000, 15_000, 30_000]
+    "--save_iterations", nargs="+", type=int, default=[5_000, 10_000, 15_000,  30_000]
 )
 # parser.add_argument("--test_iterations", nargs="+", type=int, default=[30_000])
 # parser.add_argument("--save_iterations", nargs="+", type=int, default=[30_000])
@@ -633,19 +629,23 @@ pipe_params = pp.extract(args)
 if args.viewer:
     args.test_iterations.clear()
 
-if opt_params.slowdown != 1:
-    opt_params.iterations = int(opt_params.slowdown * opt_params.iterations)
+if opt_params.timestretch != 1:
+    model_params.no_bounces_until_iter = int(model_params.no_bounces_until_iter * opt_params.timestretch)
+    model_params.max_one_bounce_until_iter = int(model_params.max_one_bounce_until_iter * opt_params.timestretch)
+    args.test_iterations = [int(x * opt_params.timestretch) for x in args.test_iterations]
+    args.save_iterations = [int(x * opt_params.timestretch) for x in args.save_iterations]
+    opt_params.iterations = int(opt_params.timestretch * opt_params.iterations)
     opt_params.densification_interval = int(
-        opt_params.slowdown * opt_params.densification_interval
+        opt_params.timestretch * opt_params.densification_interval
     )
     opt_params.position_lr_max_steps = int(
-        opt_params.slowdown * opt_params.position_lr_max_steps
+        opt_params.timestretch * opt_params.position_lr_max_steps
     )
     opt_params.densify_from_iter = int(
-        opt_params.slowdown * opt_params.densify_from_iter
+        opt_params.timestretch * opt_params.densify_from_iter
     )
     opt_params.densify_until_iter = int(
-        opt_params.slowdown * opt_params.densify_until_iter
+        opt_params.timestretch * opt_params.densify_until_iter
     )
 
 print("Optimizing " + args.model_path)
@@ -923,32 +923,38 @@ for iteration in tqdm(
                 raytracer.cuda_module.densification_gradient_glossy,
             )
 
-        if opt_params.densif_use_top_k and (
-            iteration % opt_params.densification_interval == 0 or iteration == 1
-        ):
+        if True:
+            if iteration % opt_params.densification_interval == 0:
+                gaussians.prune_znear_only(scene)
+                raytracer.rebuild_bvh()
+        else:
             max_ws_size = (
                 scene.cameras_extent
                 * model_params.glossy_bbox_size_mult
                 * model_params.scene_extent_multiplier
             )
             densif_args = (scene, opt_params, model_params.min_opacity, max_ws_size)
-            if iteration > opt_params.densify_from_iter:
-                if iteration < opt_params.densify_until_iter:
-                    #!!!!!!!! review why I'm starting with so many fewer gaussians than the # of sfm points.
-                    trace = gaussians.densify_and_prune_top_k(*densif_args)
-                    trace = f"Iteration {iteration}; " + trace
-                    with open(
-                        os.path.join(scene.model_path + "/densification_trace.txt"), "a"
-                    ) as f:
-                        f.write(trace)
+            if opt_params.densif_use_top_k and (
+                iteration % opt_params.densification_interval == 0 or iteration == 1
+            ):
+                if iteration > opt_params.densify_from_iter:
+                    if iteration < opt_params.densify_until_iter:
+                        trace = gaussians.densify_and_prune_top_k(*densif_args)
+                        trace = f"Iteration {iteration}; " + trace
+                        with open(
+                            os.path.join(scene.model_path + "/densification_trace.txt"), "a"
+                        ) as f:
+                            f.write(trace)
+                    else:
+                        gaussians.prune_znear_only(scene)
                 else:
-                    gaussians.prune_znear_only(scene)
-            else:
-                gaussians.prune(*densif_args)
-            raytracer.rebuild_bvh()
-        elif iteration % opt_params.densification_interval == 0:
-            if "NO_REBUILD" not in os.environ:
+                    gaussians.prune(*densif_args)
                 raytracer.rebuild_bvh()
+            elif iteration % opt_params.densification_interval == 0:
+                if opt_params.prune_even_without_densification:
+                    gaussians.prune(*densif_args)
+                if "NO_REBUILD" not in os.environ:
+                    raytracer.rebuild_bvh()
 
         gaussians.optimizer.step()
         gaussians.optimizer.zero_grad(set_to_none=False)
@@ -1022,6 +1028,8 @@ for iteration in tqdm(
 
     if iteration == model_params.no_bounces_until_iter:
         raytracer.cuda_module.num_bounces.copy_(min(raytracer.config.MAX_BOUNCES, 1))
+        gaussians.add_farfield_points(scene)
+        raytracer.rebuild_bvh()
 
     if (
         iteration == model_params.max_one_bounce_until_iter
