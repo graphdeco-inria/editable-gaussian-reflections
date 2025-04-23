@@ -27,7 +27,7 @@ def loadCam(args, id, cam_info, resolution_scale):
     aspect_ratio = width / height
 
     def downsize(x):
-        if resolution != x.shape[-1]:
+        if resolution != x.shape[-2]:
             return (
                 torch.nn.functional.interpolate(
                     x[None].cuda().float(),
