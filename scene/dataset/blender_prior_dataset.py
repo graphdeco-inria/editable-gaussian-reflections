@@ -36,7 +36,10 @@ class BlenderPriorDataset:
         self.data_dir = data_dir
         self.point_cloud = point_cloud
         self.split = split
-        self.size = (1536, 1024)  # Hardcoded to match blender for now
+        if "PRIOR_DATASET_TRAIN_ONLY" in os.environ:
+            self.size = (1002, 753)  # Hardcoded to match blender for now
+        else:
+            self.size = (1536, 1024)  # Hardcoded to match blender for now
         self.dirname = split if dirname is None else dirname
         self.buffers_dir = os.path.join(self.data_dir, self.dirname)
         transform_path = os.path.join(data_dir, f"transforms_{split}.json")
@@ -91,12 +94,6 @@ class BlenderPriorDataset:
             R = np.transpose(w2c[:3, :3])
         
         T = w2c[:3, 3]
-
-        # Align exposure
-        if "ALIGN_EXPOSURE" in os.environ:
-            image /= 3.5
-            diffuse_image /= 3.5
-            glossy_image /= 3.5
 
         # Postprocess normal_image
         R_tensor = torch.tensor(R, dtype=torch.float32)
@@ -159,4 +156,8 @@ class BlenderPriorDataset:
         else:
             raise ValueError(f"Buffer name not recognized: {buffer_name}")
         buffer = torch.tensor(buffer)
+
+        if buffer_name in ["image", "irradiance", "diffuse", "glossy"]:
+            buffer /= 3.5
+
         return buffer

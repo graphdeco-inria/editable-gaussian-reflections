@@ -120,12 +120,7 @@ class Scene:
 
         print(f"I have {len(self.train_cameras)} cameras")
 
-        ## Remove all init points that are too close to the camera
-        if (
-            gaussians.model_params.znear_init_pruning
-            or gaussians.model_params.znear_densif_pruning
-        ):
-            self.autoadjust_zplanes()
+        self.autoadjust_zplanes()
 
         import sys
         sys.path.append(gaussians.model_params.raytracer_version)
@@ -161,7 +156,6 @@ class Scene:
         #         normals=scene_info.point_cloud.normals[~points_to_prune],
         #     )
 
-        # self.autoadjust_zplanes()
 
         if self.loaded_iter:
             self.gaussians.load_ply(
