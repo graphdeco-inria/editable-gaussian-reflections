@@ -72,7 +72,6 @@ class ModelParams(ParamGroup):
         self._model_path = ""
         self._images = "images"
         self._resolution = 1536
-        # // 2 ## Yohan: on quarter res this crashes at 600 iters and I don't know why => this is because this gives the width, not the height! so it results in non-pow2 sizes for the height
         self._white_background = False
         self.data_device = "cuda"
         self.eval = False
@@ -200,12 +199,12 @@ class PipelineParams(ParamGroup):
 
 class OptimizationParams(ParamGroup):
     def __init__(self, parser):
-        self.iterations = 15_000
-        self.position_lr_max_steps = 15_000
+        self.iterations = 30_000
+        self.position_lr_max_steps = 30_000
         self.position_lr_init = 0.00016
         self.position_lr_final = 0.0000016
         self.position_lr_delay_mult = 0.01
-        self.timestretch = 0.5
+        self.timestretch = 0.25
 
         self.normal_lr = 0.0025
         self.position_lr = 0.0025

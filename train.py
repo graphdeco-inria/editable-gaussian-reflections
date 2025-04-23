@@ -611,7 +611,7 @@ parser.add_argument(
     default=[1, 5_000, 10_000, 15_000],
 )
 parser.add_argument(
-    "--save_iterations", nargs="+", type=int, default=[5_000, 10_000, 15_000,  30_000]
+    "--save_iterations", nargs="+", type=int, default=[10_000, 20_000, 30_000]
 )
 # parser.add_argument("--test_iterations", nargs="+", type=int, default=[30_000])
 # parser.add_argument("--save_iterations", nargs="+", type=int, default=[30_000])
@@ -925,7 +925,8 @@ for iteration in tqdm(
 
         if True:
             if iteration % opt_params.densification_interval == 0:
-                gaussians.prune_znear_only(scene)
+                if model_params.znear_densif_pruning:
+                    gaussians.prune_znear_only(scene)
                 raytracer.rebuild_bvh()
         else:
             max_ws_size = (
@@ -995,6 +996,17 @@ for iteration in tqdm(
                         max_scaling * float(os.getenv("MIN_RELATIVE_SCALING", 0.01))
                     ).unsqueeze(-1)
                 )
+
+
+        if "CLAMP_MINSIZE_DIST" in os.environ:
+            with torch.no_grad():
+                distance_to_zero = gaussians.get_xyz.norm(dim=-1)
+                gaussians._scaling.data.clamp_(
+                    min=torch.log(
+                        distance_to_zero * float(os.getenv("MIN_RELATIVE_SCALING", 0.01)) + 1e-16
+                    ).unsqueeze(-1)
+                )
+
 
         # if model_params.add_mcmc_noise:
         #     L = build_scaling_rotation(gaussians.get_scaling, gaussians.get_rotation)
