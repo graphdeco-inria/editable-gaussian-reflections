@@ -184,8 +184,10 @@ class GaussianRaytracer:
                 R_c2w_blender.contiguous(),
                 viewpoint_camera.camera_center.contiguous(),
                 viewpoint_camera.FoVy,
-                viewpoint_camera.znear,
-                viewpoint_camera.zfar,
+                0.01, #!!!
+                100.0, #!!!
+                # viewpoint_camera.znear,
+                # viewpoint_camera.zfar,
                 self.pc.model_params.lod_max_world_size_blur,
             )
 
@@ -240,7 +242,7 @@ class GaussianRaytracer:
 
             if self.cuda_module.target_brdf is not None:
                 if target_brdf is not None:
-                    self.cuda_module.target_brdr.copy_(target_brdf.moveaxis(0, -1))
+                    self.cuda_module.target_brdf.copy_(target_brdf.moveaxis(0, -1))
                 else:
                     self.cuda_module.target_brdf.zero_()
 
