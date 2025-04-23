@@ -7,8 +7,14 @@ import cv2
 import torch
 import numpy as np
 from tqdm import tqdm
+from PIL import Image 
 
 path = sys.argv[1]
+
+if len(sys.argv) > 2:
+    target_height = int(sys.argv[2])
+else: 
+    target_height = None
 
 input_passes = [
     "render",
@@ -24,6 +30,17 @@ input_passes = [
 ]
 
 
+def resize_by_height(image: torch.Tensor, target_height: int) -> torch.Tensor:
+    w, h = image.shape[1], image.shape[0]
+    scale = target_height / h
+    target_width = int(w * scale)
+    resized = torch.nn.functional.interpolate(
+        image.moveaxis(-1, 0)[None],
+        (target_height, target_width),
+        mode="area",
+    )[0].moveaxis(0, -1)
+    return torch.tensor(np.array(resized))
+
 def imread(image_path, render_pass_name):
     path = (
         image_path.replace("/images/", "/render/")
@@ -35,11 +52,13 @@ def imread(image_path, render_pass_name):
     assert os.path.exists(path), f"{render_pass_name} render pass not found at {path}"
     image = cv2.imread(path, cv2.IMREAD_UNCHANGED)
     image = torch.tensor(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
+    if target_height is not None:
+        image = resize_by_height(image, target_height)
     return image
 
 
 assert path.startswith("renders/")
-cache_path = path.replace("renders/", "cache/")
+cache_path = path.replace("renders/", f"cache_{target_height}/") if target_height is not None else path.replace("renders/", "cache/")
 
 if WRITE := True:
     for split in ["train", "test"]:
