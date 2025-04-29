@@ -21,89 +21,36 @@ WARNED = False
 def loadCam(args, id, cam_info, resolution_scale):
     resolution = args.resolution
 
-    if isinstance(cam_info.image, torch.Tensor):
+    assert isinstance(cam_info.image, torch.Tensor) 
+    height = cam_info.image.shape[0]
+    width = cam_info.image.shape[1]
+    aspect_ratio = width / height
 
-        def downsize(x):
-            if resolution != x.shape[-1]:
-                return (
-                    torch.nn.functional.interpolate(
-                        x[None].cuda().float(),
-                        (resolution, int(resolution * 1.5)),
-                        mode="area",
-                    )[0]
-                    .half()
-                    .cpu()
-                )
-            else:
-                return x.cuda()
-
-        diffuse_image = downsize(cam_info.diffuse_image.moveaxis(-1, 0))
-        glossy_image = downsize(cam_info.glossy_image.moveaxis(-1, 0))
-        position_image = downsize(cam_info.position_image.moveaxis(-1, 0))
-        normal_image = downsize(cam_info.normal_image.moveaxis(-1, 0))
-        roughness_image = downsize(cam_info.roughness_image.moveaxis(-1, 0))
-        metalness_image = downsize(cam_info.metalness_image.moveaxis(-1, 0))
-        base_color_image = downsize(cam_info.base_color_image.moveaxis(-1, 0))
-        specular_image = downsize(cam_info.specular_image.moveaxis(-1, 0))
-        brdf_image = downsize(cam_info.brdf_image.moveaxis(-1, 0))
-        gt_image = downsize(cam_info.image.moveaxis(-1, 0))
-        loaded_mask = None
-    else:
-        resolution = (resolution, int(resolution * 1.5))
-        resized_image_rgb = PILtoTorch(cam_info.image, resolution)
-        gt_image = resized_image_rgb[:3, ...]
-        loaded_mask = None
-
-        if resized_image_rgb.shape[1] == 4:
-            loaded_mask = resized_image_rgb[3:4, ...]
-
-        if cam_info.diffuse_image is not None:
-            if isinstance(cam_info.diffuse_image, np.ndarray):
-                diffuse_image = torch.nn.functional.interpolate(
-                    torch.from_numpy(cam_info.diffuse_image).moveaxis(-1, 0)[None],
-                    (resolution[1], resolution[0]),
+    def downsize(x):
+        if resolution != x.shape[-2]:
+            return (
+                torch.nn.functional.interpolate(
+                    x[None].cuda().float(),
+                    (resolution, int(resolution * aspect_ratio)),
                     mode="area",
-                )[0].cuda()
-            else:
-                resized_diffuse_image_rgb = PILtoTorch(
-                    cam_info.diffuse_image, resolution
-                )
-                diffuse_image = resized_diffuse_image_rgb[:3, ...].cuda()
-
-            if isinstance(cam_info.glossy_image, np.ndarray):
-                glossy_image = torch.nn.functional.interpolate(
-                    torch.from_numpy(cam_info.glossy_image).moveaxis(-1, 0)[None],
-                    (resolution[1], resolution[0]),
-                    mode="area",
-                )[0].cuda()
-            else:
-                resized_glossy_image_rgb = PILtoTorch(cam_info.glossy_image, resolution)
-                glossy_image = resized_glossy_image_rgb[:3, ...].cuda()
-
-            def resize_property(property_image):
-                x = torch.from_numpy(property_image).moveaxis(-1, 0).cuda()
-                return torch.nn.functional.interpolate(
-                    x[:3, ...][None],
-                    (resolution[1], resolution[0]),
-                    mode=args.downsampling_mode,
                 )[0]
-
-            position_image = resize_property(cam_info.position_image)
-            normal_image = resize_property(cam_info.normal_image)
-            roughness_image = resize_property(cam_info.roughness_image)
-            metalness_image = resize_property(cam_info.metalness_image)
-            base_color_image = resize_property(cam_info.base_color_image)
-            specular_image = resize_property(cam_info.specular_image)
-            brdf_image = resize_property(cam_info.brdf_image)
+                .half()
+                .cpu()
+            )
         else:
-            diffuse_image = None
-            glossy_image = None
-            position_image = None
-            normal_image = None
-            roughness_image = None
-            metalness_image = None
-            base_color_image = None
-            brdf_image = None
+            return x.cuda()
+
+    diffuse_image = downsize(cam_info.diffuse_image.moveaxis(-1, 0))
+    glossy_image = downsize(cam_info.glossy_image.moveaxis(-1, 0))
+    position_image = downsize(cam_info.position_image.moveaxis(-1, 0))
+    normal_image = downsize(cam_info.normal_image.moveaxis(-1, 0))
+    roughness_image = downsize(cam_info.roughness_image.moveaxis(-1, 0))
+    metalness_image = downsize(cam_info.metalness_image.moveaxis(-1, 0))
+    base_color_image = downsize(cam_info.base_color_image.moveaxis(-1, 0))
+    specular_image = downsize(cam_info.specular_image.moveaxis(-1, 0))
+    brdf_image = downsize(cam_info.brdf_image.moveaxis(-1, 0))
+    gt_image = downsize(cam_info.image.moveaxis(-1, 0))
+    loaded_mask = None
 
     return Camera(
         colmap_id=cam_info.uid,

@@ -160,7 +160,7 @@ python train.py -s <path to COLMAP or NeRF Synthetic dataset>
   Path to a saved checkpoint to continue training from.
   #### --quiet 
   Flag to omit any text written to standard out pipe. 
-  #### --feature_lr
+  #### --diffuse_lr
   Spherical harmonics features learning rate, ```0.0025``` by default.
   #### --opacity_lr
   Opacity learning rate, ```0.05``` by default.

@@ -57,16 +57,10 @@ class Camera(nn.Module):
         self.image_height = diffuse_image.shape[1]
 
         image_holding_device = os.getenv("IMAGE_HOLDING_DEVICE", "cuda")
-
-        if "SKIP_TONEMAPPING" in os.environ:
-            self._original_image = (
-                (diffuse_image + glossy_image).half().to(image_holding_device)
-            )
-            self._diffuse_image = diffuse_image.half().to(image_holding_device)
-            self._glossy_image = glossy_image.half().to(image_holding_device)
-        else:
+        
+        EXPOSURE = float(os.getenv("EXPOSURE", 3.5))
+        if "TONEMAP_INPUT" in os.environ:
             # *** optimized as tonemapped values, will need to be inverse the tonemapping before adding both passes
-            EXPOSURE = os.getenv("EXPOSURE", 3.5)
             self._original_image = (
                 (tonemap(diffuse_image * EXPOSURE + glossy_image * EXPOSURE))
                 .half()
@@ -82,6 +76,20 @@ class Camera(nn.Module):
                 self._original_image = torch.clamp(self._original_image, 0.0, 1.0)
                 self._diffuse_image = torch.clamp(self._diffuse_image, 0.0, 1.0)
                 self._glossy_image = torch.clamp(self._glossy_image, 0.0, 1.0)
+        else:
+            self._original_image = (
+                (diffuse_image + glossy_image).half().to(image_holding_device)
+            )
+            self._diffuse_image = diffuse_image.half().to(image_holding_device)
+            self._glossy_image = glossy_image.half().to(image_holding_device)
+            self._original_image *= EXPOSURE
+            self._diffuse_image *= EXPOSURE 
+            self._glossy_image *= EXPOSURE
+
+            if "CLAMP_TARGETS" in os.environ:
+                self._original_image = torch.clamp(self._original_image, 0.0, 1.0)
+                self._diffuse_image = torch.clamp(self._diffuse_image, 0.0, 1.0)
+                self._glossy_image = torch.clamp(self._glossy_image, 0.0, 1.0)
 
         if "DIFFUSE_IS_RENDER" in os.environ:
             self._diffuse_image = self._original_image
@@ -89,6 +97,8 @@ class Camera(nn.Module):
         self._normal_image = normal_image.half().to(image_holding_device)
         self._position_image = position_image.half().to(image_holding_device)
         self._roughness_image = (roughness_image).half().to(image_holding_device)
+        if "ZERO_ROUGHNESS" in os.environ: 
+            self._roughness_image = self._roughness_image * 0
         self._brdf_image = brdf_image.half().to(image_holding_device)
         self._F0_image = (
             (

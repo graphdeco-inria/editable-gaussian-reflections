@@ -44,7 +44,6 @@ def render(
     targets_available=True,
     force_update_bvh=False
 ):
-    
     do_backprop = torch.is_grad_enabled()
 
     if targets_available:

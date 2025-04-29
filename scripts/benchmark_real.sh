@@ -4,17 +4,21 @@ set -xe
 RESOLUTION=512
 RAYTRACER_VERSION="../optix-gaussian-raytracing/build/v52/"
 
-SCENE_DIR="data/shiny_dataset_priors"
+SCENE_DIR="data/real_datasets_v1/renders_priors"
 SCENE_LIST="shiny_kitchen shiny_livingroom shiny_office shiny_bedroom"
-OUTPUT_DIR="output/benchmark_shiny_dataset_priors"
+OUTPUT_DIR="output/benchmark_renders_priors"
 
-# SCENE_DIR="data/refnerf_priors"
+# SCENE_DIR="data/real_datasets_v1/refnerf_priors"
 # SCENE_LIST="gardenspheres sedan toycar"
 # OUTPUT_DIR="output/benchmark_refnerf_priors"
 
-# SCENE_DIR="data/360_v2_priors"
+# SCENE_DIR="data/real_datasets_v1/360_v2_priors"
 # SCENE_LIST="garden bicycle stump bonsai counter kitchen room treehill flowers"
 # OUTPUT_DIR="output/benchmark_360_v2_priors"
+
+# SCENE_DIR="data/real_datasets_v1/neural_catacaustics_priors"
+# SCENE_LIST="compost concave_bowl2 crazy_blade2 hallway_lamp multibounce silver_vase2 wateringcan2"
+# OUTPUT_DIR="output/benchmark_neural_catacaustics_priors"
 
 for SCENE in $SCENE_LIST;
 do

@@ -22,7 +22,7 @@ from torchvision.utils import save_image
 from arguments import ModelParams, PipelineParams, OptimizationParams
 import numpy as np
 import kornia
-
+import time 
 LOADED = False
 
 
@@ -38,11 +38,7 @@ class GaussianRaytracer:
 
         self.image_width: int = image_width
         self.image_height: int = image_height
-        self.cuda_module = torch.classes.gausstracer.Raytracer(
-            image_width,
-            image_height,
-            pc.get_scaling.shape[0],
-        )
+        self.cuda_module = torch.classes.gausstracer.Raytracer(image_width, image_height, pc.get_scaling.shape[0])
 
         os.environ["DIFFUSE_LOSS_WEIGHT"] = str(pc.model_params.diffuse_loss_weight)
         os.environ["GLOSSY_LOSS_WEIGHT"] = str(pc.model_params.glossy_loss_weight)
@@ -54,7 +50,7 @@ class GaussianRaytracer:
         os.environ["ALBEDO_LOSS_WEIGHT"] = str(pc.model_params.albedo_loss_weight)
         os.environ["METALNESS_LOSS_WEIGHT"] = str(pc.model_params.metalness_loss_weight)
 
-        self.cuda_module.configure(pc.model_params.t_thresh, pc.model_params.a_thresh, pc.model_params.exp_power)
+        # self.cuda_module.configure(pc.model_params.t_thresh, pc.model_params.a_thresh, pc.model_params.exp_power)
         self.cuda_module.set_losses(True)
 
         self.pc = pc
@@ -188,8 +184,8 @@ class GaussianRaytracer:
                 R_c2w_blender.contiguous(),
                 viewpoint_camera.camera_center.contiguous(),
                 viewpoint_camera.FoVy,
-                viewpoint_camera.znear,
-                viewpoint_camera.zfar,
+                float(os.getenv("ZNEAR", 0.01)),
+                float(os.getenv("ZFAR", 999.9)),
                 self.pc.model_params.lod_max_world_size_blur,
             )
 
@@ -244,7 +240,7 @@ class GaussianRaytracer:
 
             if self.cuda_module.target_brdf is not None:
                 if target_brdf is not None:
-                    self.cuda_module.target_brdr.copy_(target_brdf.moveaxis(0, -1))
+                    self.cuda_module.target_brdf.copy_(target_brdf.moveaxis(0, -1))
                 else:
                     self.cuda_module.target_brdf.zero_()
 

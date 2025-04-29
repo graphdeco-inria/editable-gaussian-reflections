@@ -44,7 +44,7 @@ def resize_by_height(image: torch.Tensor, target_height: int) -> torch.Tensor:
 def imread(image_path, render_pass_name):
     path = (
         image_path.replace("/images/", "/render/")
-        .replace("/colmap/", "/renders/")
+        .replace("/colmap/", "/priors/")
         .replace("/render_", f"/{render_pass_name}_")
         .replace("/render/", f"/{render_pass_name}/")
     )
@@ -57,8 +57,8 @@ def imread(image_path, render_pass_name):
     return image
 
 
-assert path.startswith("renders/")
-cache_path = path.replace("renders/", f"cache_{target_height}/") if target_height is not None else path.replace("renders/", "cache/")
+assert path.startswith("priors/")
+cache_path = path.replace("priors/", f"cache_{target_height}/") if target_height is not None else path.replace("priors/", "cache/")
 
 if WRITE := True:
     for split in ["train", "test"]:

@@ -8,6 +8,7 @@ from PIL import Image
 
 from arguments import ModelParams
 from scene.gaussian_model import BasicPointCloud
+from scene.tonemapping import untonemap
 from utils.depth_utils import (
     linear_least_squares_1d,
     project_pointcloud_to_depth_map,
@@ -54,7 +55,7 @@ class ColmapDataset:
             self.cam_extrinsics = read_extrinsics_text(cameras_extrinsic_file)
             self.cam_intrinsics = read_intrinsics_text(cameras_intrinsic_file)
 
-        keys = sorted(list(self.cam_extrinsics.keys()))
+        keys = list(sorted(list(self.cam_extrinsics.keys())))[:self.model_params.max_images]
         if model_params.eval:
             if split == "train":
                 self.keys = [
@@ -120,6 +121,7 @@ class ColmapDataset:
         T = w2c[:3, 3]
 
         # Align exposure
+        # if "ALIGN_EXPOSURE" in os.environ:
         image /= 3.5
         diffuse_image /= 3.5
         glossy_image /= 3.5
@@ -173,12 +175,10 @@ class ColmapDataset:
         buffer_path = os.path.join(self.buffers_dir, buffer_name, file_name + ".png")
         buffer = from_pil_image(Image.open(buffer_path))
 
-        if buffer_name == "image":
-            buffer = buffer**2.2
+        if buffer_name in ["image", "irradiance", "diffuse", "glossy"]:
+            buffer = untonemap(buffer)
         elif buffer_name == "albedo":
             pass
-        elif buffer_name in ["irradiance", "diffuse", "glossy"]:
-            buffer = buffer / (1.0 - buffer + 1e-6)
         elif buffer_name in ["roughness", "metalness", "depth"]:
             buffer = repeat(buffer, "h w 1 -> h w 3")
         elif buffer_name == "normal":
