@@ -24,11 +24,11 @@ def get_point_cloud(data_dir) -> BasicPointCloud:
 
 def make_random_point_cloud(model_params) -> BasicPointCloud:
     num_rand_pts = model_params.num_farfield_init_points
-    glossy_bbox_size_mult = model_params.glossy_bbox_size_mult
+    # glossy_bbox_size_mult = model_params.glossy_bbox_size_mult
     init_extra_point_diffuse = model_params.init_extra_point_diffuse
 
     print(f"Generating random point cloud ({num_rand_pts})...")
-    rand_xyz = (np.random.random((num_rand_pts, 3)) * 2.6 - 1.3) * glossy_bbox_size_mult
+    rand_xyz = (np.random.random((num_rand_pts, 3)) * 2.6 - 1.3)# * glossy_bbox_size_mult
     if "GRAY_EXTRA_POINTS" in os.environ:
         init_rgb = np.ones_like(rand_xyz) * init_extra_point_diffuse
     else:

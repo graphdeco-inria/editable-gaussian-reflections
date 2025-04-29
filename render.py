@@ -240,14 +240,23 @@ def render_set(
                 else:
                     blur_sigma = blur_sigma
                 
-                package = render(view, raytracer, pipeline, background, blur_sigma=blur_sigma)
-                if model_params.num_samples > 1:
-                    rgb = package.rgb.clone() / model_params.num_samples
-                    for i in range(model_params.num_samples - 1):
+                raytracer.cuda_module.denoise.copy_(not args.skip_denoiser)
+                
+                if args.spp > 1:
+                    raytracer.cuda_module.accumulate.copy_(True)
+                    raytracer.cuda_module.accumulated_rgb.zero_()
+                    raytracer.cuda_module.accumulated_normal.zero_()
+                    raytracer.cuda_module.accumulated_sample_count.zero_()
+                    for i in range(args.spp):
                         package = render(view, raytracer, pipeline, background, blur_sigma=blur_sigma)
-                        rgb += package.rgb / model_params.num_samples
-                    rgb[-1] = rgb[:-1].sum(dim=0, keepdim=True)
-                    package.rgb = rgb
+                else:
+                    package = render(view, raytracer, pipeline, background, blur_sigma=blur_sigma)
+
+                if args.supersampling > 1:
+                    for key, value in package.__dict__.items():
+                        batched = value.ndim == 4 
+                        resized = torch.nn.functional.interpolate(value[None] if not batched else value, scale_factor=1.0 / args.supersampling, mode="area")
+                        setattr(package, key, resized[0] if not batched else resized)
                     
                 diffuse_gt_image = tonemap(view.diffuse_image).clamp(0.0, 1.0)
                 glossy_gt_image = tonemap(view.glossy_image).clamp(0.0, 1.0)
@@ -256,6 +265,15 @@ def render_set(
                 normal_gt_image = view.normal_image
                 roughness_gt_image = view.roughness_image
                 F0_gt_image = view.F0_image
+
+                if args.supersampling > 1:
+                    diffuse_gt_image = torch.nn.functional.interpolate(diffuse_gt_image[None], scale_factor=1.0 / args.supersampling, mode="area")[0]
+                    glossy_gt_image = torch.nn.functional.interpolate(glossy_gt_image[None], scale_factor=1.0 / args.supersampling, mode="area")[0]
+                    gt_image = torch.nn.functional.interpolate(gt_image[None], scale_factor=1.0 / args.supersampling, mode="area")[0]
+                    position_gt_image = torch.nn.functional.interpolate(position_gt_image[None], scale_factor=1.0 / args.supersampling, mode="area")[0]
+                    normal_gt_image = torch.nn.functional.interpolate(normal_gt_image[None], scale_factor=1.0 / args.supersampling, mode="area")[0]
+                    roughness_gt_image = torch.nn.functional.interpolate(roughness_gt_image[None], scale_factor=1.0 / args.supersampling, mode="area")[0]
+                    F0_gt_image = torch.nn.functional.interpolate(F0_gt_image[None], scale_factor=1.0 / args.supersampling, mode="area")[0]
 
                 diffuse_image = tonemap(package.rgb[0]).clamp(0, 1)
                 glossy_image = tonemap(package.rgb[1:-1].sum(dim=0)).clamp(0, 1)
@@ -574,6 +592,9 @@ def render_set(
 def render_sets(model_params: ModelParams, iteration: int, pipeline: PipelineParams):
     gaussians = GaussianModel(model_params)
     scene = Scene(model_params, gaussians, load_iteration=iteration, shuffle=False)
+    if "DBG_FLOATERS" in os.environ:
+        mask = scene.select_points_to_prune_near_cameras(gaussians.get_xyz, gaussians.get_scaling)
+        gaussians._opacity.data[mask] = -100000000.0
 
     if args.red_region:
         bbox_min = [0.22, -0.5, -0.22]
@@ -590,15 +611,11 @@ def render_sets(model_params: ModelParams, iteration: int, pipeline: PipelinePar
 
     background = torch.tensor([0, 0, 0], dtype=torch.float32, device="cuda")
 
-    if "KLUDGE" in os.environ:
-        with torch.no_grad():
-            gaussians._scaling.copy_(torch.log(gaussians.get_scaling.clamp(1e-3)))
-
     viewpoint_stack = scene.getTrainCameras().copy()
     raytracer = GaussianRaytracer(
         gaussians, viewpoint_stack[0].image_width, viewpoint_stack[0].image_height
     )
-    if model_params.num_samples > 1:
+    if args.spp > 1:
         raytracer.cuda_module.denoise.fill_(False)
 
     if args.train_views:
@@ -670,7 +687,10 @@ if __name__ == "__main__":
     parser.add_argument("--start_checkpoint", type=str, default=None)
     # Rendering args
     parser.add_argument("--iteration", default=-1, type=int)
+    parser.add_argument("--spp", default=32, type=int)
+    parser.add_argument("--supersampling", default=1, type=int)
     parser.add_argument("--train_views", action="store_true")
+    parser.add_argument("--skip_denoiser", action="store_true")
     parser.add_argument("--quiet", action="store_true")
     parser.add_argument(
         "--modes",
@@ -695,7 +715,6 @@ if __name__ == "__main__":
 
     args = get_combined_args(parser)
     print("Rendering " + args.model_path)
-    
 
     # if not args.train_views:
     #     args.max_images = min(100, args.max_images)
@@ -704,4 +723,5 @@ if __name__ == "__main__":
     safe_state(args.quiet)
 
     model_params = model.extract(args)
+    model_params.resolution *= args.supersampling
     render_sets(model_params, args.iteration, pipeline.extract(args))

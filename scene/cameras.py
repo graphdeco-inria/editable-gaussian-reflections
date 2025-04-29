@@ -86,6 +86,11 @@ class Camera(nn.Module):
             self._diffuse_image *= EXPOSURE 
             self._glossy_image *= EXPOSURE
 
+            if "CLAMP_TARGETS" in os.environ:
+                self._original_image = torch.clamp(self._original_image, 0.0, 1.0)
+                self._diffuse_image = torch.clamp(self._diffuse_image, 0.0, 1.0)
+                self._glossy_image = torch.clamp(self._glossy_image, 0.0, 1.0)
+
         if "DIFFUSE_IS_RENDER" in os.environ:
             self._diffuse_image = self._original_image
 
