@@ -237,7 +237,7 @@ class OptimizationParams(ParamGroup):
         self.densif_scaledown_clones = False
         self.densif_jitter_clones = False
 
-        self.densification_interval = 100
+        self.densification_interval = 500
         self.opacity_reset_interval = 999999999999 # Doesn't change metrics in 3dgs, may cause issues
         self.densify_from_iter = 999999999999  # was 500 in 3dgs, 1500 when doing LOD
         self.densify_until_iter = 3500  # was 25k in mcmc

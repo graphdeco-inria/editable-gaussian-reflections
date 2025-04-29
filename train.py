@@ -945,8 +945,12 @@ for iteration in tqdm(
             #         raytracer.rebuild_bvh()
         else:
             if iteration % opt_params.densification_interval == 0:
+                if model_params.min_weight > 0:
+                    gaussians.prune_points((raytracer.cuda_module.gaussian_total_weight < model_params.min_weight).squeeze(1))
                 if model_params.znear_densif_pruning:
                     gaussians.prune_znear_only(scene)
+                raytracer.cuda_module.gaussian_total_weight.zero_()
+                torch.cuda.synchronize()
                 raytracer.rebuild_bvh()
 
         gaussians.optimizer.step()
