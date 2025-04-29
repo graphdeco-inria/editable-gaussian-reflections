@@ -19,6 +19,7 @@ from viewer.widgets.ellipsoid_viewer import EllipsoidViewer
 from dataclasses import dataclass
 import dataclasses
 from scipy.spatial.transform import Rotation
+import numpy as np 
 
 gizmo = imguizmo.im_guizmo
 Matrix3 = gizmo.Matrix3
