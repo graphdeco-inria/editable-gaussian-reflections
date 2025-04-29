@@ -280,6 +280,7 @@ class GaussianViewer(Viewer):
                             self.gaussians.is_dirty = True
                             self.raytracer.cuda_module.accumulate.copy_(False)
                             accum_rgb_backup = self.raytracer.cuda_module.accumulated_rgb.clone()
+                            accum_normal_backup = self.raytracer.cuda_module.accumulated_normal.clone()
                             accum_sample_count_backup = self.raytracer.cuda_module.accumulated_sample_count.clone()
                             self.raytracer.cuda_module.accumulated_rgb.zero_()
                             self.raytracer.cuda_module.accumulated_sample_count.zero_()
@@ -296,6 +297,7 @@ class GaussianViewer(Viewer):
                                 self.gaussians._diffuse.copy_(rgb_backup)
                             self.last_rendered_selection_mask_id = self.selection_mode_counter
                             self.raytracer.cuda_module.accumulated_rgb.copy_(accum_rgb_backup)
+                            self.raytracer.cuda_module.accumulated_normal.copy_(accum_normal_backup)
                             self.raytracer.cuda_module.accumulated_sample_count.copy_(accum_sample_count_backup)
 
                         for key in self.edits.keys():
@@ -308,6 +310,7 @@ class GaussianViewer(Viewer):
                     
                     if self.gaussians.is_dirty or self.camera.is_dirty or not self.accumulate_samples or self.is_dirty:
                         self.raytracer.cuda_module.accumulated_rgb.zero_()
+                        self.raytracer.cuda_module.accumulated_normal.zero_()
                         self.raytracer.cuda_module.accumulated_sample_count.zero_()
                         self.is_dirty = False
 

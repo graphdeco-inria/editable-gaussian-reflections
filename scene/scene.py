@@ -177,7 +177,10 @@ class Scene:
 
         self.gaussians.scene = self
 
-    def select_points_to_prune_near_cameras(self, points, scales):
+    def select_points_to_prune_near_cameras(self, points, scales, sigma=int(os.getenv("PRUNING_SIGMA", 0))):
+        # Delete all gaussians that would intesect a sphere around each camera at 3 stddev
+        # The sphere radius is determined by the distance to the closest point 
+
         points_to_prune = torch.zeros(points.shape[0], dtype=torch.bool, device="cuda")
 
         if "SKIPZNEAR" in os.environ:
@@ -194,7 +197,7 @@ class Scene:
                 T = torch.from_numpy(camera.camera_center)
             
             points_dist_to_camera = (points - T).norm(dim=1)
-            too_close = points_dist_to_camera - scales.amax(dim=1) < camera.znear
+            too_close = points_dist_to_camera - sigma * scales.amax(dim=1) < camera.znear
 
             points_to_prune |= too_close
 

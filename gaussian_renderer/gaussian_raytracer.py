@@ -184,10 +184,8 @@ class GaussianRaytracer:
                 R_c2w_blender.contiguous(),
                 viewpoint_camera.camera_center.contiguous(),
                 viewpoint_camera.FoVy,
-                0.01, #!!!
-                100.0, #!!!
-                # viewpoint_camera.znear,
-                # viewpoint_camera.zfar,
+                float(os.getenv("ZNEAR", 0.01)),
+                float(os.getenv("ZFAR", 999.9)),
                 self.pc.model_params.lod_max_world_size_blur,
             )
 

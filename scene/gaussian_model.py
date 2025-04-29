@@ -360,23 +360,35 @@ class GaussianModel:
     @torch.no_grad()
     def add_farfield_points(self, scene):
         print(f"Generating random point cloud ({self.model_params.num_farfield_init_points})...")
-        new_xyz = (torch.rand((self.model_params.num_farfield_init_points, 3), device="cuda") * 2.6 - 1.3) * self.model_params.glossy_bbox_size_mult
+        new_xyz = torch.randn(self.model_params.num_farfield_init_points, 3, device="cuda").clamp(-3, 3) * scene.cameras_extent * self.model_params.scene_extent_init_radius
         mask = scene.select_points_to_prune_near_cameras(new_xyz, torch.zeros_like(new_xyz))
         new_xyz = new_xyz[~mask]
+
+        add_book_points = "shiny_office_with_book" in self.model_params.source_path and not "SKIP_BOOK_EXTRA_POINTS" in os.environ
+        if add_book_points:
+            num_book_pts = int(os.getenv("NUM_BOOK_PTS", 5000))
+            extra_pts = torch.rand(num_book_pts, 3, device="cuda") * 0.3 + torch.tensor([-0.15, -0.1, -0.15], device="cuda")
+            new_xyz = torch.cat([new_xyz, extra_pts])
+            print("ADDED EXTRA POINTS FOR BOOK")
         
         dist2 = torch.clamp_min(
             distCUDA2(new_xyz.float().cuda()),
             0.0000001,
         )
-        new_scaling = torch.log(torch.sqrt(dist2) * self.model_params.init_scale_factor_farfield)[
-            ..., None
-        ].repeat(1, 3)
+        new_scaling = torch.log(torch.sqrt(dist2) * self.model_params.init_scale_factor_farfield)[..., None].repeat(1, 3)
+
+        if add_book_points:
+            book_pts_scale = float(os.getenv("BOOK_PTS_SCALE", 0.001))
+            new_scaling[-new_xyz.shape[0]:] = torch.log(torch.tensor(book_pts_scale, device="cuda"))
         new_rotation = torch.zeros((new_xyz.shape[0], 4), device="cuda")
         new_rotation[:, 0] = 1
         new_opacity = inverse_sigmoid(
-            self.model_params.init_opacity * torch.ones((new_xyz.shape[0], 1), dtype=torch.float, device="cuda")
+            self.model_params.init_opacity_farfield * torch.ones((new_xyz.shape[0], 1), dtype=torch.float, device="cuda")
         )
         new_diffuse = torch.ones_like(new_xyz) * self.model_params.init_extra_point_diffuse
+        if add_book_points:
+            new_diffuse[-new_xyz.shape[0]:] = torch.rand_like(new_diffuse[-new_xyz.shape[0]:])
+
         new_normal = torch.zeros_like(new_xyz)
         new_position = torch.zeros_like(new_xyz)
         new_f0 = torch.ones_like(new_xyz) * 0.04
@@ -387,6 +399,9 @@ class GaussianModel:
         new_lod_scale = torch.ones_like(new_roughness) # tmp, for future
             
         new_round_counter = torch.zeros(new_xyz.shape[0], 1, dtype=torch.int, device="cuda")
+        new_comes_from_colmap_pc = torch.zeros(new_xyz.shape[0], 1, dtype=torch.int, device="cuda")
+        # if add_book_points:
+        #     new_comes_from_colmap_pc[-new_xyz.shape[0]:] = 1.0
 
         self.densification_postfix(
             new_xyz,
@@ -401,8 +416,11 @@ class GaussianModel:
             new_scaling,
             new_rotation,
             new_round_counter,
+            new_comes_from_colmap_pc,
             reset_params=True,
         )
+
+        torch.cuda.synchronize()
 
     def training_setup(self, training_args):
         self.percent_dense = training_args.percent_dense
@@ -412,9 +430,9 @@ class GaussianModel:
         self.xyz_gradient_accum_glossy = torch.zeros(
             (self.get_xyz.shape[0], 1), device="cuda"
         )
-        self.comes_from_colmap_pc = torch.zeros(
+        self.comes_from_colmap_pc = torch.ones(
             (self.get_xyz.shape[0], 1), device="cuda"
-        )  #!!!!! mark properly
+        ) 
         self.denom = torch.zeros((self.get_xyz.shape[0], 1), device="cuda")
 
         self._xyz.grad = torch.zeros_like(self._xyz)
@@ -819,6 +837,7 @@ class GaussianModel:
         new_scaling,
         new_rotation,
         new_round_counter,
+        new_comes_from_colmap_pc,
         reset_params=True,
     ):
         d = {
@@ -887,9 +906,7 @@ class GaussianModel:
         self._rotation = optimizable_tensors["rotation"]
 
         self._round_counter = torch.cat((self._round_counter, new_round_counter), dim=0)
-        self.comes_from_colmap_pc = torch.cat(
-            (self.comes_from_colmap_pc, torch.zeros_like(new_round_counter)), dim=0
-        )  #!!! fix this to update properly
+        self.comes_from_colmap_pc = torch.cat((self.comes_from_colmap_pc, new_comes_from_colmap_pc), dim=0)
 
         if reset_params:
             self.xyz_gradient_accum_diffuse = torch.zeros(
@@ -935,6 +952,7 @@ class GaussianModel:
             new_lod_mean /= 0.8 * N
         new_lod_scale = self._lod_scale[selected_pts_mask].repeat(N, 1)
         new_round_counter = self._round_counter[selected_pts_mask].repeat(N, 1) + 1
+        new_comes_from_colmap_pc = self.comes_from_colmap_pc[selected_pts_mask].repeat(N, 1) + 1
 
         self.densification_postfix(
             new_xyz,
@@ -949,6 +967,7 @@ class GaussianModel:
             new_scaling,
             new_rotation,
             new_round_counter,
+            new_comes_from_colmap_pc
         )
 
         prune_filter = torch.cat(
@@ -995,6 +1014,7 @@ class GaussianModel:
         new_lod_mean = self._lod_mean[selected_pts_mask]
         new_lod_scale = self._lod_scale[selected_pts_mask]
         new_round_counter = self._round_counter[selected_pts_mask] + 1
+        new_comes_from_colmap_pc = self.comes_from_colmap_pc[selected_pts_mask]
 
         self.densification_postfix(
             new_xyz,
@@ -1009,6 +1029,7 @@ class GaussianModel:
             new_scaling,
             new_rotation,
             new_round_counter,
+            new_comes_from_colmap_pc
         )
 
     def prune_znear_only(self, scene):
@@ -1026,7 +1047,7 @@ class GaussianModel:
             prune_mask = torch.zeros_like(prune_mask)
 
         if self.model_params.znear_densif_pruning:
-            prune_mask |= scene.select_points_to_prune_near_cameras(self._xyz.data)
+            prune_mask |= scene.select_points_to_prune_near_cameras(self._xyz.data, self.get_scaling)
 
         self.prune_points(prune_mask)
 
