@@ -30,7 +30,7 @@ class BlenderPriorDataset:
         data_dir: str,
         point_cloud: BasicPointCloud,
         split: str = "train",
-        dirname: str = None
+        dirname: str = None,
     ):
         self.model_params = model_params
         self.data_dir = data_dir
@@ -92,7 +92,7 @@ class BlenderPriorDataset:
             R = w2c[:3, :3]
         else:
             R = np.transpose(w2c[:3, :3])
-        
+
         T = w2c[:3, 3]
 
         # Postprocess normal_image

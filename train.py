@@ -83,7 +83,9 @@ def training_report(tb_writer, iteration):
             {
                 "name": "train",
                 "cameras": [
-                    sorted(scene.getTrainCameras(), key=lambda x: x.image_name)[idx % len(scene.getTrainCameras())]
+                    sorted(scene.getTrainCameras(), key=lambda x: x.image_name)[
+                        idx % len(scene.getTrainCameras())
+                    ]
                     for idx in args.val_views
                 ],
             },
@@ -107,7 +109,7 @@ def training_report(tb_writer, iteration):
                         tb_writer.log_dir + "/" + f"{config['name']}_view",
                         exist_ok=True,
                     )
-                    
+
                     if "SKIP_TONEMAPPING_OUTPUT" in os.environ:
                         diffuse_image = package.rgb[0].clamp(0, 1)
                         glossy_image = package.rgb[1:-1].sum(dim=0)
@@ -136,9 +138,9 @@ def training_report(tb_writer, iteration):
                         diffuse_image = tonemap(package.rgb[0]).clamp(0, 1)
                         glossy_image = tonemap(package.rgb[1:-1].sum(dim=0)).clamp(0, 1)
                         pred_image = tonemap(package.rgb[-1]).clamp(0, 1)
-                        pred_image_without_denoising = tonemap(package.rgb[:-1].sum(
-                            dim=0
-                        ))
+                        pred_image_without_denoising = tonemap(
+                            package.rgb[:-1].sum(dim=0)
+                        )
                         diffuse_gt_image = tonemap(viewpoint.diffuse_image).clamp(0, 1)
                         glossy_gt_image = tonemap(viewpoint.glossy_image).clamp(0, 1)
                         gt_image = tonemap(viewpoint.original_image).clamp(0, 1)
@@ -292,7 +294,7 @@ def training_report(tb_writer, iteration):
 
                         if raytracer.config.SAVE_LOD_IMAGES:
                             save_image(
-                                raytracer.cuda_module.output_lod_mean, 
+                                raytracer.cuda_module.output_lod_mean,
                                 tb_writer.log_dir
                                 + "/"
                                 + f"{config['name']}_view/iter_{iteration:09}_view_{viewpoint.colmap_id}_lod_mean_all_rays.png",
@@ -603,7 +605,9 @@ parser.add_argument("--viewer", action="store_true")
 parser.add_argument("--viewer_mode", type=str, default="local")
 parser.add_argument("--detect_anomaly", action="store_true", default=False)
 parser.add_argument("--flip_camera", action="store_true", default=False)
-parser.add_argument("--val_views",  nargs='+', type=int, default=[75]) # 135 for teaser book sceen
+parser.add_argument(
+    "--val_views", nargs="+", type=int, default=[75]
+)  # 135 for teaser book sceen
 parser.add_argument(
     "--test_iterations",
     nargs="+",
@@ -620,7 +624,7 @@ args = parser.parse_args(sys.argv[1:])
 args.save_iterations.append(args.iterations)
 
 if "_with_book" in args.source_path:
-    args.max_images = 199 ##! crashes if last image is included
+    args.max_images = 199  ##! crashes if last image is included
 
 torch.autograd.set_detect_anomaly(args.detect_anomaly)
 model_params = lp.extract(args)
@@ -631,11 +635,21 @@ if args.viewer:
     args.test_iterations.clear()
 
 if opt_params.timestretch != 1:
-    model_params.no_bounces_until_iter = int(model_params.no_bounces_until_iter * opt_params.timestretch)
-    model_params.max_one_bounce_until_iter = int(model_params.max_one_bounce_until_iter * opt_params.timestretch)
-    model_params.rebalance_losses_at_iter  = int(model_params.rebalance_losses_at_iter * opt_params.timestretch)
-    args.test_iterations = [int(x * opt_params.timestretch) for x in args.test_iterations]
-    args.save_iterations = [int(x * opt_params.timestretch) for x in args.save_iterations]
+    model_params.no_bounces_until_iter = int(
+        model_params.no_bounces_until_iter * opt_params.timestretch
+    )
+    model_params.max_one_bounce_until_iter = int(
+        model_params.max_one_bounce_until_iter * opt_params.timestretch
+    )
+    model_params.rebalance_losses_at_iter = int(
+        model_params.rebalance_losses_at_iter * opt_params.timestretch
+    )
+    args.test_iterations = [
+        int(x * opt_params.timestretch) for x in args.test_iterations
+    ]
+    args.save_iterations = [
+        int(x * opt_params.timestretch) for x in args.save_iterations
+    ]
     opt_params.iterations = int(opt_params.timestretch * opt_params.iterations)
     opt_params.densification_interval = int(
         opt_params.timestretch * opt_params.densification_interval
@@ -743,7 +757,7 @@ for iteration in tqdm(
     else:
         blur_sigma = None
 
-    torch.cuda.synchronize() # todo may be needed or not, idk, occasional crash. double check after deadline
+    torch.cuda.synchronize()  # todo may be needed or not, idk, occasional crash. double check after deadline
     package = render(viewpoint_cam, raytracer, pipe_params, bg, blur_sigma=blur_sigma)
 
     if opt_params.opacity_reg > 0:
@@ -780,7 +794,7 @@ for iteration in tqdm(
     with torch.no_grad():
         # Log and save
         training_report(tb_writer, iteration)
-        torch.cuda.synchronize() # not sure if needed
+        torch.cuda.synchronize()  # not sure if needed
 
         if iteration % 1000 == 0 or iteration == 1:
             os.makedirs(os.path.join(args.model_path, "plots"), exist_ok=True)
@@ -927,7 +941,10 @@ for iteration in tqdm(
             # )
             max_ws_size = 9999999.99
             densif_args = (scene, opt_params, model_params.min_opacity, max_ws_size)
-            if iteration % opt_params.densification_interval == 0 and iteration > opt_params.densify_from_iter:
+            if (
+                iteration % opt_params.densification_interval == 0
+                and iteration > opt_params.densify_from_iter
+            ):
                 if iteration < opt_params.densify_until_iter:
                     trace = gaussians.densify_and_prune_top_k(*densif_args)
                     trace = f"Iteration {iteration}; " + trace
@@ -946,7 +963,12 @@ for iteration in tqdm(
         else:
             if iteration % opt_params.densification_interval == 0:
                 if model_params.min_weight > 0:
-                    gaussians.prune_points((raytracer.cuda_module.gaussian_total_weight < model_params.min_weight).squeeze(1))
+                    gaussians.prune_points(
+                        (
+                            raytracer.cuda_module.gaussian_total_weight
+                            < model_params.min_weight
+                        ).squeeze(1)
+                    )
                 if model_params.znear_densif_pruning:
                     gaussians.prune_znear_only(scene)
                 raytracer.cuda_module.gaussian_total_weight.zero_()
@@ -971,10 +993,10 @@ for iteration in tqdm(
                     gaussians._scaling.data.clamp_(
                         min=torch.log(
                             gaussians._lod_mean.clamp(
-                                min=float(os.getenv("LOD_CLAMP_EPS", 0.0)) # was 1e-8
+                                min=float(os.getenv("LOD_CLAMP_EPS", 0.0))  # was 1e-8
                             )
                         )
-                    ) 
+                    )
                 if (
                     torch.isnan(gaussians._lod_mean).any()
                     or torch.isnan(gaussians._scaling).any()
@@ -997,7 +1019,7 @@ for iteration in tqdm(
                         max_scaling * float(os.getenv("RELMINSIZE_NEARFIELD", 0.05))
                     ).unsqueeze(-1)
                 )
-                gaussians._scaling.data.copy_( 
+                gaussians._scaling.data.copy_(
                     torch.where(
                         farfield_mask.repeat(1, 3),
                         clamped_size_farfield,
@@ -1015,15 +1037,15 @@ for iteration in tqdm(
             with torch.no_grad():
                 farfield_mask = ~gaussians.comes_from_colmap_pc.bool()
                 distance_to_zero = gaussians.get_xyz.norm(dim=-1)
-                clamped_size = gaussians._scaling.clamp(min=torch.log(
-                    distance_to_zero * float(os.getenv("SIZEDIST", 0.0025)) + 1e-8
-                ).unsqueeze(-1))
+                clamped_size = gaussians._scaling.clamp(
+                    min=torch.log(
+                        distance_to_zero * float(os.getenv("SIZEDIST", 0.0025)) + 1e-8
+                    ).unsqueeze(-1)
+                )
                 # using indexing failed to overwrite in place, going with this ugly solution
-                gaussians._scaling.data.copy_( 
+                gaussians._scaling.data.copy_(
                     torch.where(
-                        farfield_mask.repeat(1, 3),
-                        clamped_size,
-                        gaussians._scaling
+                        farfield_mask.repeat(1, 3), clamped_size, gaussians._scaling
                     )
                 )
 

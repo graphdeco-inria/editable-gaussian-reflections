@@ -55,7 +55,9 @@ class ColmapDataset:
             self.cam_extrinsics = read_extrinsics_text(cameras_extrinsic_file)
             self.cam_intrinsics = read_intrinsics_text(cameras_intrinsic_file)
 
-        keys = list(sorted(list(self.cam_extrinsics.keys())))[:self.model_params.max_images]
+        keys = list(sorted(list(self.cam_extrinsics.keys())))[
+            : self.model_params.max_images
+        ]
         if model_params.eval:
             if split == "train":
                 self.keys = [

@@ -65,8 +65,9 @@ class Scene:
 
         data_dir = model_params.source_path
         if os.path.exists(os.path.join(data_dir, "transforms_train.json")):
-            
-            if os.path.isdir(os.path.join(data_dir, "train", "preview")) or os.path.isdir(os.path.join(data_dir, "priors", "preview")):
+            if os.path.isdir(
+                os.path.join(data_dir, "train", "preview")
+            ) or os.path.isdir(os.path.join(data_dir, "priors", "preview")):
                 scene_info = readBlenderPriorSceneInfo(model_params, data_dir)
             else:
                 scene_info = readBlenderSceneInfo(model_params, data_dir)
@@ -123,6 +124,7 @@ class Scene:
         self.autoadjust_zplanes()
 
         import sys
+
         sys.path.append(gaussians.model_params.raytracer_version)
         import raytracer_config
 
@@ -156,7 +158,6 @@ class Scene:
         #         normals=scene_info.point_cloud.normals[~points_to_prune],
         #     )
 
-
         if self.loaded_iter:
             self.gaussians.load_ply(
                 os.path.join(
@@ -177,9 +178,11 @@ class Scene:
 
         self.gaussians.scene = self
 
-    def select_points_to_prune_near_cameras(self, points, scales, sigma=int(os.getenv("PRUNING_SIGMA", 0))):
+    def select_points_to_prune_near_cameras(
+        self, points, scales, sigma=int(os.getenv("PRUNING_SIGMA", 0))
+    ):
         # Delete all gaussians that would intesect a sphere around each camera at 3 stddev
-        # The sphere radius is determined by the distance to the closest point 
+        # The sphere radius is determined by the distance to the closest point
 
         points_to_prune = torch.zeros(points.shape[0], dtype=torch.bool, device="cuda")
 
@@ -195,9 +198,11 @@ class Scene:
                 T = camera.camera_center
             else:
                 T = torch.from_numpy(camera.camera_center)
-            
+
             points_dist_to_camera = (points - T).norm(dim=1)
-            too_close = points_dist_to_camera - sigma * scales.amax(dim=1) < camera.znear
+            too_close = (
+                points_dist_to_camera - sigma * scales.amax(dim=1) < camera.znear
+            )
 
             points_to_prune |= too_close
 

@@ -57,7 +57,7 @@ class Camera(nn.Module):
         self.image_height = diffuse_image.shape[1]
 
         image_holding_device = os.getenv("IMAGE_HOLDING_DEVICE", "cuda")
-        
+
         EXPOSURE = float(os.getenv("EXPOSURE", 3.5))
         if "TONEMAP_INPUT" in os.environ:
             # *** optimized as tonemapped values, will need to be inverse the tonemapping before adding both passes
@@ -83,7 +83,7 @@ class Camera(nn.Module):
             self._diffuse_image = diffuse_image.half().to(image_holding_device)
             self._glossy_image = glossy_image.half().to(image_holding_device)
             self._original_image *= EXPOSURE
-            self._diffuse_image *= EXPOSURE 
+            self._diffuse_image *= EXPOSURE
             self._glossy_image *= EXPOSURE
 
             if "CLAMP_TARGETS" in os.environ:
@@ -97,7 +97,7 @@ class Camera(nn.Module):
         self._normal_image = normal_image.half().to(image_holding_device)
         self._position_image = position_image.half().to(image_holding_device)
         self._roughness_image = (roughness_image).half().to(image_holding_device)
-        if "ZERO_ROUGHNESS" in os.environ: 
+        if "ZERO_ROUGHNESS" in os.environ:
             self._roughness_image = self._roughness_image * 0
         self._brdf_image = brdf_image.half().to(image_holding_device)
         self._F0_image = (

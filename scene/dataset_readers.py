@@ -147,11 +147,7 @@ def readBlenderPriorSceneInfo(model_params: ModelParams, data_dir: str) -> Scene
 
     if "PRIOR_DATASET_TRAIN_ONLY" in os.environ:
         train_dataset = BlenderPriorDataset(
-            model_params,
-            data_dir,
-            point_cloud,
-            split="train",
-            dirname="priors"
+            model_params, data_dir, point_cloud, split="train", dirname="priors"
         )
         train_cam_infos = read_dataset(train_dataset)
 
@@ -159,7 +155,7 @@ def readBlenderPriorSceneInfo(model_params: ModelParams, data_dir: str) -> Scene
             point_cloud=point_cloud,
             extra_point_cloud=extra_point_cloud,
             train_cameras=train_cam_infos,
-            test_cameras=train_cam_infos, #!!!
+            test_cameras=train_cam_infos,  #!!!
             nerf_normalization=getNerfppNorm(train_cam_infos),
             ply_path=os.path.join(data_dir, "sparse/0/points3D.ply"),
         )
