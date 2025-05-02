@@ -19,13 +19,13 @@ import numpy as np
 import torch
 
 from arguments import ModelParams
+from scene.cameras import Camera
 from scene.dataset_readers import (
     readBlenderPriorSceneInfo,
     readBlenderSceneInfo,
     readColmapSceneInfo,
 )
 from scene.gaussian_model import BasicPointCloud, GaussianModel
-from utils.camera_utils import camera_to_JSON, cameraList_from_camInfos
 from utils.system_utils import searchForMaxIteration
 
 
@@ -78,20 +78,6 @@ class Scene:
             :: model_params.keep_every_kth_view
         ]
 
-        if not self.loaded_iter:
-            # with open(scene_info.ply_path, 'rb') as src_file, open(os.path.join(self.model_path, "input.ply") , 'wb') as dest_file:
-            #     dest_file.write(src_file.read())
-            json_cams = []
-            camlist = []
-            if scene_info.test_cameras:
-                camlist.extend(scene_info.test_cameras)
-            if scene_info.train_cameras:
-                camlist.extend(scene_info.train_cameras)
-            for id, cam in enumerate(camlist):
-                json_cams.append(camera_to_JSON(id, cam))
-            with open(os.path.join(self.model_path, "cameras.json"), "w") as file:
-                json.dump(json_cams, file)
-
         if model_params.sparseness != -1:
             cameras = sorted(scene_info.train_cameras, key=lambda x: x.image_path)
             cameras = cameras[:50] + cameras[-50:]
@@ -111,13 +97,9 @@ class Scene:
 
         for resolution_scale in resolution_scales:
             print("Loading Training Cameras")
-            self.train_cameras[resolution_scale] = cameraList_from_camInfos(
-                scene_info.train_cameras, resolution_scale, model_params
-            )
+            self.train_cameras[resolution_scale] = scene_info.train_cameras
             print("Loading Test Cameras")
-            self.test_cameras[resolution_scale] = cameraList_from_camInfos(
-                scene_info.test_cameras, resolution_scale, model_params
-            )
+            self.test_cameras[resolution_scale] = scene_info.test_cameras
 
         print(f"I have {len(self.train_cameras)} cameras")
 

@@ -5,6 +5,7 @@ from pathlib import Path
 import cv2
 import numpy as np
 import torch
+from einops import rearrange
 
 from arguments import ModelParams
 from scene.gaussian_model import BasicPointCloud
@@ -65,7 +66,12 @@ class BlenderDataset:
                 metalness_image,
                 base_color_image,
                 brdf_image,
-            ) = torch.unbind(image_tensor, dim=0)
+            ) = tuple(
+                [
+                    self._resize_image_tensor(x)
+                    for x in torch.unbind(image_tensor, dim=0)
+                ]
+            )
         else:
             image = self._get_buffer(frame_name, "render")
             diffuse_image = self._get_buffer(frame_name, "diffuse")
@@ -125,4 +131,19 @@ class BlenderDataset:
         assert os.path.exists(buffer_path), f"{buffer_name} not found at {buffer_path}"
         image = cv2.imread(buffer_path, cv2.IMREAD_UNCHANGED)
         image = torch.tensor(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
+        image = self._resize_image_tensor(image)
+        return image
+
+    def _resize_image_tensor(self, image):
+        height = image.shape[0]
+        width = image.shape[1]
+        aspect_ratio = width / height
+        resolution = self.model_params.resolution
+        image = rearrange(image, "h w c -> 1 c h w")
+        image = torch.nn.functional.interpolate(
+            image.float(),
+            (resolution, int(resolution * aspect_ratio)),
+            mode="area",
+        ).half()
+        image = rearrange(image, "1 c h w -> h w c")
         return image

@@ -10,7 +10,6 @@
 #
 
 import os
-from copy import deepcopy
 from dataclasses import dataclass
 
 import numpy as np
@@ -23,18 +22,20 @@ from scene.dataset.points_utils import get_point_cloud, make_random_point_cloud
 from scene.gaussian_model import BasicPointCloud
 from utils.graphics_utils import getWorld2View2
 
+from .cameras import Camera
+
 
 @dataclass
 class SceneInfo:
     point_cloud: BasicPointCloud
     extra_point_cloud: BasicPointCloud
-    train_cameras: list
-    test_cameras: list
+    train_cameras: list[Camera]
+    test_cameras: list[Camera]
     nerf_normalization: dict
     ply_path: str
 
 
-def getNerfppNorm(cam_info):
+def getNerfppNorm(cameras: list[Camera]) -> dict:
     def get_center_and_diag(cam_centers):
         cam_centers = np.hstack(cam_centers)
         avg_cam_center = np.mean(cam_centers, axis=1, keepdims=True)
@@ -45,7 +46,7 @@ def getNerfppNorm(cam_info):
 
     cam_centers = []
 
-    for cam in cam_info:
+    for cam in cameras:
         W2C = getWorld2View2(cam.R, cam.T)
         C2W = np.linalg.inv(W2C)
         cam_centers.append(C2W[:3, 3:4])
@@ -68,13 +69,11 @@ def read_dataset(dataset, num_workers=16):
         collate_fn=lambda x: x,
         persistent_workers=False if "NO_WORKERS" in os.environ else True,
     )
-    cam_infos = []
+    cameras = []
     for cam_info_batch in tqdm(dataloader):
-        # Use deepcopy to avoid too many open files error
-        cam_info = deepcopy(cam_info_batch[0])
-        cam_infos.append(cam_info)
-        del cam_info_batch
-    return cam_infos
+        camera = Camera.from_cam_info(cam_info_batch[0])
+        cameras.append(camera)
+    return cameras
 
 
 def readColmapSceneInfo(model_params: ModelParams, data_dir: str) -> SceneInfo:
@@ -94,16 +93,16 @@ def readColmapSceneInfo(model_params: ModelParams, data_dir: str) -> SceneInfo:
         split="test",
     )
     print("Reading Training Transforms")
-    train_cam_infos = read_dataset(train_dataset)
+    train_cameras = read_dataset(train_dataset)
     print("Reading Test Transforms")
-    test_cam_infos = read_dataset(test_dataset)
+    test_cameras = read_dataset(test_dataset)
 
     scene_info = SceneInfo(
         point_cloud=point_cloud,
         extra_point_cloud=extra_point_cloud,
-        train_cameras=train_cam_infos,
-        test_cameras=test_cam_infos,
-        nerf_normalization=getNerfppNorm(train_cam_infos),
+        train_cameras=train_cameras,
+        test_cameras=test_cameras,
+        nerf_normalization=getNerfppNorm(train_cameras),
         ply_path=os.path.join(data_dir, "sparse/0/points3D.ply"),
     )
     return scene_info
@@ -126,16 +125,16 @@ def readBlenderSceneInfo(model_params: ModelParams, data_dir: str) -> SceneInfo:
         split="test",
     )
     print("Reading Training Transforms")
-    train_cam_infos = read_dataset(train_dataset)
+    train_cameras = read_dataset(train_dataset)
     print("Reading Test Transforms")
-    test_cam_infos = read_dataset(test_dataset)
+    test_cameras = read_dataset(test_dataset)
 
     scene_info = SceneInfo(
         point_cloud=point_cloud,
         extra_point_cloud=extra_point_cloud,
-        train_cameras=train_cam_infos,
-        test_cameras=test_cam_infos,
-        nerf_normalization=getNerfppNorm(train_cam_infos),
+        train_cameras=train_cameras,
+        test_cameras=test_cameras,
+        nerf_normalization=getNerfppNorm(train_cameras),
         ply_path=os.path.join(data_dir, "sparse/0/points3D.ply"),
     )
     return scene_info
@@ -145,46 +144,29 @@ def readBlenderPriorSceneInfo(model_params: ModelParams, data_dir: str) -> Scene
     point_cloud = get_point_cloud(data_dir)
     extra_point_cloud = make_random_point_cloud(model_params)
 
-    if "PRIOR_DATASET_TRAIN_ONLY" in os.environ:
-        train_dataset = BlenderPriorDataset(
-            model_params, data_dir, point_cloud, split="train", dirname="priors"
-        )
-        train_cam_infos = read_dataset(train_dataset)
-
-        scene_info = SceneInfo(
-            point_cloud=point_cloud,
-            extra_point_cloud=extra_point_cloud,
-            train_cameras=train_cam_infos,
-            test_cameras=train_cam_infos,  #!!!
-            nerf_normalization=getNerfppNorm(train_cam_infos),
-            ply_path=os.path.join(data_dir, "sparse/0/points3D.ply"),
-        )
-
-        return scene_info
-    else:
-        train_dataset = BlenderPriorDataset(
-            model_params,
-            data_dir,
-            point_cloud,
-            split="train",
-        )
-        test_dataset = BlenderPriorDataset(
-            model_params,
-            data_dir,
-            point_cloud,
-            split="test",
-        )
-        print("Reading Training Transforms")
-        train_cam_infos = read_dataset(train_dataset)
-        print("Reading Test Transforms")
-        test_cam_infos = read_dataset(test_dataset)
+    train_dataset = BlenderPriorDataset(
+        model_params,
+        data_dir,
+        point_cloud,
+        split="train",
+    )
+    test_dataset = BlenderPriorDataset(
+        model_params,
+        data_dir,
+        point_cloud,
+        split="test",
+    )
+    print("Reading Training Transforms")
+    train_cameras = read_dataset(train_dataset)
+    print("Reading Test Transforms")
+    test_cameras = read_dataset(test_dataset)
 
     scene_info = SceneInfo(
         point_cloud=point_cloud,
         extra_point_cloud=extra_point_cloud,
-        train_cameras=train_cam_infos,
-        test_cameras=test_cam_infos,
-        nerf_normalization=getNerfppNorm(train_cam_infos),
+        train_cameras=train_cameras,
+        test_cameras=test_cameras,
+        nerf_normalization=getNerfppNorm(train_cameras),
         ply_path=os.path.join(data_dir, "sparse/0/points3D.ply"),
     )
     return scene_info

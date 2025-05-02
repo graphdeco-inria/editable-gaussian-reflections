@@ -36,10 +36,7 @@ class BlenderPriorDataset:
         self.data_dir = data_dir
         self.point_cloud = point_cloud
         self.split = split
-        if "PRIOR_DATASET_TRAIN_ONLY" in os.environ:
-            self.size = (1002, 753)  # Hardcoded to match blender for now
-        else:
-            self.size = (1536, 1024)  # Hardcoded to match blender for now
+
         self.dirname = split if dirname is None else dirname
         self.buffers_dir = os.path.join(self.data_dir, self.dirname)
         transform_path = os.path.join(data_dir, f"transforms_{split}.json")
@@ -142,7 +139,13 @@ class BlenderPriorDataset:
     def _get_buffer(self, frame_name: str, buffer_name: str):
         file_name = frame_name.split("/")[-1]
         buffer_path = os.path.join(self.buffers_dir, buffer_name, file_name + ".png")
-        buffer_image = Image.open(buffer_path).resize(self.size)
+
+        buffer_image = Image.open(buffer_path)
+        buffer_height = self.model_params.resolution
+        buffer_width = int(
+            buffer_height * (buffer_image.size[0] / buffer_image.size[1])
+        )
+        buffer_image = buffer_image.resize((buffer_width, buffer_height))
         buffer = from_pil_image(buffer_image)
 
         if buffer_name in ["image", "irradiance", "diffuse", "glossy"]:
