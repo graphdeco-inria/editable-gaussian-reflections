@@ -61,11 +61,11 @@ class ColmapDataset:
         if model_params.eval:
             if split == "train":
                 self.keys = [
-                    key for idx, key in enumerate(keys) if idx % self.llffhold != 0
+                    key for i, key in enumerate(keys) if i % self.llffhold != 0
                 ]
             else:
                 self.keys = [
-                    key for idx, key in enumerate(keys) if idx % self.llffhold == 0
+                    key for i, key in enumerate(keys) if i % self.llffhold == 0
                 ]
         else:
             if split == "train":

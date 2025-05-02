@@ -39,6 +39,8 @@ def test_blender_prior_dataset():
 
     for scene_name in tqdm(scene_list):
         model_params = ModelParams(parser=argparse.ArgumentParser())
+        model_params.resolution = 1024
+
         data_dir = f"data/renders/{scene_name}"
         point_cloud = get_point_cloud(data_dir)
         dataset0 = BlenderDataset(model_params, data_dir, point_cloud)
