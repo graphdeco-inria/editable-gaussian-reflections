@@ -175,7 +175,14 @@ class ColmapDataset:
     def _get_buffer(self, frame_name: str, buffer_name: str):
         file_name = frame_name.split("/")[-1]
         buffer_path = os.path.join(self.buffers_dir, buffer_name, file_name + ".png")
-        buffer = from_pil_image(Image.open(buffer_path))
+
+        buffer_image = Image.open(buffer_path)
+        buffer_height = self.model_params.resolution
+        buffer_width = int(
+            buffer_height * (buffer_image.size[0] / buffer_image.size[1])
+        )
+        buffer_image = buffer_image.resize((buffer_width, buffer_height))
+        buffer = from_pil_image(buffer_image)
 
         if buffer_name in ["image", "irradiance", "diffuse", "glossy"]:
             buffer = untonemap(buffer)

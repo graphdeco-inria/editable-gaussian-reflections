@@ -128,6 +128,30 @@ class Camera(nn.Module):
 
         self.update()
 
+    @classmethod
+    def from_cam_info(cls, cam_info):
+        return cls(
+            colmap_id=cam_info.uid,
+            R=cam_info.R,
+            T=cam_info.T,
+            FoVx=cam_info.FovX,
+            FoVy=cam_info.FovY,
+            image=cam_info.image,
+            gt_alpha_mask=None,
+            image_name=cam_info.image_name,
+            uid=cam_info.uid,
+            data_device="cuda",
+            diffuse_image=cam_info.diffuse_image.moveaxis(-1, 0),
+            glossy_image=cam_info.glossy_image.moveaxis(-1, 0),
+            position_image=cam_info.position_image.moveaxis(-1, 0),
+            normal_image=cam_info.normal_image.moveaxis(-1, 0),
+            roughness_image=cam_info.roughness_image.moveaxis(-1, 0),
+            metalness_image=cam_info.metalness_image.moveaxis(-1, 0),
+            base_color_image=cam_info.base_color_image.moveaxis(-1, 0),
+            brdf_image=cam_info.brdf_image.moveaxis(-1, 0),
+            specular_image=cam_info.specular_image.moveaxis(-1, 0),
+        )
+
     @property
     def original_image(self):
         return self._original_image.float().cuda()
