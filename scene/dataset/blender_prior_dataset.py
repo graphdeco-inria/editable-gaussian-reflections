@@ -37,7 +37,7 @@ class BlenderPriorDataset:
         self.point_cloud = point_cloud
         self.split = split
         if "PRIOR_DATASET_TRAIN_ONLY" in os.environ:
-            self.size = (1002, 753)  # Hardcoded to match blender for now
+            self.size = (1002, 753)  # Hardcoded to match colmap for now
         else:
             self.size = (1536, 1024)  # Hardcoded to match blender for now
         self.dirname = split if dirname is None else dirname
@@ -115,6 +115,48 @@ class BlenderPriorDataset:
         depth_image = depth_image * a + b
         position_image = transform_depth_to_position_image(depth_image, fovx, fovy)
         position_image = transform_points(position_image, c2w_tensor)
+        
+        if "ABLATION" in os.environ:
+            resolution = image.shape[0]
+            scene_name = os.path.basename(self.data_dir).replace("_128", "").replace("_256", "").replace("_512", "").replace("_768", "")
+            assert int(image_name.split("_")[-1]) == idx
+            (
+                rendered_image,
+                rendered_diffuse_image,
+                rendered_glossy_image,
+                rendered_normal_image,
+                rendered_position_image,
+                rendered_roughness_image,
+                rendered_specular_image,
+                rendered_metalness_image,
+                rendered_base_color_image,
+                rendered_brdf_image,
+            ) = torch.load(f"cache/{resolution}/{scene_name}/{self.split}/render/{idx:04d}.pt".replace("/render/", "/"))
+            
+            ablated_passes = os.environ["ABLATION"].split(",")
+            
+            if "image" not in ablated_passes:
+                image = rendered_image
+            if "diffuse" not in ablated_passes:
+                diffuse_image = rendered_diffuse_image
+            if "glossy" not in ablated_passes:
+                glossy_image = rendered_glossy_image
+            if "normals" not in ablated_passes and "normal" not in ablated_passes:
+                normal_image = rendered_normal_image
+            if "position" not in ablated_passes:
+                position_image = rendered_position_image
+            if "roughness" not in ablated_passes:
+                roughness_image = rendered_roughness_image
+            if "specular" not in ablated_passes:
+                specular_image = rendered_specular_image
+            if "metalness" not in ablated_passes:
+                metalness_image = rendered_metalness_image
+            if "base_color" not in ablated_passes:
+                base_color_image = rendered_base_color_image
+            else:
+                base_color_image = albedo_image
+        else:
+            base_color_image = albedo_image
 
         cam_info = CameraInfo(
             uid=idx,
@@ -127,13 +169,14 @@ class BlenderPriorDataset:
             image_name=image_name,
             width=width,
             height=height,
+            #
             diffuse_image=diffuse_image,
             glossy_image=glossy_image,
             position_image=position_image,
             normal_image=normal_image,
             roughness_image=roughness_image,
             metalness_image=metalness_image,
-            base_color_image=albedo_image,
+            base_color_image=base_color_image,
             brdf_image=brdf_image,
             specular_image=specular_image,
         )
@@ -142,9 +185,8 @@ class BlenderPriorDataset:
     def _get_buffer(self, frame_name: str, buffer_name: str):
         file_name = frame_name.split("/")[-1]
         buffer_path = os.path.join(self.buffers_dir, buffer_name, file_name + ".png")
-        buffer_image = Image.open(buffer_path).resize(self.size)
+        buffer_image = Image.open(buffer_path)
         buffer = from_pil_image(buffer_image)
-
         if buffer_name in ["image", "irradiance", "diffuse", "glossy"]:
             buffer = untonemap(buffer)
         elif buffer_name == "albedo":

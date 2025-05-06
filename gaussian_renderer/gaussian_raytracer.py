@@ -49,6 +49,7 @@ class GaussianRaytracer:
         os.environ["SPECULAR_LOSS_WEIGHT"] = str(pc.model_params.specular_loss_weight)
         os.environ["ALBEDO_LOSS_WEIGHT"] = str(pc.model_params.albedo_loss_weight)
         os.environ["METALNESS_LOSS_WEIGHT"] = str(pc.model_params.metalness_loss_weight)
+        os.environ["REGULAR_LOSS_WEIGHT"] = str(pc.model_params.regular_loss_weight)
 
         # self.cuda_module.configure(pc.model_params.t_thresh, pc.model_params.a_thresh, pc.model_params.exp_power)
         self.cuda_module.set_losses(True)
@@ -247,7 +248,7 @@ class GaussianRaytracer:
         if torch.is_grad_enabled() or force_update_bvh:
             self.cuda_module.update_bvh()
         self.cuda_module.raytrace()
-
+        
         if torch.is_grad_enabled():
             self._import_param_gradients()
 

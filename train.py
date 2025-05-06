@@ -611,7 +611,7 @@ parser.add_argument(
     default=[4, 6_000, 12_000, 18_000, 24_000, 32_000],
 )
 parser.add_argument(
-    "--save_iterations", nargs="+", type=int, default=[4, 6_000, 12_000, 18_000, 24_000, 32_000]
+    "--save_iterations", nargs="+", type=int, default=[4, 6_000, 12_000, 16_000, 24_000, 32_000]
 )
 parser.add_argument("--quiet", action="store_true")
 parser.add_argument("--checkpoint_iterations", nargs="+", type=int, default=[])
@@ -662,6 +662,8 @@ gaussians = GaussianModel(model_params)
 scene = Scene(model_params, gaussians)
 
 gaussians.training_setup(opt_params)
+
+
 
 first_iter = 0
 if args.start_checkpoint:
@@ -779,6 +781,8 @@ for iteration in tqdm(
 
     with torch.no_grad():
         # Log and save
+        NOW = time.time()
+
         training_report(tb_writer, iteration)
         torch.cuda.synchronize() # not sure if needed
 
@@ -860,7 +864,7 @@ for iteration in tqdm(
                 minutes, seconds = divmod(int(delta), 60)
                 timestamp = f"{minutes:02}:{seconds:02}"
                 print("Elapsed time: ", timestamp)
-                f.write(f"{iteration:5}: {timestamp}\n")
+                f.write("\n[ITER {}] elapsed {}".format(iteration, time.strftime("%H:%M:%S", time.gmtime(NOW - start))))
 
             # Save the average and std opacity
             with open(os.path.join(args.model_path, "opacity.txt"), "a") as f:
@@ -906,7 +910,7 @@ for iteration in tqdm(
                 )
 
             with open(os.path.join(args.model_path, "num_gaussians.txt"), "a") as f:
-                f.write(f"{iteration:5}: {gaussians.get_xyz.shape[0]}\n")
+                f.write("\n[ITER {}] # {}".format(iteration, scene.gaussians.get_xyz.shape[0]))
                 print("Number of gaussians: ", gaussians.get_xyz.shape[0])
 
         if iteration in args.save_iterations:
@@ -1027,9 +1031,6 @@ for iteration in tqdm(
                     )
                 )
 
-        if "PRUNE_USELESS_GAUSSIANS" in os.environ:
-            if i % 1000 == 0:
-                breakpoint()
 
         if iteration in args.checkpoint_iterations:
             print("\n[ITER {}] Saving Checkpoint".format(iteration))
@@ -1047,6 +1048,11 @@ for iteration in tqdm(
         if not "SKIP_INIT_FARFIELD" in os.environ:
             torch.cuda.synchronize()
             gaussians.add_farfield_points(scene)
+        raytracer.rebuild_bvh()
+        torch.cuda.synchronize()
+
+    if iteration == 1 and (model_params.no_bounces_until_iter in [-1, 0] or model_params.no_bounces_until_iter > 900_000):
+        gaussians.add_farfield_points(scene)
         raytracer.rebuild_bvh()
         torch.cuda.synchronize()
 

@@ -65,7 +65,6 @@ class Scene:
 
         data_dir = model_params.source_path
         if os.path.exists(os.path.join(data_dir, "transforms_train.json")):
-            
             if os.path.isdir(os.path.join(data_dir, "train", "preview")) or os.path.isdir(os.path.join(data_dir, "priors", "preview")):
                 scene_info = readBlenderPriorSceneInfo(model_params, data_dir)
             else:
@@ -118,7 +117,7 @@ class Scene:
                 scene_info.test_cameras, resolution_scale, model_params
             )
 
-        print(f"I have {len(self.train_cameras)} cameras")
+        print(f"I have {len(self.train_cameras[resolution_scales[0]])} cameras")
 
         self.autoadjust_zplanes()
 

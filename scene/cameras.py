@@ -17,6 +17,7 @@ from torch import nn
 
 from scene.tonemapping import *
 from utils.graphics_utils import getProjectionMatrix, getWorld2View2
+from torchvision.utils import save_image
 
 
 class Camera(nn.Module):
@@ -55,6 +56,9 @@ class Camera(nn.Module):
 
         self.image_width = diffuse_image.shape[2]
         self.image_height = diffuse_image.shape[1]
+
+        if "CLAMP_BASE_COLOR" in os.environ:
+            base_color_image.clamp_(0, 1)
 
         image_holding_device = os.getenv("IMAGE_HOLDING_DEVICE", "cuda")
         
@@ -100,6 +104,7 @@ class Camera(nn.Module):
         if "ZERO_ROUGHNESS" in os.environ: 
             self._roughness_image = self._roughness_image * 0
         self._brdf_image = brdf_image.half().to(image_holding_device)
+        
         self._F0_image = (
             (
                 (1.0 - metalness_image)

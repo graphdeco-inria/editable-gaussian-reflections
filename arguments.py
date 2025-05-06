@@ -100,6 +100,7 @@ class ModelParams(ParamGroup):
         self.num_farfield_init_points = 25_000  # 100_000
 
         self.min_opacity = 0.005
+        self.min_weight = 1e-10
 
         self.znear_init_pruning = True
         self.znear_densif_pruning = True
@@ -130,13 +131,14 @@ class ModelParams(ParamGroup):
         self.warmup_diffuse_loss_weight = 10000.0
         self.diffuse_loss_weight = 5.0
         self.glossy_loss_weight = 0.001 
-        self.normal_loss_weight = 1.0
-        self.position_loss_weight = 1.0
+        self.normal_loss_weight = 5.0
+        self.position_loss_weight = 5.0
         self.f0_loss_weight = 1.0
         self.roughness_loss_weight = 1.0
         self.specular_loss_weight = 1.0
         self.albedo_loss_weight = 1.0
         self.metalness_loss_weight = 1.0
+        self.regular_loss_weight = 0.0
 
         if "ONLY_DIFFUSE_LOSS" in os.environ:
             self.diffuse_loss_weight = 5.0
@@ -165,7 +167,7 @@ class ModelParams(ParamGroup):
         self.sparseness = -1
         self.warmup_until_iter = 0
         self.no_bounces_until_iter = 6_000
-        self.max_one_bounce_until_iter = 12_000 
+        self.max_one_bounce_until_iter = 12_000
         self.diffuse_loss_weight_after_rebalance = 5.0
         self.glossy_loss_weight_after_rebalance = 5.0
         self.rebalance_losses_at_iter = 18_000 

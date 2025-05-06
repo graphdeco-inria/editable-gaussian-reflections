@@ -9,13 +9,12 @@ import numpy as np
 from tqdm import tqdm
 from PIL import Image 
 
+assert len(sys.argv) == 3, "Usage: python prep_dataset_cache.py renders/shiny_office 256"
+
+
 path = sys.argv[1]
-
-if len(sys.argv) > 2:
-    target_height = int(sys.argv[2])
-else: 
-    target_height = None
-
+target_height = int(sys.argv[2])
+    
 input_passes = [
     "render",
     "diffuse",
@@ -28,7 +27,6 @@ input_passes = [
     "base_color",
     "glossy_brdf",
 ]
-
 
 def resize_by_height(image: torch.Tensor, target_height: int) -> torch.Tensor:
     w, h = image.shape[1], image.shape[0]
@@ -58,7 +56,7 @@ def imread(image_path, render_pass_name):
 
 
 assert path.startswith("renders/")
-cache_path = path.replace("renders/", f"cache_{target_height}/") if target_height is not None else path.replace("renders/", "cache/")
+cache_path = path.replace("renders/", f"cache/{target_height}/") if target_height is not None else path.replace("renders/", "cache/")
 
 if WRITE := True:
     for split in ["train", "test"]:

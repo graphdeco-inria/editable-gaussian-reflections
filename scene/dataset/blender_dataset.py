@@ -26,10 +26,11 @@ class BlenderDataset:
         self.point_cloud = point_cloud
         self.split = split
 
-        if os.path.exists(data_dir.replace("/renders/", f"/cache_{model_params.resolution}/")):
-            self.cache_dir = data_dir.replace("/renders/", f"/cache_{model_params.resolution}/")
+        downsampled_cache_dir = data_dir.replace("/renders/", f"/cache/{model_params.resolution}/")
+        if os.path.exists(downsampled_cache_dir):
+            self.cache_dir = downsampled_cache_dir
         else:
-            self.cache_dir = data_dir.replace("/renders/", "/cache/")
+            self.cache_dir = data_dir.replace("/renders/", "/cache/fullres/")
         transform_path = os.path.join(data_dir, f"transforms_{split}.json")
         with open(transform_path) as json_file:
             self.contents = json.load(json_file)
