@@ -30,16 +30,12 @@ class BlenderPriorDataset:
         data_dir: str,
         point_cloud: BasicPointCloud,
         split: str = "train",
-        dirname: str = None
+        dirname: str = None,
     ):
         self.model_params = model_params
         self.data_dir = data_dir
         self.point_cloud = point_cloud
         self.split = split
-        if "PRIOR_DATASET_TRAIN_ONLY" in os.environ:
-            self.size = (1002, 753)  # Hardcoded to match colmap for now
-        else:
-            self.size = (1536, 1024)  # Hardcoded to match blender for now
         self.dirname = split if dirname is None else dirname
         self.buffers_dir = os.path.join(self.data_dir, self.dirname)
         transform_path = os.path.join(data_dir, f"transforms_{split}.json")
@@ -98,7 +94,7 @@ class BlenderPriorDataset:
             R = w2c[:3, :3]
         else:
             R = np.transpose(w2c[:3, :3])
-        
+
         T = w2c[:3, 3]
 
         # Postprocess normal_image

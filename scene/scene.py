@@ -19,13 +19,13 @@ import numpy as np
 import torch
 
 from arguments import ModelParams
+from scene.cameras import Camera
 from scene.dataset_readers import (
     readBlenderPriorSceneInfo,
     readBlenderSceneInfo,
     readColmapSceneInfo,
 )
 from scene.gaussian_model import BasicPointCloud, GaussianModel
-from utils.camera_utils import camera_to_JSON, cameraList_from_camInfos
 from utils.system_utils import searchForMaxIteration
 
 
@@ -65,7 +65,9 @@ class Scene:
 
         data_dir = model_params.source_path
         if os.path.exists(os.path.join(data_dir, "transforms_train.json")):
-            if os.path.isdir(os.path.join(data_dir, "train", "preview")) or os.path.isdir(os.path.join(data_dir, "priors", "preview")):
+            if os.path.isdir(
+                os.path.join(data_dir, "train", "preview")
+            ) or os.path.isdir(os.path.join(data_dir, "priors", "preview")):
                 scene_info = readBlenderPriorSceneInfo(model_params, data_dir)
             else:
                 scene_info = readBlenderSceneInfo(model_params, data_dir)
@@ -75,20 +77,6 @@ class Scene:
         scene_info.train_cameras = scene_info.train_cameras[
             :: model_params.keep_every_kth_view
         ]
-
-        if not self.loaded_iter:
-            # with open(scene_info.ply_path, 'rb') as src_file, open(os.path.join(self.model_path, "input.ply") , 'wb') as dest_file:
-            #     dest_file.write(src_file.read())
-            json_cams = []
-            camlist = []
-            if scene_info.test_cameras:
-                camlist.extend(scene_info.test_cameras)
-            if scene_info.train_cameras:
-                camlist.extend(scene_info.train_cameras)
-            for id, cam in enumerate(camlist):
-                json_cams.append(camera_to_JSON(id, cam))
-            with open(os.path.join(self.model_path, "cameras.json"), "w") as file:
-                json.dump(json_cams, file)
 
         if model_params.sparseness != -1:
             cameras = sorted(scene_info.train_cameras, key=lambda x: x.image_path)
@@ -109,19 +97,16 @@ class Scene:
 
         for resolution_scale in resolution_scales:
             print("Loading Training Cameras")
-            self.train_cameras[resolution_scale] = cameraList_from_camInfos(
-                scene_info.train_cameras, resolution_scale, model_params
-            )
+            self.train_cameras[resolution_scale] = scene_info.train_cameras
             print("Loading Test Cameras")
-            self.test_cameras[resolution_scale] = cameraList_from_camInfos(
-                scene_info.test_cameras, resolution_scale, model_params
-            )
+            self.test_cameras[resolution_scale] = scene_info.test_cameras
 
         print(f"I have {len(self.train_cameras[resolution_scales[0]])} cameras")
 
         self.autoadjust_zplanes()
 
         import sys
+
         sys.path.append(gaussians.model_params.raytracer_version)
         import raytracer_config
 
@@ -155,7 +140,6 @@ class Scene:
         #         normals=scene_info.point_cloud.normals[~points_to_prune],
         #     )
 
-
         if self.loaded_iter:
             self.gaussians.load_ply(
                 os.path.join(
@@ -176,9 +160,11 @@ class Scene:
 
         self.gaussians.scene = self
 
-    def select_points_to_prune_near_cameras(self, points, scales, sigma=int(os.getenv("PRUNING_SIGMA", 0))):
+    def select_points_to_prune_near_cameras(
+        self, points, scales, sigma=int(os.getenv("PRUNING_SIGMA", 0))
+    ):
         # Delete all gaussians that would intesect a sphere around each camera at 3 stddev
-        # The sphere radius is determined by the distance to the closest point 
+        # The sphere radius is determined by the distance to the closest point
 
         points_to_prune = torch.zeros(points.shape[0], dtype=torch.bool, device="cuda")
 
@@ -194,9 +180,11 @@ class Scene:
                 T = camera.camera_center
             else:
                 T = torch.from_numpy(camera.camera_center)
-            
+
             points_dist_to_camera = (points - T).norm(dim=1)
-            too_close = points_dist_to_camera - sigma * scales.amax(dim=1) < camera.znear
+            too_close = (
+                points_dist_to_camera - sigma * scales.amax(dim=1) < camera.znear
+            )
 
             points_to_prune |= too_close
 

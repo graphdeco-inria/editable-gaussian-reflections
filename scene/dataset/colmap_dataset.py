@@ -55,15 +55,17 @@ class ColmapDataset:
             self.cam_extrinsics = read_extrinsics_text(cameras_extrinsic_file)
             self.cam_intrinsics = read_intrinsics_text(cameras_intrinsic_file)
 
-        keys = list(sorted(list(self.cam_extrinsics.keys())))[:self.model_params.max_images]
+        keys = list(sorted(list(self.cam_extrinsics.keys())))[
+            : self.model_params.max_images
+        ]
         if model_params.eval:
             if split == "train":
                 self.keys = [
-                    key for idx, key in enumerate(keys) if idx % self.llffhold != 0
+                    key for i, key in enumerate(keys) if i % self.llffhold != 0
                 ]
             else:
                 self.keys = [
-                    key for idx, key in enumerate(keys) if idx % self.llffhold == 0
+                    key for i, key in enumerate(keys) if i % self.llffhold == 0
                 ]
         else:
             if split == "train":
@@ -188,7 +190,14 @@ class ColmapDataset:
     def _get_buffer(self, frame_name: str, buffer_name: str):
         file_name = frame_name.split("/")[-1]
         buffer_path = os.path.join(self.buffers_dir, buffer_name, file_name + ".png")
-        buffer = from_pil_image(Image.open(buffer_path))
+
+        buffer_image = Image.open(buffer_path)
+        buffer_height = self.model_params.resolution
+        buffer_width = int(
+            buffer_height * (buffer_image.size[0] / buffer_image.size[1])
+        )
+        buffer_image = buffer_image.resize((buffer_width, buffer_height))
+        buffer = from_pil_image(buffer_image)
 
         if buffer_name in ["image", "irradiance", "diffuse", "glossy"]:
             buffer = untonemap(buffer)

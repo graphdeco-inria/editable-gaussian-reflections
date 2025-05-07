@@ -61,7 +61,7 @@ class Camera(nn.Module):
             base_color_image.clamp_(0, 1)
 
         image_holding_device = os.getenv("IMAGE_HOLDING_DEVICE", "cuda")
-        
+
         EXPOSURE = float(os.getenv("EXPOSURE", 3.5))
         if "TONEMAP_INPUT" in os.environ:
             # *** optimized as tonemapped values, will need to be inverse the tonemapping before adding both passes
@@ -87,7 +87,7 @@ class Camera(nn.Module):
             self._diffuse_image = diffuse_image.half().to(image_holding_device)
             self._glossy_image = glossy_image.half().to(image_holding_device)
             self._original_image *= EXPOSURE
-            self._diffuse_image *= EXPOSURE 
+            self._diffuse_image *= EXPOSURE
             self._glossy_image *= EXPOSURE
 
             if "CLAMP_TARGETS" in os.environ:
@@ -101,7 +101,7 @@ class Camera(nn.Module):
         self._normal_image = normal_image.half().to(image_holding_device)
         self._position_image = position_image.half().to(image_holding_device)
         self._roughness_image = (roughness_image).half().to(image_holding_device)
-        if "ZERO_ROUGHNESS" in os.environ: 
+        if "ZERO_ROUGHNESS" in os.environ:
             self._roughness_image = self._roughness_image * 0
         self._brdf_image = brdf_image.half().to(image_holding_device)
         
@@ -132,6 +132,30 @@ class Camera(nn.Module):
         self.T = T
 
         self.update()
+
+    @classmethod
+    def from_cam_info(cls, cam_info):
+        return cls(
+            colmap_id=cam_info.uid,
+            R=cam_info.R,
+            T=cam_info.T,
+            FoVx=cam_info.FovX,
+            FoVy=cam_info.FovY,
+            image=cam_info.image,
+            gt_alpha_mask=None,
+            image_name=cam_info.image_name,
+            uid=cam_info.uid,
+            data_device="cuda",
+            diffuse_image=cam_info.diffuse_image.moveaxis(-1, 0),
+            glossy_image=cam_info.glossy_image.moveaxis(-1, 0),
+            position_image=cam_info.position_image.moveaxis(-1, 0),
+            normal_image=cam_info.normal_image.moveaxis(-1, 0),
+            roughness_image=cam_info.roughness_image.moveaxis(-1, 0),
+            metalness_image=cam_info.metalness_image.moveaxis(-1, 0),
+            base_color_image=cam_info.base_color_image.moveaxis(-1, 0),
+            brdf_image=cam_info.brdf_image.moveaxis(-1, 0),
+            specular_image=cam_info.specular_image.moveaxis(-1, 0),
+        )
 
     @property
     def original_image(self):
