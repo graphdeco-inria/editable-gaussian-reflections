@@ -47,7 +47,6 @@ def render_set(
     start_event = torch.cuda.Event(enable_timing=True)
     end_event = torch.cuda.Event(enable_timing=True)
 
-    raytracer.rebuild_bvh()
     start_event.record()
     for idx, view in enumerate(tqdm(views, desc="Rendering progress")):
         package = render(view, raytracer, pipeline, background, force_update_bvh=True, targets_available=False)
@@ -59,8 +58,9 @@ def render_set(
     fps = len(views) / elapsed_sec
     print(f"{fps:.2f} FPS")
 
-    with open(os.path.join(model_path, "fps.txt"), "w") as f:
-        f.write(f"{fps:.2f}\n")
+    if "SKIP_WRITE" not in os.environ:
+        with open(os.path.join(model_path, "fps.txt"), "w") as f:
+            f.write(f"{fps:.2f}\n")
 
 
 @torch.no_grad()
@@ -145,7 +145,7 @@ if __name__ == "__main__":
     # Rendering args
     parser.add_argument("--iteration", default=-1, type=int)
     parser.add_argument("--train_views", action="store_true")
-    parser.add_argument("--skip_denoiser", action="store_true")
+    parser.add_argument("--skip_denoise", action="store_true")
     parser.add_argument("--quiet", action="store_true")
     parser.add_argument(
         "--modes",

@@ -91,8 +91,23 @@ class ColmapDataset:
         metalness_image = self._get_buffer(frame_name, "metalness")
         depth_image = self._get_buffer(frame_name, "depth")
         normal_image = self._get_buffer(frame_name, "normal")
-        specular_image = torch.zeros_like(image)
+        specular_image = torch.zeros_like(image) + 0.5
         brdf_image = torch.zeros_like(image)
+
+        roughness_image = self._get_buffer(frame_name, "roughness")
+        metalness_image = self._get_buffer(frame_name, "metalness")
+        if "REAL_SCENE" in os.environ:
+            if "SKIP_THRESHOLD_METALNESS" not in os.environ:
+                metal_mask = metalness_image > 0.4
+                metalness_image[metal_mask] = 1.0
+                metalness_image[~metal_mask] = 0.0
+                if "SKIP_MIRROR_METALS" not in os.environ:
+                    roughness_image *= (1.0 - metalness_image)
+                if "SKIP_WHITE_METALS" not in os.environ:
+                    albedo_image[metal_mask] = 1.0
+                    diffuse_image[metal_mask] = 0.0
+            if "SKIP_THRESHOLD_ROUGHNESS" not in os.environ:
+                roughness_image[roughness_image < 0.25] = 0.0
 
         # Camera intrinsics
         height = intr.height

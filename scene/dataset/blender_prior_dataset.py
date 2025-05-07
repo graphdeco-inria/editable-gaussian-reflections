@@ -64,10 +64,16 @@ class BlenderPriorDataset:
         diffuse_image = self._get_buffer(frame_name, "diffuse")
         glossy_image = self._get_buffer(frame_name, "glossy")
         roughness_image = self._get_buffer(frame_name, "roughness")
+        if "SKIP_THRESHOLD_ROUGHNESS" not in os.environ:
+            roughness_image[roughness_image < 0.25] = 0.0
         metalness_image = self._get_buffer(frame_name, "metalness")
+        if "SKIP_THRESHOLD_METALNESS" not in os.environ:
+            mask = metalness_image > 0.4
+            metalness_image[mask] = 1.0
+            metalness_image[~mask] = 0.0
         depth_image = self._get_buffer(frame_name, "depth")
         normal_image = self._get_buffer(frame_name, "normal")
-        specular_image = torch.zeros_like(image)
+        specular_image = torch.zeros_like(image) + 0.5
         brdf_image = torch.zeros_like(image)
 
         # Camera intrinsics
