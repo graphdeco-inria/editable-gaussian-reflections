@@ -683,8 +683,10 @@ viewpoint_stack = scene.getTrainCameras().copy()
 raytracer = GaussianRaytracer(
     gaussians, viewpoint_stack[0].image_width, viewpoint_stack[0].image_height
 )
-# raytracer.cuda_module.num_samples.fill_(model_params.num_samples)
 
+if "KEYVIEW" in os.environ:
+    keyview = [x for x in scene.getTrainCameras() if x.colmap_id == int(os.environ["KEYVIEW"])][0]
+# raytracer.cuda_module.num_samples.fill_(model_params.num_samples)
 
 if args.viewer:
     from gaussianviewer import GaussianViewer
@@ -718,6 +720,7 @@ for iteration in tqdm(
     total=opt_params.iterations,
     initial=first_iter,
 ):
+
     iter_start.record()
 
     if args.viewer:
@@ -727,6 +730,9 @@ for iteration in tqdm(
     if not viewpoint_stack:
         viewpoint_stack = scene.getTrainCameras().copy()
     viewpoint_cam = viewpoint_stack.pop(randint(0, len(viewpoint_stack) - 1))
+
+    if "KEYVIEW" in os.environ and random.random() < 0.5:
+        viewpoint_cam = keyview
 
     bg = torch.rand((3), device="cuda") if opt_params.random_background else background
 
