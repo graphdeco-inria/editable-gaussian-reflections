@@ -16,6 +16,7 @@ from utils.depth_utils import (
     transform_depth_to_position_image,
     transform_normals_to_world,
     transform_points,
+    transform_distance_to_position_image
 )
 from utils.graphics_utils import focal2fov, fov2focal
 
@@ -62,11 +63,14 @@ class BlenderPriorDataset:
         roughness_image = self._get_buffer(frame_name, "roughness")
         if "SKIP_THRESHOLD_ROUGHNESS" not in os.environ:
             roughness_image[roughness_image < 0.25] = 0.0
+            upsized_roughness = torch.nn.functional.interpolate(roughness_image.moveaxis(-1, 0)[None], scale_factor=4, mode='bicubic', antialias=True)
+            upsized_roughness[upsized_roughness < 0.25] = 0.0
+            roughness_image = torch.nn.functional.interpolate(upsized_roughness, scale_factor=1/4, mode="area")[0].moveaxis(0, -1)
         metalness_image = self._get_buffer(frame_name, "metalness")
         if "SKIP_THRESHOLD_METALNESS" not in os.environ:
-            mask = metalness_image > 0.4
-            metalness_image[mask] = 1.0
-            metalness_image[~mask] = 0.0
+            upsized_metal = torch.nn.functional.interpolate(metalness_image.moveaxis(-1, 0)[None], scale_factor=4, mode='bicubic', antialias=True)
+            metalness_image = torch.nn.functional.interpolate((upsized_metal > 0.4).float(), scale_factor=1/4, mode="area")[0].moveaxis(0, -1)
+            
         depth_image = self._get_buffer(frame_name, "depth")
         normal_image = self._get_buffer(frame_name, "normal")
         specular_image = torch.zeros_like(image) + 0.5
@@ -85,15 +89,11 @@ class BlenderPriorDataset:
         # NeRF 'transform_matrix' is a camera-to-world transform
         c2w = np.array(frame["transform_matrix"])
         # change from OpenGL/Blender camera axes (Y up, Z back) to COLMAP (Y down, Z forward)
-        if "SKIP_FLIP" not in os.environ:
-            c2w[:3, 1:3] *= -1
+        c2w[:3, 1:3] *= -1
         # get the world-to-camera transform and set R, T
         w2c = np.linalg.inv(c2w)
         # R is stored transposed due to 'glm' in CUDA code
-        if "SKIP_T" in os.environ:
-            R = w2c[:3, :3]
-        else:
-            R = np.transpose(w2c[:3, :3])
+        R = np.transpose(w2c[:3, :3])
 
         T = w2c[:3, 3]
 
@@ -115,8 +115,25 @@ class BlenderPriorDataset:
             depth_points_image[depth_points_image != 0],
         )
         depth_image = depth_image * a + b
+        # camera_center = torch.tensor([0.007455553859472275, -1.6538097858428955, 0.9788005352020264])
         position_image = transform_depth_to_position_image(depth_image, fovx, fovy)
         position_image = transform_points(position_image, c2w_tensor)
+
+        # def save_position_image_to_ply(position_image, path):
+        #     import numpy as np
+        #     from plyfile import PlyData, PlyElement
+
+        #     H, W, _ = position_image.shape
+        #     points = position_image.reshape(-1, 3).astype(np.float32)
+
+        #     verts = np.array(
+        #         [(p[0], p[1], p[2]) for p in points],
+        #         dtype=[('x', 'f4'), ('y', 'f4'), ('z', 'f4')]
+        #     )
+
+        #     ply = PlyData([PlyElement.describe(verts, 'vertex')], text=True)
+        #     ply.write(path)
+        # save_position_image_to_ply(position_image.numpy(), "distance_converted2.ply")
         
         if "ABLATION" in os.environ:
             resolution = image.shape[0]
