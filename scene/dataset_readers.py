@@ -21,6 +21,7 @@ from scene.dataset import BlenderDataset, BlenderPriorDataset, ColmapDataset
 from scene.dataset.points_utils import get_point_cloud, make_random_point_cloud
 from scene.gaussian_model import BasicPointCloud
 from utils.graphics_utils import getWorld2View2
+from typing import List
 
 from .cameras import Camera
 
@@ -29,13 +30,13 @@ from .cameras import Camera
 class SceneInfo:
     point_cloud: BasicPointCloud
     extra_point_cloud: BasicPointCloud
-    train_cameras: list[Camera]
-    test_cameras: list[Camera]
+    train_cameras: List[Camera]
+    test_cameras: List[Camera]
     nerf_normalization: dict
     ply_path: str
 
 
-def getNerfppNorm(cameras: list[Camera]) -> dict:
+def getNerfppNorm(cameras: List[Camera]) -> dict:
     def get_center_and_diag(cam_centers):
         cam_centers = np.hstack(cam_centers)
         avg_cam_center = np.mean(cam_centers, axis=1, keepdims=True)
