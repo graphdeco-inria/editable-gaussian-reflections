@@ -71,9 +71,9 @@ class BlenderPriorDataset:
             upsized_metal = torch.nn.functional.interpolate(metalness_image.moveaxis(-1, 0)[None], scale_factor=4, mode='bicubic', antialias=True)
             metalness_image = torch.nn.functional.interpolate((upsized_metal > 0.4).float(), scale_factor=1/4, mode="area")[0].moveaxis(0, -1)
             
-        depth_image = self._get_buffer(frame_name, "depth")
-        normal_image = self._get_buffer(frame_name, "normal")
         specular_image = torch.zeros_like(image) + 0.5
+        depth_image = self._get_buffer(frame_name, "depth_moge")
+        normal_image = self._get_buffer(frame_name, "normal_stable")
         brdf_image = torch.zeros_like(image)
 
         # Camera intrinsics
@@ -210,9 +210,9 @@ class BlenderPriorDataset:
             buffer = untonemap(buffer)
         elif buffer_name == "albedo":
             pass
-        elif buffer_name in ["roughness", "metalness", "depth"]:
+        elif buffer_name in ["roughness", "metalness", "depth", "depth_moge"]:
             buffer = repeat(buffer, "h w 1 -> h w 3")
-        elif buffer_name == "normal":
+        elif buffer_name in ["normal", "normal_stable"]:
             buffer = buffer * 2.0 - 1.0
         else:
             raise ValueError(f"Buffer name not recognized: {buffer_name}")

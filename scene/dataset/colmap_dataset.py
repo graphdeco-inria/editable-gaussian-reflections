@@ -89,11 +89,10 @@ class ColmapDataset:
         # irradiance_image = self._get_buffer(frame_name, "irradiance")
         diffuse_image = self._get_buffer(frame_name, "diffuse")
         glossy_image = self._get_buffer(frame_name, "glossy")
-        roughness_image = self._get_buffer(frame_name, "roughness")
-        metalness_image = self._get_buffer(frame_name, "metalness")
-        depth_image = self._get_buffer(frame_name, "depth")
-        normal_image = self._get_buffer(frame_name, "normal")
         specular_image = torch.zeros_like(image) + 0.5
+        
+        depth_image = self._get_buffer(frame_name, "depth_moge")
+        normal_image = self._get_buffer(frame_name, "normal_stable")
         brdf_image = torch.zeros_like(image)
 
         roughness_image = self._get_buffer(frame_name, "roughness")
@@ -207,9 +206,9 @@ class ColmapDataset:
             buffer = untonemap(buffer)
         elif buffer_name == "albedo":
             pass
-        elif buffer_name in ["roughness", "metalness", "depth"]:
+        elif buffer_name in ["roughness", "metalness", "depth", "depth_moge"]:
             buffer = repeat(buffer, "h w 1 -> h w 3")
-        elif buffer_name == "normal":
+        elif buffer_name in ["normal", "normal_stable"]:
             buffer = buffer * 2.0 - 1.0
         else:
             raise ValueError(f"Buffer name not recognized: {buffer_name}")
