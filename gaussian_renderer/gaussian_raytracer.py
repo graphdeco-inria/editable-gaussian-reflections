@@ -82,7 +82,7 @@ class GaussianRaytracer:
         torch.cuda.synchronize()  #!!! remove
 
     @torch.no_grad()
-    def _export_param_values(self, edits=None):
+    def _export_param_values(self):
         self.cuda_module.gaussian_scales.copy_(self.pc._get_scaling)
         self.cuda_module.gaussian_rotations.copy_(self.pc._get_rotation)
         self.cuda_module.gaussian_means.copy_(self.pc.get_xyz)
@@ -157,6 +157,7 @@ class GaussianRaytracer:
         target_diffuse=None,
         target_glossy=None,
         target_position=None,
+        target_depth=None,
         target_normal=None,
         target_roughness=None,
         target_f0=None,
@@ -190,7 +191,7 @@ class GaussianRaytracer:
                 self.pc.model_params.lod_max_world_size_blur,
             )
 
-            self._export_param_values(edits)
+            self._export_param_values()
 
             if target is not None:
                 self.cuda_module.target_rgb.copy_(target.moveaxis(0, -1))
@@ -218,6 +219,12 @@ class GaussianRaytracer:
                     )
                 else:
                     self.cuda_module.target_position.zero_()
+
+            if self.cuda_module.target_depth is not None:
+                if target_depth is not None:
+                    self.cuda_module.target_depth.copy_(target_depth.unsqueeze(-1))
+                else:
+                    self.cuda_module.target_depth.zero_()
 
             if self.cuda_module.target_normal is not None:
                 if target_normal is not None:

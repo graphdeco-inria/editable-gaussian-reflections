@@ -133,6 +133,8 @@ class Camera(nn.Module):
 
         self.update()
 
+        self._depth_image = torch.norm(self._position_image - self.camera_center.unsqueeze(-1).unsqueeze(-1), dim=0)
+
     @classmethod
     def from_cam_info(cls, cam_info):
         return cls(
@@ -176,6 +178,10 @@ class Camera(nn.Module):
     @property
     def position_image(self):
         return self._position_image.float().cuda()
+
+    @property
+    def depth_image(self):
+        return self._depth_image.float().cuda()
 
     @property
     def roughness_image(self):

@@ -91,7 +91,7 @@ class ModelParams(ParamGroup):
         self.use_masks = False
         self.precomp_ray = False
 
-        self.raytracer_version = "build"  # "build_v0.1_attached_brdf"
+        self.raytracer_version = ""  # "build_v0.1_attached_brdf"
 
         self.disable_bounce_grads = False
 
@@ -102,8 +102,8 @@ class ModelParams(ParamGroup):
         self.min_opacity = 0.005
         self.min_weight = 1e-10
 
-        self.znear_init_pruning = True
-        self.znear_densif_pruning = True
+        self.znear_init_pruning = "REAL_SCENE" not in os.environ
+        self.znear_densif_pruning = "REAL_SCENE" not in os.environ
         self.znear_scaledown = 0.8
         self.zfar_scaleup = 1.5
 
@@ -178,10 +178,6 @@ class ModelParams(ParamGroup):
         else:
             self.skip_n_images = 0
 
-        # self.a_thresh = 0.05
-        # self.t_thresh = 0.1
-        # self.exp_power = 4
-
         super().__init__(parser, "Loading Parameters", sentinel)
 
     def extract(self, args):
@@ -242,7 +238,7 @@ class OptimizationParams(ParamGroup):
         self.densification_interval = 500
         self.opacity_reset_interval = 999999999999 # Doesn't change metrics in 3dgs, may cause issues
         self.densify_from_iter = 999999999999  # was 500 in 3dgs, 1500 when doing LOD
-        self.densify_until_iter = 3500  # was 25k in mcmc
+        self.densify_until_iter = 15_000  # was 25k in mcmc
         self.densify_grad_threshold = 0.0002
 
         self.densif_use_top_k = True

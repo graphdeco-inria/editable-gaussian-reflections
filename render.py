@@ -44,6 +44,7 @@ def render_set(
     background,
     raytracer,
 ):
+
     for mode in args.modes:
         for blur_sigma in args.blur_sigmas:
             render_path = os.path.join(
@@ -70,6 +71,12 @@ def render_set(
             position_gts_path = os.path.join(
                 model_path, split, "ours_{}".format(iteration), "position_gt"
             )
+            depth_path = os.path.join(
+                model_path, split, "ours_{}".format(iteration), "depth"
+            )
+            depth_gts_path = os.path.join(
+                model_path, split, "ours_{}".format(iteration), "depth_gt"
+            )
             normal_path = os.path.join(
                 model_path, split, "ours_{}".format(iteration), "normal"
             )
@@ -95,6 +102,8 @@ def render_set(
             makedirs(glossy_gts_path, exist_ok=True)
             makedirs(position_path, exist_ok=True)
             makedirs(position_gts_path, exist_ok=True)
+            makedirs(depth_path, exist_ok=True)
+            makedirs(depth_gts_path, exist_ok=True)
             makedirs(normal_path, exist_ok=True)
             makedirs(normal_gts_path, exist_ok=True)
             makedirs(roughness_path, exist_ok=True)
@@ -113,6 +122,9 @@ def render_set(
 
             all_position_renders = []
             all_position_gts = []
+
+            all_depth_renders = []
+            all_depth_gts = []
 
             all_normal_renders = []
             all_normal_gts = []
@@ -295,6 +307,11 @@ def render_set(
                         scale_factor=1.0 / args.supersampling,
                         mode="area",
                     )[0]
+                    depth_gt_image = torch.nn.functional.interpolate(
+                        depth_gt_image[None],
+                        scale_factor=1.0 / args.supersampling,
+                        mode="area",
+                    )[0]
                     normal_gt_image = torch.nn.functional.interpolate(
                         normal_gt_image[None],
                         scale_factor=1.0 / args.supersampling,
@@ -371,6 +388,19 @@ def render_set(
                     )
 
                     torchvision.utils.save_image(
+                        package.depth[0],
+                        os.path.join(
+                            depth_path, "{0:05d}".format(idx) + "_depth.png"
+                        ),
+                    )
+                    torchvision.utils.save_image(
+                        depth_gt_image,
+                        os.path.join(
+                            depth_gts_path, "{0:05d}".format(idx) + "_depth.png"
+                        ),
+                    )
+
+                    torchvision.utils.save_image(
                         package.normal[0] / 2 + 0.5,
                         os.path.join(
                             normal_path, "{0:05d}".format(idx) + "_normal.png"
@@ -437,6 +467,9 @@ def render_set(
 
                 all_position_renders.append(format_image(package.position[0]))
                 all_position_gts.append(format_image(package.target_position))
+
+                all_depth_renders.append(format_image(package.depth[0]))
+                all_depth_gts.append(format_image(package.target_depth))
 
                 all_normal_renders.append(format_image(package.normal[0] / 2 + 0.5))
                 all_normal_gts.append(format_image(package.target_normal / 2 + 0.5))
@@ -540,6 +573,28 @@ def render_set(
                             [
                                 torch.stack(all_position_renders),
                                 torch.stack(all_position_gts),
+                            ],
+                            dim=2,
+                        ),
+                        **kwargs,
+                    )
+
+                    torchvision.io.write_video(
+                        path.format(name=f"depth_renders_{label}", dir=video_dir),
+                        torch.stack(all_depth_renders),
+                        **kwargs,
+                    )
+                    torchvision.io.write_video(
+                        path.format(name=f"depth_gts_{label}", dir=video_dir),
+                        torch.stack(all_depth_gts),
+                        **kwargs,
+                    )
+                    torchvision.io.write_video(
+                        path.format(name=f"depth_comparison_{label}", dir=video_dir),
+                        torch.cat(
+                            [
+                                torch.stack(all_depth_renders),
+                                torch.stack(all_depth_gts),
                             ],
                             dim=2,
                         ),

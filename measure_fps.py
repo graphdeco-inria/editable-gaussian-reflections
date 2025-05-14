@@ -75,7 +75,7 @@ def render_sets(model_params: ModelParams, iteration: int, pipeline: PipelinePar
         gaussians, viewpoint_stack[0].image_width, viewpoint_stack[0].image_height
     )
 
-    if args.train_views:
+    if args.train_views or "REAL_SCENE" in os.environ:
         render_set(
             scene,
             model_params,

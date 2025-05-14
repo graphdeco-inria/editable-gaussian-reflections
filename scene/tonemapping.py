@@ -1,4 +1,5 @@
 def tonemap(x, gamma=1.3):  # filmic tonemapping
+    x = x.nan_to_num(posinf=999999999.9)
     x = (x * (6.2 * x + 0.5)) / (x * (6.2 * x + 1.7) + 0.06)
     x = x**gamma
     return x

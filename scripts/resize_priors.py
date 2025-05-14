@@ -51,6 +51,6 @@ def main(source_dir, target_height, target_aspect_ratio):
 
 if __name__ == "__main__":
     if len(sys.argv) != 4:
-        print("Usage: python resize_priors.py SOURCE_DIR TARGET_IMG_HEIGHT ASPECT_RATIO")
+        print("Usage: python resize_priors.py SOURCE_DIR TARGET_IMG_HEIGHT ASPECT_RATIO ('None' to preserve aspect ratio)")
         sys.exit(1)
     main(sys.argv[1], sys.argv[2], None if sys.argv[3] == "None" else float(sys.argv[3]))

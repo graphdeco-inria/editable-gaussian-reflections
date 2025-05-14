@@ -192,6 +192,8 @@ def training_report(tb_writer, iteration):
                     roughness_image = torch.clamp(package.roughness[0], 0.0, 1.0)
                     normal_image = torch.clamp(package.normal[0] / 2 + 0.5, 0.0, 1.0)
                     position_image = torch.clamp(package.position[0], 0.0, 1.0)
+                    depth_image = package.depth[0]
+
                     F0_image = torch.clamp(package.F0[0], 0.0, 1.0)
                     if model_params.brdf_mode != "disabled":
                         brdf_image = torch.clamp(package.brdf[0], 0.0, 1.0)
@@ -199,6 +201,7 @@ def training_report(tb_writer, iteration):
                     normal_gt_image = torch.clamp(
                         viewpoint.normal_image / 2 + 0.5, 0.0, 1.0
                     )
+                    depth_gt_image = viewpoint.depth_image
                     position_gt_image = torch.clamp(viewpoint.position_image, 0.0, 1.0)
                     F0_gt_image = torch.clamp(viewpoint.F0_image, 0.0, 1.0)
                     roughness_gt_image = torch.clamp(
@@ -250,6 +253,13 @@ def training_report(tb_writer, iteration):
                                 tb_writer.log_dir
                                 + "/"
                                 + f"{config['name']}_view/iter_{iteration:09}_view_{viewpoint.colmap_id}_pos_all_rays.png",
+                                padding=0,
+                            )
+                            save_image(
+                                package.depth / package.depth.amax(dim=(1, 2, 3), keepdim=True),
+                                tb_writer.log_dir
+                                + "/"
+                                + f"{config['name']}_view/iter_{iteration:09}_view_{viewpoint.colmap_id}_depth_all_rays.png",
                                 padding=0,
                             )
                             save_image(
@@ -409,6 +419,17 @@ def training_report(tb_writer, iteration):
                             tb_writer.log_dir
                             + "/"
                             + f"{config['name']}_view/iter_{iteration:09}_view_{viewpoint.colmap_id}_position_vs_target.png",
+                            nrow=2,
+                            padding=0,
+                        )
+
+                        save_image(
+                            (torch.stack(
+                                [depth_image.cuda(), depth_gt_image.unsqueeze(0)]
+                            ) - depth_gt_image.amin()) / (depth_gt_image.amax() - depth_gt_image.amin()),
+                            tb_writer.log_dir
+                            + "/"
+                            + f"{config['name']}_view/iter_{iteration:09}_view_{viewpoint.colmap_id}_depth_vs_target.png",
                             nrow=2,
                             padding=0,
                         )
@@ -607,7 +628,7 @@ parser.add_argument("--detect_anomaly", action="store_true", default=False)
 parser.add_argument("--flip_camera", action="store_true", default=False)
 parser.add_argument(
     "--val_views", nargs="+", type=int, default=[75]
-)  # 135 for teaser book sceen
+)  # 135 for teaser book scene
 parser.add_argument(
     "--test_iterations",
     nargs="+",
@@ -622,6 +643,8 @@ parser.add_argument("--checkpoint_iterations", nargs="+", type=int, default=[])
 parser.add_argument("--start_checkpoint", type=str, default=None)
 args = parser.parse_args(sys.argv[1:])
 args.save_iterations.append(args.iterations)
+
+assert args.raytracer_version != ""
 
 if "_with_book" in args.source_path:
     args.max_images = 199  ##! crashes if last image is included
@@ -943,47 +966,30 @@ for iteration in tqdm(
                 raytracer.cuda_module.densification_gradient_glossy,
             )
 
-        if "DENSIFY" in os.environ:
-            # max_ws_size = (
-            #     scene.cameras_extent
-            #     * model_params.glossy_bbox_size_mult
-            #     * model_params.scene_extent_multiplier
-            # )
-            max_ws_size = 9999999.99
-            densif_args = (scene, opt_params, model_params.min_opacity, max_ws_size)
-            if (
-                iteration % opt_params.densification_interval == 0
-                and iteration > opt_params.densify_from_iter
-            ):
-                if iteration < opt_params.densify_until_iter:
-                    trace = gaussians.densify_and_prune_top_k(*densif_args)
-                    trace = f"Iteration {iteration}; " + trace
-                    with open(
-                        os.path.join(scene.model_path + "/densification_trace.txt"), "a"
-                    ) as f:
-                        f.write(trace)
-                else:
-                    gaussians.prune_znear_only(scene)
-                raytracer.rebuild_bvh()
-            # elif iteration % opt_params.densification_interval == 0:
-            #     if opt_params.prune_even_without_densification:
-            #         gaussians.prune(*densif_args)
-            #     if "NO_REBUILD" not in os.environ:
-            #         raytracer.rebuild_bvh()
-        else:
-            if iteration % opt_params.densification_interval == 0:
-                if model_params.min_weight > 0:
-                    gaussians.prune_points(
-                        (
-                            raytracer.cuda_module.gaussian_total_weight
-                            < model_params.min_weight
-                        ).squeeze(1)
-                    )
-                if model_params.znear_densif_pruning:
-                    gaussians.prune_znear_only(scene)
-                raytracer.cuda_module.gaussian_total_weight.zero_()
-                torch.cuda.synchronize()
-                raytracer.rebuild_bvh()
+        if iteration % opt_params.densification_interval == 0:
+            if model_params.min_weight > 0:
+                gaussians.prune_points(
+                    (
+                        raytracer.cuda_module.gaussian_total_weight
+                        < model_params.min_weight
+                    ).squeeze(1)
+                )
+            if model_params.znear_densif_pruning:
+                gaussians.prune_znear_only(scene)
+            raytracer.cuda_module.gaussian_total_weight.zero_()
+
+            if "DENSIFY" in os.environ:
+                if (
+                    iteration % opt_params.densification_interval == 0
+                    and iteration > opt_params.densify_from_iter
+                ):
+                    if iteration < opt_params.densify_until_iter:
+                        max_ws_size = 99999999999.999999
+                        densif_args = (scene, opt_params, model_params.min_opacity, max_ws_size)
+                        trace = gaussians.densify_and_prune_top_k(*densif_args)
+                    
+            torch.cuda.synchronize()
+            raytracer.rebuild_bvh()
 
         gaussians.optimizer.step()
         gaussians.optimizer.zero_grad(set_to_none=False)

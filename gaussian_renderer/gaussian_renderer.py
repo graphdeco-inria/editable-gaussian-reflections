@@ -54,6 +54,7 @@ def render(
         target_normal = camera.normal_image
         target_f0 = camera.F0_image
         target_roughness = camera.roughness_image.mean(dim=0, keepdim=True)
+        target_depth = camera.depth_image
         target_brdf = camera.brdf_image
     else:
         target = None
@@ -64,6 +65,7 @@ def render(
         target_roughness = None
         target_f0 = None
         target_brdf = None
+        target_depth = None
         
     if blur_sigma is not None:
         if not isinstance(blur_sigma, torch.Tensor):
@@ -109,6 +111,7 @@ def render(
         _target_roughness = target_roughness
         _target_f0 = target_f0
         _target_brdf = target_brdf
+        _target_depth = target_depth
 
     if raytracer.pc.model_params.use_diffuse_target:
         _target = _target_diffuse
@@ -125,6 +128,7 @@ def render(
             target_diffuse=_target_diffuse,
             target_glossy=_target_glossy,
             target_position=_target_position,
+            target_depth=_target_depth,
             target_normal=_target_normal,
             target_roughness=_target_roughness,
             target_f0=_target_f0,
@@ -132,7 +136,6 @@ def render(
             edits=edits,
             force_update_bvh=force_update_bvh
         )
-        # if blur_sigma is not None:
         raytracer.cuda_module.init_blur_sigma.fill_(0.0)
 
     # All of these results are reshaped to (C, H, W)
@@ -140,6 +143,9 @@ def render(
         rgb=raytracer.cuda_module.output_rgb.clone().detach().moveaxis(-1, 1),
         position=raytracer.cuda_module.output_position.clone().detach().moveaxis(-1, 1)
         if raytracer.cuda_module.output_position is not None
+        else torch.zeros_like(rgb),
+        depth=raytracer.cuda_module.output_depth.clone().detach().moveaxis(-1, 1)
+        if raytracer.cuda_module.output_depth is not None
         else torch.zeros_like(rgb),
         normal=raytracer.cuda_module.output_normal.clone().detach().moveaxis(-1, 1)
         if raytracer.cuda_module.output_normal is not None
@@ -160,6 +166,7 @@ def render(
         target_diffuse=_target_diffuse,
         target_glossy=_target_glossy,
         target_position=_target_position,
+        target_depth=_target_depth,
         target_normal=_target_normal,
         target_roughness=_target_roughness,
         target_f0=_target_f0,
