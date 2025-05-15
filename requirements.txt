@@ -1,4 +1,5 @@
 av==13.*
+einops
 imageio
 kornia
 matplotlib
