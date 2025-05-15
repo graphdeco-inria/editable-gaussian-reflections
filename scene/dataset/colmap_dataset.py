@@ -90,7 +90,7 @@ class ColmapDataset:
         diffuse_image = self._get_buffer(frame_name, "diffuse")
         glossy_image = self._get_buffer(frame_name, "glossy")
         specular_image = torch.zeros_like(image) + 0.5
-        
+
         depth_image = self._get_buffer(frame_name, "depth_moge")
         normal_image = self._get_buffer(frame_name, "normal_stable")
         brdf_image = torch.zeros_like(image)
@@ -101,17 +101,33 @@ class ColmapDataset:
             original_metalness_image = metalness_image
             original_roughness_image = roughness_image
             if "SKIP_THRESHOLD_METALNESS" not in os.environ:
-                upsized_metal = torch.nn.functional.interpolate(metalness_image.moveaxis(-1, 0)[None], scale_factor=4, mode='bicubic', antialias=True)
-                metalness_image = torch.nn.functional.interpolate((upsized_metal > 0.6).float(), scale_factor=1/4, mode="area")[0].moveaxis(0, -1)
+                upsized_metal = torch.nn.functional.interpolate(
+                    metalness_image.moveaxis(-1, 0)[None],
+                    scale_factor=4,
+                    mode="bicubic",
+                    antialias=True,
+                )
+                metalness_image = torch.nn.functional.interpolate(
+                    (upsized_metal > 0.6).float(), scale_factor=1 / 4, mode="area"
+                )[0].moveaxis(0, -1)
                 if "SKIP_MIRROR_METALS" not in os.environ:
-                    roughness_image *= (1.0 - metalness_image)
+                    roughness_image *= 1.0 - metalness_image
                 if "SKIP_WHITE_METALS" not in os.environ:
-                    albedo_image = albedo_image * (1.0 - metalness_image) + metalness_image
+                    albedo_image = (
+                        albedo_image * (1.0 - metalness_image) + metalness_image
+                    )
                     diffuse_image = diffuse_image * (1.0 - metalness_image)
             if "SKIP_THRESHOLD_ROUGHNESS" not in os.environ:
-                upsized_roughness = torch.nn.functional.interpolate(roughness_image.moveaxis(-1, 0)[None], scale_factor=4, mode='bicubic', antialias=True)
+                upsized_roughness = torch.nn.functional.interpolate(
+                    roughness_image.moveaxis(-1, 0)[None],
+                    scale_factor=4,
+                    mode="bicubic",
+                    antialias=True,
+                )
                 upsized_roughness[upsized_roughness < 0.25] = 0.0
-                roughness_image = torch.nn.functional.interpolate(upsized_roughness, scale_factor=1/4, mode="area")[0].moveaxis(0, -1)
+                roughness_image = torch.nn.functional.interpolate(
+                    upsized_roughness, scale_factor=1 / 4, mode="area"
+                )[0].moveaxis(0, -1)
             if "SKIP_SPECULAR_FROM_METALNESS" not in os.environ:
                 specular_image = original_roughness_image / 2 + 0.5
 

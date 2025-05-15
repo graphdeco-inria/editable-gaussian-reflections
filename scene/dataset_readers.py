@@ -11,6 +11,7 @@
 
 import os
 from dataclasses import dataclass
+from typing import List
 
 import numpy as np
 import torch
@@ -21,7 +22,6 @@ from scene.dataset import BlenderDataset, BlenderPriorDataset, ColmapDataset
 from scene.dataset.points_utils import get_point_cloud, make_random_point_cloud
 from scene.gaussian_model import BasicPointCloud
 from utils.graphics_utils import getWorld2View2
-from typing import List
 
 from .cameras import Camera
 

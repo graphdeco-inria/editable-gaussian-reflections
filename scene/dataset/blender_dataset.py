@@ -27,7 +27,9 @@ class BlenderDataset:
         self.point_cloud = point_cloud
         self.split = split
 
-        downsampled_cache_dir = data_dir.replace("/renders/", f"/cache/{model_params.resolution}/")
+        downsampled_cache_dir = data_dir.replace(
+            "/renders/", f"/cache/{model_params.resolution}/"
+        )
         if os.path.exists(downsampled_cache_dir):
             self.cache_dir = downsampled_cache_dir
         else:
