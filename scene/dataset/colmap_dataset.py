@@ -156,11 +156,6 @@ class ColmapDataset:
         R = np.transpose(w2c[:3, :3])
         T = w2c[:3, 3]
 
-        # Align exposure
-        image /= 3.5
-        diffuse_image /= 3.5
-        glossy_image /= 3.5
-
         # Postprocess normal_image
         R_tensor = torch.tensor(R, dtype=torch.float32)
         normal_image = transform_normals_to_world(normal_image, R_tensor)
