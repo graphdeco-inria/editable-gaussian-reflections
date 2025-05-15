@@ -86,17 +86,16 @@ class ColmapDataset:
 
         image = self._get_buffer(frame_name, "image")
         albedo_image = self._get_buffer(frame_name, "albedo")
-        # irradiance_image = self._get_buffer(frame_name, "irradiance")
         diffuse_image = self._get_buffer(frame_name, "diffuse")
         glossy_image = self._get_buffer(frame_name, "glossy")
-        specular_image = torch.zeros_like(image) + 0.5
-
-        depth_image = self._get_buffer(frame_name, "depth_moge")
-        normal_image = self._get_buffer(frame_name, "normal_stable")
-        brdf_image = torch.zeros_like(image)
-
         roughness_image = self._get_buffer(frame_name, "roughness")
         metalness_image = self._get_buffer(frame_name, "metalness")
+        depth_image = self._get_buffer(frame_name, "depth_moge")
+        normal_image = self._get_buffer(frame_name, "normal_stable")
+        specular_image = torch.ones_like(image) * 0.5
+        brdf_image = torch.zeros_like(image)
+        base_color_image = albedo_image * (1.0 - metalness_image) + metalness_image
+
         if "REAL_SCENE" in os.environ:
             original_metalness_image = metalness_image
             original_roughness_image = roughness_image
@@ -200,7 +199,7 @@ class ColmapDataset:
             normal_image=normal_image,
             roughness_image=roughness_image,
             metalness_image=metalness_image,
-            base_color_image=albedo_image,
+            base_color_image=base_color_image,
             brdf_image=brdf_image,
             specular_image=specular_image,
         )
@@ -220,6 +219,7 @@ class ColmapDataset:
 
         if buffer_name in ["image", "irradiance", "diffuse", "glossy"]:
             buffer = untonemap(buffer)
+            buffer /= 3.5  # Align exposure
         elif buffer_name == "albedo":
             pass
         elif buffer_name in ["roughness", "metalness", "depth", "depth_moge"]:

@@ -47,7 +47,7 @@ OUTPUT_DIR="output/benchmark_neural_catacaustics_priors"
 
 # RESOLUTION=512
 # SCENE_DIR="data/real_datasets_v2_filmic/renders_priors"
-# SCENE_LIST="shiny_kitchen shiny_livingroom shiny_office shiny_bedroom"
+# SCENE_LIST="shiny_kitchen shiny_bedroom shiny_livingroom shiny_office"
 # # SCENE_LIST="multichromeball_kitchen_v2 multichromeball_identical_kitchen_v2 multichromeball_tint_kitchen_v2 multichromeball_value_kitchen_v2"
 # OUTPUT_DIR="output/benchmark_renders_priors"
 
@@ -58,6 +58,7 @@ do
         -m $OUTPUT_DIR/$SCENE \
         -r $RESOLUTION \
         --no_znear_densif_pruning \
+        --position_loss_weight 0.0 \
         --eval \
         --raytracer_version $RAYTRACER_VERSION
 
@@ -76,11 +77,19 @@ do
         --raytracer_version $RAYTRACER_VERSION
 
     # Saving videos
-    IMAGES_DIR=$OUTPUT_DIR/$SCENE/novel_views
-    ffmpeg -y -framerate 30 -pattern_type glob -i "$IMAGES_DIR/ours_6000/render/*.png" -c:v libx264 -vf "pad=ceil(iw/2)*2:ceil(ih/2)*2" -pix_fmt yuv420p "$IMAGES_DIR/RENDER.mp4"
-    ffmpeg -y -framerate 30 -pattern_type glob -i "$IMAGES_DIR/ours_6000/diffuse/*.png" -c:v libx264 -vf "pad=ceil(iw/2)*2:ceil(ih/2)*2" -pix_fmt yuv420p "$IMAGES_DIR/DIFFUSE.mp4"
-    ffmpeg -y -framerate 30 -pattern_type glob -i "$IMAGES_DIR/ours_6000/glossy/*.png" -c:v libx264 -vf "pad=ceil(iw/2)*2:ceil(ih/2)*2" -pix_fmt yuv420p "$IMAGES_DIR/GLOSSY.mp4"
-    ffmpeg -y -framerate 30 -pattern_type glob -i "$IMAGES_DIR/ours_6000/normal/*.png" -c:v libx264 -vf "pad=ceil(iw/2)*2:ceil(ih/2)*2" -pix_fmt yuv420p "$IMAGES_DIR/NORMAL.mp4"
-    ffmpeg -y -i "$IMAGES_DIR/RENDER.mp4" -i "$IMAGES_DIR/DIFFUSE.mp4" -i "$IMAGES_DIR/GLOSSY.mp4" -i "$IMAGES_DIR/NORMAL.mp4" -filter_complex "[0:v][1:v][2:v][3:v]hstack=inputs=4[v]" -map "[v]" "$IMAGES_DIR/RENDER,DIFFUSE,GLOSSY,NORMAL.mp4"
+    IMAGES_DIR=$OUTPUT_DIR/$SCENE/novel_views/ours_8000
+    ffmpeg -y -framerate 30 -pattern_type glob -i "$IMAGES_DIR/render/*.png" -c:v libx264 -vf "pad=ceil(iw/2)*2:ceil(ih/2)*2" -pix_fmt yuv420p "$IMAGES_DIR/RENDER.mp4"
+    ffmpeg -y -framerate 30 -pattern_type glob -i "$IMAGES_DIR/diffuse/*.png" -c:v libx264 -vf "pad=ceil(iw/2)*2:ceil(ih/2)*2" -pix_fmt yuv420p "$IMAGES_DIR/DIFFUSE.mp4"
+    ffmpeg -y -framerate 30 -pattern_type glob -i "$IMAGES_DIR/glossy/*.png" -c:v libx264 -vf "pad=ceil(iw/2)*2:ceil(ih/2)*2" -pix_fmt yuv420p "$IMAGES_DIR/GLOSSY.mp4"
+    ffmpeg -y -framerate 30 -pattern_type glob -i "$IMAGES_DIR/depth/*.png" -c:v libx264 -vf "pad=ceil(iw/2)*2:ceil(ih/2)*2" -pix_fmt yuv420p "$IMAGES_DIR/DEPTH.mp4"
+    ffmpeg -y -framerate 30 -pattern_type glob -i "$IMAGES_DIR/normal/*.png" -c:v libx264 -vf "pad=ceil(iw/2)*2:ceil(ih/2)*2" -pix_fmt yuv420p "$IMAGES_DIR/NORMAL.mp4"
+    ffmpeg -y \
+        -i "$IMAGES_DIR/RENDER.mp4" \
+        -i "$IMAGES_DIR/DIFFUSE.mp4" \
+        -i "$IMAGES_DIR/GLOSSY.mp4" \
+        -i "$IMAGES_DIR/NORMAL.mp4" \
+        -filter_complex "[0:v][1:v][2:v][3:v]hstack=inputs=4[v]" \
+        -map "[v]" \
+        "$IMAGES_DIR/RENDER,DIFFUSE,GLOSSY,NORMAL.mp4"
 
 done

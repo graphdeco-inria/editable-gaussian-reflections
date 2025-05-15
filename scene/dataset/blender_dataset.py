@@ -73,15 +73,19 @@ class BlenderDataset:
             )
         else:
             image = self._get_buffer(frame_name, "render")
+            albedo_image = self._get_buffer(frame_name, "albedo")
             diffuse_image = self._get_buffer(frame_name, "diffuse")
             glossy_image = self._get_buffer(frame_name, "glossy")
+            roughness_image = self._get_buffer(frame_name, "roughness")
+            metalness_image = self._get_buffer(frame_name, "metalness")
             normal_image = self._get_buffer(frame_name, "normal")
             position_image = self._get_buffer(frame_name, "position")
-            roughness_image = self._get_buffer(frame_name, "roughness")
             specular_image = self._get_buffer(frame_name, "specular")
-            metalness_image = self._get_buffer(frame_name, "metalness")
-            base_color_image = self._get_buffer(frame_name, "base_color")
             brdf_image = self._get_buffer(frame_name, "glossy_brdf")
+            base_color_image = self._get_buffer(frame_name, "base_color")
+            # specular_image = torch.ones_like(image) * 0.5
+            # brdf_image = torch.zeros_like(image)
+            # base_color_image = albedo_image * (1.0 - metalness_image) + metalness_image
         diffuse_image = diffuse_image * self.model_params.exposure
         glossy_image = glossy_image * self.model_params.exposure
 
