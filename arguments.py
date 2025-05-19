@@ -97,12 +97,11 @@ class ModelParams(ParamGroup):
 
         self.keep_every_kth_view = 1
         self.max_images = 9999999
-        self.num_farfield_init_points = 25_000  # 100_000
+        self.num_farfield_init_points = 75_000 
 
         self.min_opacity = 0.005
         self.min_weight = 1e-10
 
-        self.znear_init_pruning = "REAL_SCENE" not in os.environ
         self.znear_densif_pruning = "REAL_SCENE" not in os.environ
         self.znear_scaledown = 0.8
         self.zfar_scaleup = 1.5
@@ -122,17 +121,19 @@ class ModelParams(ParamGroup):
         self.init_opacity = 0.1  # 0.1 for 3dgs, 0.5 for mcmc
         self.init_opacity_farfield = 0.1
         self.init_roughness = 0.1
-        if "CHROME_BALL" in os.environ:
-            self.init_f0 = 0.00
-        else:
-            self.init_f0 = 0.04
+        self.init_f0 = 0.04
         self.init_extra_point_diffuse = 0.2
 
         self.warmup_diffuse_loss_weight = 10000.0
         self.diffuse_loss_weight = 5.0
-        self.glossy_loss_weight = 0.001 
-        self.normal_loss_weight = 5.0
-        self.position_loss_weight = 5.0
+        self.glossy_loss_weight = 5.0
+        if "LEGACY_WEIGHT" in os.environ:
+            self.glossy_loss_weight = 0.001 
+        
+        self.normal_loss_weight = 1.0
+        self.position_loss_weight = 1.0
+        if "REAL_SCENE" in os.environ:
+            self.position_loss_weight = 0.0
         self.f0_loss_weight = 1.0
         self.roughness_loss_weight = 1.0
         self.specular_loss_weight = 1.0
@@ -165,18 +166,26 @@ class ModelParams(ParamGroup):
         self.use_glossy_target = False
 
         self.sparseness = -1
+        self.hard_sparse = -1
+
         self.warmup_until_iter = 0
-        self.no_bounces_until_iter = 6_000
-        self.max_one_bounce_until_iter = 12_000
-        self.diffuse_loss_weight_after_rebalance = 5.0
+        if "LEGACY_SCHEDULE" in os.environ:
+            self.no_bounces_until_iter = 6_000
+            self.max_one_bounce_until_iter = 12_000
+        else:
+            self.no_bounces_until_iter = 3_000
+            self.max_one_bounce_until_iter = -1
+
+        self.diffuse_loss_weight_after_rebalance = 5.0    
         self.glossy_loss_weight_after_rebalance = 5.0
-        self.rebalance_losses_at_iter = 18_000 
+        self.rebalance_losses_at_iter = -1
+        if "REAL_SCENE" in os.environ:
+            self.rebalance_losses_at_iter = -1
+        if "LEGACY_WEIGHT" in os.environ:
+            self.rebalance_losses_at_iter = 18_000 
         self.enable_regular_loss_at_iter = -1
 
-        if "CHROME_BALL" in os.environ:
-            self.skip_n_images = 50
-        else:
-            self.skip_n_images = 0
+        self.skip_n_images = 0
 
         super().__init__(parser, "Loading Parameters", sentinel)
 
@@ -199,16 +208,19 @@ class OptimizationParams(ParamGroup):
     def __init__(self, parser):
         self.iterations = 32_000
         self.position_lr_max_steps = 32_000
+
+        # flat schedule
         self.position_lr_init = 0.00016
         self.position_lr_final = 0.0000016
         self.position_lr_delay_mult = 0.01
+        
         self.timestretch = 0.25
 
         self.normal_lr = 0.0025
         self.position_lr = 0.0025
         self.roughness_lr = 0.0025
         self.f0_lr = 0.0025
-        self.diffuse_lr = 0.01 / 2 
+        self.diffuse_lr = 0.005
 
         self.lod_mean_lr = 0.005 / 100
         self.lod_scale_lr = 0.005 / 100 * 5

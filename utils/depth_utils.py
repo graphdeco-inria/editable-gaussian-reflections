@@ -192,3 +192,19 @@ def linear_least_squares_1d(x: torch.Tensor, y: torch.Tensor):
 
     w, b = theta[0].item(), theta[1].item()
     return w, b
+
+
+def save_position_image_to_ply(position_image, path):
+    import numpy as np
+    from plyfile import PlyData, PlyElement
+
+    H, W, _ = position_image.shape
+    points = position_image.reshape(-1, 3).astype(np.float32)
+
+    verts = np.array(
+        [(p[0], p[1], p[2]) for p in points],
+        dtype=[('x', 'f4'), ('y', 'f4'), ('z', 'f4')]
+    )
+
+    ply = PlyData([PlyElement.describe(verts, 'vertex')], text=True)
+    ply.write(path)

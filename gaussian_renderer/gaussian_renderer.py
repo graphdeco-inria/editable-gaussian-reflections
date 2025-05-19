@@ -139,14 +139,15 @@ def render(
         raytracer.cuda_module.init_blur_sigma.fill_(0.0)
 
     # All of these results are reshaped to (C, H, W)
+    rgb = raytracer.cuda_module.output_rgb.clone().detach().moveaxis(-1, 1)
     return SimpleNamespace(
-        rgb=raytracer.cuda_module.output_rgb.clone().detach().moveaxis(-1, 1),
+        rgb=rgb,
         position=raytracer.cuda_module.output_position.clone().detach().moveaxis(-1, 1)
         if raytracer.cuda_module.output_position is not None
         else torch.zeros_like(rgb),
         depth=raytracer.cuda_module.output_depth.clone().detach().moveaxis(-1, 1)
-        if raytracer.cuda_module.output_depth is not None
-        else torch.zeros_like(rgb),
+        if hasattr(raytracer.cuda_module, "output_depth") and raytracer.cuda_module.output_depth is not None
+        else torch.zeros_like(rgb).mean(dim=1, keepdim=True),
         normal=raytracer.cuda_module.output_normal.clone().detach().moveaxis(-1, 1)
         if raytracer.cuda_module.output_normal is not None
         else torch.zeros_like(rgb),

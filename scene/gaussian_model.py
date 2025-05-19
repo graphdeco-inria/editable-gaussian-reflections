@@ -430,8 +430,8 @@ class GaussianModel:
         new_comes_from_colmap_pc = torch.zeros(
             new_xyz.shape[0], 1, dtype=torch.int, device="cuda"
         )
-        # if add_book_points:
-        #     new_comes_from_colmap_pc[-new_xyz.shape[0]:] = 1.0
+        if "BOOK_POINTS_NEARFIELD" and add_book_points:
+            new_comes_from_colmap_pc[-new_xyz.shape[0]:] = 1.0
 
         self.densification_postfix(
             new_xyz,

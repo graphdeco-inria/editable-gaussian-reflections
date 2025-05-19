@@ -78,6 +78,11 @@ class Scene:
             :: model_params.keep_every_kth_view
         ]
 
+        if "HARD_SPARSE" in os.environ:
+            cameras = scene_info.train_cameras
+            cameras = [cameras[0], cameras[49], cameras[100], cameras[199]]
+            scene_info.train_cameras = cameras
+
         if model_params.sparseness != -1:
             cameras = sorted(scene_info.train_cameras, key=lambda x: x.image_path)
             cameras = cameras[:50] + cameras[-50:]
@@ -106,39 +111,8 @@ class Scene:
         self.autoadjust_zplanes()
 
         import sys
-
         sys.path.append(gaussians.model_params.raytracer_version)
         import raytracer_config
-
-        # if raytracer_config.MAX_BOUNCES > 0 and "SKIP_EXTRA_INIT" not in os.environ and not "INIT_POINTS_LATER" in os.environ:
-        #     scene_info.point_cloud = BasicPointCloud(
-        #         np.concatenate(
-        #             [scene_info.point_cloud.points, scene_info.extra_point_cloud.points]
-        #         ),
-        #         np.concatenate(
-        #             [scene_info.point_cloud.colors, scene_info.extra_point_cloud.colors]
-        #         ),
-        #         np.concatenate(
-        #             [
-        #                 scene_info.point_cloud.normals,
-        #                 scene_info.extra_point_cloud.normals,
-        #             ]
-        #         ),
-        #     )
-
-        # if gaussians.model_params.znear_init_pruning:
-        #     points = torch.from_numpy(scene_info.point_cloud.points).cuda().float()
-        #     points_to_prune = (
-        #         self.select_points_to_prune_near_cameras(points, torch.zeros_like(points)).cpu().numpy()
-        #     )
-        #     print(
-        #         f"Pruned {points_to_prune.mean() * 100:.2f}% of the init points since they are too close to the cameras."
-        #     )
-        #     scene_info.point_cloud = BasicPointCloud(
-        #         points=scene_info.point_cloud.points[~points_to_prune],
-        #         colors=scene_info.point_cloud.colors[~points_to_prune],
-        #         normals=scene_info.point_cloud.normals[~points_to_prune],
-        #     )
 
         if self.loaded_iter:
             self.gaussians.load_ply(
