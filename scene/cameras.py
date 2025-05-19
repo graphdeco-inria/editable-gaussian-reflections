@@ -134,7 +134,7 @@ class Camera(nn.Module):
         self.update()
 
         self._depth_image = torch.norm(
-            self._position_image - self.camera_center.unsqueeze(-1).unsqueeze(-1), dim=0
+            self._position_image - self.camera_center.unsqueeze(-1).unsqueeze(-1).to(self._position_image.device), dim=0
         )
 
     @classmethod
