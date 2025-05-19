@@ -63,6 +63,7 @@ class Edit:
     rotate_y: float = 0.0 
     rotate_z: float = 0.0
 
+
 class GaussianViewer(Viewer):
     def __init__(self, mode: ViewerMode, raytracer: "GaussianRaytracer"):
         super().__init__(mode)
@@ -194,7 +195,7 @@ class GaussianViewer(Viewer):
         self.monitor = PerformanceMonitor(self.mode, ["Render"], add_other=False)
 
         # Render modes
-        self.render_modes = ["RGB", "Normals", "Hit Position", "F0", "Roughness", "Illumination", "Ellipsoids"]
+        self.render_modes = ["RGB", "Normals", "Depth", "F0", "Roughness", "Illumination", "Ellipsoids"]
         self.render_mode = 0
         
         self.ray_choices = ["All/Default"] + ["Ray " + str(i) for i in range(self.ray_count)] 
@@ -209,6 +210,7 @@ class GaussianViewer(Viewer):
         
         # Render settings
         self.exposure = 1.0
+        self.znear = 0.5
         self.scaling_modifier = 1.0
 
         self.tool = "pan" # pan, select, move, scale, or rotate
@@ -270,6 +272,9 @@ class GaussianViewer(Viewer):
             start = torch.cuda.Event(enable_timing=True)
             end = torch.cuda.Event(enable_timing=True)
             start.record()
+
+            os.environ["ZNEAR"] = str(self.znear) #ew sorry 
+
             with torch.no_grad():
                 with self.gaussian_lock:
                     self.camera.dirty_check()
@@ -344,8 +349,10 @@ class GaussianViewer(Viewer):
                         net_image = package.F0[max(nth_ray, 0)]
                     elif mode_name == "Normals":
                         net_image = package.normal[max(nth_ray, 0)] / 2 + 0.5
-                    elif mode_name == "Hit Position":
-                        net_image = package.position[max(nth_ray, 0)]
+                    elif mode_name == "Depth":
+                        depth = package.depth[max(nth_ray, 0)]
+                        depth = (depth - depth.amin()) / (depth.amax() - depth.amin())
+                        net_image = depth.repeat(3, 1, 1)
                     elif mode_name == "Illumination":
                         net_image = self.raytracer.cuda_module.output_incident_radiance[max(nth_ray, 0)].moveaxis(-1, 0)
                     elif mode_name == "Roughness":
@@ -438,8 +445,16 @@ class GaussianViewer(Viewer):
                 elif test_cam_changed:
                     self.camera.update_pose(np.array(self.test_transforms["frames"][self.current_test_cam]["transform_matrix"]) @ self.blender_to_opengl)
                     self.current_train_cam = -1
+
                 
             self.camera.show_gui()
+
+            _, new_znear = imgui.drag_float("ZNear Clipping", self.znear, v_min=0.0, v_max=5.0, v_speed=0.01)
+            if new_znear != self.znear:
+                self.is_dirty = True 
+                self.znear = new_znear
+            if imgui.is_item_hovered() and imgui.is_mouse_clicked(imgui.MouseButton_.right):
+                self.znear = 0.5
 
             if did_disable:
                 imgui.end_disabled()
@@ -797,6 +812,7 @@ class GaussianViewer(Viewer):
             "scaling_modifier": self.scaling_modifier,
             "render_mode": self.render_mode,
             "exposure": self.exposure,
+            "znear": self.znear,
             "ray_choice": self.ray_choice,
             "selection_choice": self.selection_choice,
             "hovering_over": self.hovering_over,
@@ -813,6 +829,7 @@ class GaussianViewer(Viewer):
         self.ray_choice = text["ray_choice"]
         self.selection_choice = text["selection_choice"]
         self.exposure = text["exposure"]
+        self.znear = text["znear"]
         self.hovering_over = text["hovering_over"]
         self.tool = text["tool"]
         self.selection_mode_counter = text["selection_mode_counter"]

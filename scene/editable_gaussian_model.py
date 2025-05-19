@@ -161,6 +161,35 @@ class EditableGaussianModel(GaussianModel):
 
         self.f0 = f0
         return f0
+    
+    @property
+    def get_normal(self):
+        normal = super().get_normal.clone()
+
+        if not self.ready_for_editing:
+            return normal
+
+        if not self.is_dirty:
+            return self.normal
+
+        for key, edit in self.edits.items():
+            rotation_angles = torch.tensor(
+                [edit.rotate_x, edit.rotate_y, edit.rotate_z], device=normal.device
+            )
+            rotation_angles = torch.deg2rad(rotation_angles)
+            rotation_matrix = kornia.geometry.axis_angle_to_rotation_matrix(
+                rotation_angles[None]
+            )[0]
+
+            normal[self.selections[key].squeeze(1)] = (
+                torch.matmul(
+                    normal[self.selections[key].squeeze(1)],
+                    rotation_matrix.T,
+                )
+            )
+
+        self.normal = normal
+        return normal
 
     # ----------------------------------------------------------------
 
