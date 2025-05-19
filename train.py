@@ -287,7 +287,7 @@ def training_report(tb_writer, iteration):
                             save_image(
                                 raytracer.cuda_module.output_ray_origin[0].moveaxis(
                                     -1, 0
-                                ),
+                                ).abs() / 5,
                                 tb_writer.log_dir
                                 + "/"
                                 + f"{config['name']}_view/iter_{iteration:09}_view_{viewpoint.colmap_id}_ray_origin.png",
@@ -296,7 +296,7 @@ def training_report(tb_writer, iteration):
                             save_image(
                                 raytracer.cuda_module.output_ray_direction[0].moveaxis(
                                     -1, 0
-                                ),
+                                ) / 2 + 0.5,
                                 tb_writer.log_dir
                                 + "/"
                                 + f"{config['name']}_view/iter_{iteration:09}_view_{viewpoint.colmap_id}_ray_direction.png",
@@ -632,7 +632,7 @@ parser.add_argument("--viewer_mode", type=str, default="local")
 parser.add_argument("--detect_anomaly", action="store_true", default=False)
 parser.add_argument("--flip_camera", action="store_true", default=False)
 parser.add_argument(
-    "--val_views", nargs="+", type=int, default=[75]
+    "--val_views", nargs="+", type=int, default=[75, 175]
 )  # 135 for teaser book scene
 parser.add_argument(
     "--test_iterations",
@@ -798,6 +798,7 @@ for iteration in tqdm(
 
     torch.cuda.synchronize()  # todo may be needed or not, idk, occasional crash. double check after deadline
     package = render(viewpoint_cam, raytracer, pipe_params, bg, blur_sigma=blur_sigma)
+
 
     if opt_params.opacity_reg > 0:
         gaussians._opacity.grad += torch.autograd.grad(
@@ -983,7 +984,7 @@ for iteration in tqdm(
             )
 
         if iteration % opt_params.densification_interval == 0:
-            if model_params.min_weight > 0:
+            if iteration > model_params.no_bounces_until_iter + 500 and model_params.min_weight > 0:
                 gaussians.prune_points(
                     (
                         raytracer.cuda_module.gaussian_total_weight
@@ -1011,6 +1012,7 @@ for iteration in tqdm(
 
             torch.cuda.synchronize()
             raytracer.rebuild_bvh()
+
 
         gaussians.optimizer.step()
         gaussians.optimizer.zero_grad(set_to_none=False)
@@ -1042,7 +1044,7 @@ for iteration in tqdm(
                     quit()
 
         # Might help for roughness or for tint spehres, doesn't help in the regular case
-        if "SKIP_CLAMP_RELMINSIZE" not in os.environ:
+        if "SKIP_CLAMP_RELMINSIZE" not in os.environ and "_with_book" not in args.source_path:
             with torch.no_grad():
                 farfield_mask = ~gaussians.comes_from_colmap_pc.bool()
                 max_scaling = gaussians.get_scaling.amax(dim=-1)
@@ -1063,11 +1065,7 @@ for iteration in tqdm(
                         clamped_size_nearfield,
                     )
                 )
-                # gaussians._scaling.data.clamp_(
-                #     min=torch.log(
-                #         gaussians.get_scaling.amax(dim=-1) * float(os.getenv("RELMINSIZE", 0.2))
-                #     ).unsqueeze(-1)
-                # )
+
 
         # Might help for rough chromespheres, but leads to slight blurry and no gain in other scenes (0.05)
         if "SKIP_CLAMP_SIZEDIST" not in os.environ:
@@ -1086,6 +1084,10 @@ for iteration in tqdm(
                     )
                 )
 
+        if "OPACITY_CAP" in os.environ:
+            with torch.no_grad():
+                gaussians._opacity.data.clamp_(max=torch.logit(torch.tensor(float(os.environ["OPACITY_CAP"]), device="cuda")))
+
         if iteration in args.checkpoint_iterations:
             print("\n[ITER {}] Saving Checkpoint".format(iteration))
             torch.save(
@@ -1098,7 +1100,15 @@ for iteration in tqdm(
         raytracer.cuda_module.set_losses(True)
 
     if iteration == model_params.no_bounces_until_iter:
-        raytracer.cuda_module.num_bounces.copy_(min(raytracer.config.MAX_BOUNCES, 1))
+        if model_params.max_one_bounce_until_iter in [0, -1]:
+            raytracer.cuda_module.num_bounces.copy_(raytracer.config.MAX_BOUNCES)
+        else:
+            raytracer.cuda_module.num_bounces.copy_(min(raytracer.config.MAX_BOUNCES, 1))
+
+        # if "_with_book" in args.source_path:
+        #     print("------- limit to 1 bounce --------")
+        #     raytracer.cuda_module.num_bounces.copy_(min(raytracer.cuda_module.num_bounces.item(), 1))
+
         if not "SKIP_INIT_FARFIELD" in os.environ:
             torch.cuda.synchronize()
             gaussians.add_farfield_points(scene)

@@ -220,7 +220,7 @@ class GaussianRaytracer:
                 else:
                     self.cuda_module.target_position.zero_()
 
-            if self.cuda_module.target_depth is not None:
+            if hasattr(self.cuda_module, "target_depth") and self.cuda_module.target_depth is not None:
                 if target_depth is not None:
                     self.cuda_module.target_depth.copy_(target_depth.unsqueeze(-1))
                 else:

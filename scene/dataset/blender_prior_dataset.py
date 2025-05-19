@@ -128,21 +128,10 @@ class BlenderPriorDataset:
             depth_points_image[depth_points_image != 0],
         )
         depth_image = depth_image * a + b
-        # camera_center = torch.tensor([0.007455553859472275, -1.6538097858428955, 0.9788005352020264])
+
         position_image = transform_depth_to_position_image(depth_image, fovx, fovy)
         position_image = transform_points(position_image, c2w_tensor)
 
-        # def save_position_image_to_ply(position_image, path):
-        #     import numpy as np
-        #     from plyfile import PlyData, PlyElement
-
-        #     H, W, _ = position_image.shape
-        #     points = position_image.reshape(-1, 3).astype(np.float32)
-
-        #     verts = np.array(
-        #         [(p[0], p[1], p[2]) for p in points],
-        #         dtype=[('x', 'f4'), ('y', 'f4'), ('z', 'f4')]
-        #     )
 
         #     ply = PlyData([PlyElement.describe(verts, 'vertex')], text=True)
         #     ply.write(path)

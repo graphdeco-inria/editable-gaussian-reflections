@@ -253,6 +253,9 @@ def render_set(
 
                 raytracer.cuda_module.denoise.copy_(not args.skip_denoiser)
 
+                if args.max_bounces > -1:
+                    raytracer.cuda_module.num_bounces.copy_(args.max_bounces)
+
                 if args.spp > 1:
                     raytracer.cuda_module.accumulate.copy_(True)
                     raytracer.cuda_module.accumulated_rgb.zero_()
@@ -687,6 +690,7 @@ def render_set(
 @torch.no_grad()
 def render_sets(model_params: ModelParams, iteration: int, pipeline: PipelineParams):
     gaussians = GaussianModel(model_params)
+    
     scene = Scene(model_params, gaussians, load_iteration=iteration, shuffle=False)
     if "DBG_FLOATERS" in os.environ:
         mask = scene.select_points_to_prune_near_cameras(
@@ -713,6 +717,10 @@ def render_sets(model_params: ModelParams, iteration: int, pipeline: PipelinePar
     raytracer = GaussianRaytracer(
         gaussians, viewpoint_stack[0].image_width, viewpoint_stack[0].image_height
     )
+
+    if "MAKE_MIRROR" in os.environ:
+        gaussians._roughness.zero_()
+
     if args.spp > 1:
         raytracer.cuda_module.denoise.fill_(False)
 
@@ -785,6 +793,7 @@ if __name__ == "__main__":
     parser.add_argument("--start_checkpoint", type=str, default=None)
     # Rendering args
     parser.add_argument("--iteration", default=-1, type=int)
+    parser.add_argument("--max_bounces", default=-1, type=int)
     parser.add_argument("--spp", default=32, type=int)
     parser.add_argument("--supersampling", default=1, type=int)
     parser.add_argument("--train_views", action="store_true")

@@ -80,7 +80,9 @@ def render_set(
             "diffuse": diffuse_image,
             "position": package.position[0],
             "depth": package.depth[0] / package.depth[0].amax(),
-            "normal": normal_image * 0.5 + 0.5,
+            "normal": package.normal[0] / 2 + 0.5,
+            "ray_origin": raytracer.cuda_module.output_ray_origin[0].moveaxis(-1, 0).abs() / 5,
+            "ray_direction": raytracer.cuda_module.output_ray_direction[0].moveaxis(-1, 0) / 2 + 0.5,
             "roughness": package.roughness[0],
             "F0": package.F0[0],
         }
@@ -153,7 +155,7 @@ if __name__ == "__main__":
 
     # Rendering args
     parser.add_argument("--iteration", default=-1, type=int)
-    parser.add_argument("--spp", default=32, type=int)
+    parser.add_argument("--spp", default=8, type=int)
     parser.add_argument("--supersampling", default=1, type=int)
     parser.add_argument("--skip_denoiser", action="store_true")
     parser.add_argument("--quiet", action="store_true")
