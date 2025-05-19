@@ -131,7 +131,7 @@ class ModelParams(ParamGroup):
             self.glossy_loss_weight = 0.001 
         
         self.normal_loss_weight = 1.0
-        self.position_loss_weight = 1.0
+        self.position_loss_weight = 3.0
         if "REAL_SCENE" in os.environ:
             self.position_loss_weight = 0.0
         self.f0_loss_weight = 1.0
