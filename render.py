@@ -260,6 +260,9 @@ def render_set(
                     raytracer.cuda_module.accumulate.copy_(True)
                     raytracer.cuda_module.accumulated_rgb.zero_()
                     raytracer.cuda_module.accumulated_normal.zero_()
+                    raytracer.cuda_module.accumulated_depth.zero_()
+                    raytracer.cuda_module.accumulated_f0.zero_()
+                    raytracer.cuda_module.accumulated_roughness.zero_()
                     raytracer.cuda_module.accumulated_sample_count.zero_()
                     for i in range(args.spp):
                         package = render(
