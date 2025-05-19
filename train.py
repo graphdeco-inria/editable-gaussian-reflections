@@ -256,7 +256,8 @@ def training_report(tb_writer, iteration):
                                 padding=0,
                             )
                             save_image(
-                                package.depth / package.depth.amax(dim=(1, 2, 3), keepdim=True),
+                                package.depth
+                                / package.depth.amax(dim=(1, 2, 3), keepdim=True),
                                 tb_writer.log_dir
                                 + "/"
                                 + f"{config['name']}_view/iter_{iteration:09}_view_{viewpoint.colmap_id}_depth_all_rays.png",
@@ -424,9 +425,13 @@ def training_report(tb_writer, iteration):
                         )
 
                         save_image(
-                            (torch.stack(
-                                [depth_image.cuda(), depth_gt_image.unsqueeze(0)]
-                            ) - depth_gt_image.amin()) / (depth_gt_image.amax() - depth_gt_image.amin()),
+                            (
+                                torch.stack(
+                                    [depth_image.cuda(), depth_gt_image.unsqueeze(0)]
+                                )
+                                - depth_gt_image.amin()
+                            )
+                            / (depth_gt_image.amax() - depth_gt_image.amin()),
                             tb_writer.log_dir
                             + "/"
                             + f"{config['name']}_view/iter_{iteration:09}_view_{viewpoint.colmap_id}_depth_vs_target.png",
@@ -636,7 +641,10 @@ parser.add_argument(
     default=[4, 6_000, 12_000, 18_000, 24_000, 32_000],
 )
 parser.add_argument(
-    "--save_iterations", nargs="+", type=int, default=[4, 6_000, 12_000, 16_000, 24_000, 32_000]
+    "--save_iterations",
+    nargs="+",
+    type=int,
+    default=[4, 6_000, 12_000, 16_000, 24_000, 32_000],
 )
 parser.add_argument("--quiet", action="store_true")
 parser.add_argument("--checkpoint_iterations", nargs="+", type=int, default=[])
@@ -701,7 +709,6 @@ scene = Scene(model_params, gaussians)
 gaussians.training_setup(opt_params)
 
 
-
 first_iter = 0
 if args.start_checkpoint:
     (capture_data, first_iter) = torch.load(
@@ -722,7 +729,9 @@ raytracer = GaussianRaytracer(
 )
 
 if "KEYVIEW" in os.environ:
-    keyview = [x for x in scene.getTrainCameras() if x.colmap_id == int(os.environ["KEYVIEW"])][0]
+    keyview = [
+        x for x in scene.getTrainCameras() if x.colmap_id == int(os.environ["KEYVIEW"])
+    ][0]
 # raytracer.cuda_module.num_samples.fill_(model_params.num_samples)
 
 if args.viewer:
@@ -757,7 +766,6 @@ for iteration in tqdm(
     total=opt_params.iterations,
     initial=first_iter,
 ):
-
     iter_start.record()
 
     if args.viewer:
@@ -908,7 +916,11 @@ for iteration in tqdm(
                 minutes, seconds = divmod(int(delta), 60)
                 timestamp = f"{minutes:02}:{seconds:02}"
                 print("Elapsed time: ", timestamp)
-                f.write("\n[ITER {}] elapsed {}".format(iteration, time.strftime("%H:%M:%S", time.gmtime(NOW - start))))
+                f.write(
+                    "\n[ITER {}] elapsed {}".format(
+                        iteration, time.strftime("%H:%M:%S", time.gmtime(NOW - start))
+                    )
+                )
 
             # Save the average and std opacity
             with open(os.path.join(args.model_path, "opacity.txt"), "a") as f:
@@ -954,7 +966,11 @@ for iteration in tqdm(
                 )
 
             with open(os.path.join(args.model_path, "num_gaussians.txt"), "a") as f:
-                f.write("\n[ITER {}] # {}".format(iteration, scene.gaussians.get_xyz.shape[0]))
+                f.write(
+                    "\n[ITER {}] # {}".format(
+                        iteration, scene.gaussians.get_xyz.shape[0]
+                    )
+                )
                 print("Number of gaussians: ", gaussians.get_xyz.shape[0])
 
         if iteration in args.save_iterations:
@@ -986,9 +1002,14 @@ for iteration in tqdm(
                 ):
                     if iteration < opt_params.densify_until_iter:
                         max_ws_size = 99999999999.999999
-                        densif_args = (scene, opt_params, model_params.min_opacity, max_ws_size)
+                        densif_args = (
+                            scene,
+                            opt_params,
+                            model_params.min_opacity,
+                            max_ws_size,
+                        )
                         trace = gaussians.densify_and_prune_top_k(*densif_args)
-                    
+
             torch.cuda.synchronize()
             raytracer.rebuild_bvh()
 
@@ -1094,7 +1115,10 @@ for iteration in tqdm(
         raytracer.rebuild_bvh()
         torch.cuda.synchronize()
 
-    if iteration == 1 and (model_params.no_bounces_until_iter in [-1, 0] or model_params.no_bounces_until_iter > 900_000):
+    if iteration == 1 and (
+        model_params.no_bounces_until_iter in [-1, 0]
+        or model_params.no_bounces_until_iter > 900_000
+    ):
         gaussians.add_farfield_points(scene)
         raytracer.rebuild_bvh()
         torch.cuda.synchronize()

@@ -16,6 +16,7 @@ from copy import deepcopy
 import numpy as np
 import torch
 import torchvision
+from einops import rearrange
 from tqdm import tqdm
 
 from arguments import ModelParams, OptimizationParams, PipelineParams, get_combined_args
@@ -62,6 +63,17 @@ def render_set(
         diffuse_image = tonemap(package.rgb[0]).clamp(0, 1)
         glossy_image = tonemap(package.rgb[1:-1].sum(dim=0)).clamp(0, 1)
         pred_image = tonemap(package.rgb[-1]).clamp(0, 1)
+
+        # Match normal image with EnvGS visualization
+        R_tensor = torch.tensor(camera.R.T, dtype=torch.float32)
+        normal_image = package.normal[0].cpu()
+        normal_image = rearrange(normal_image, "c h w -> h w c")
+        normal_image = normal_image / torch.norm(normal_image, dim=-1, keepdim=True)
+        normal_image = torch.einsum("ij,...j->...i", R_tensor, normal_image)
+        normal_image = rearrange(normal_image, "h w c -> c h w")
+        normal_image *= -1
+        normal_image[0, :, :] *= -1  # To match EnvGS visualization.
+
         result = {
             "render": pred_image,
             "glossy": glossy_image,

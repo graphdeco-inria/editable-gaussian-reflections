@@ -44,7 +44,6 @@ def render_set(
     background,
     raytracer,
 ):
-
     for mode in args.modes:
         for blur_sigma in args.blur_sigmas:
             render_path = os.path.join(
@@ -393,9 +392,7 @@ def render_set(
 
                     torchvision.utils.save_image(
                         package.depth[0].unsqueeze(0) / package.target_depth.amax(),
-                        os.path.join(
-                            depth_path, "{0:05d}".format(idx) + "_depth.png"
-                        ),
+                        os.path.join(depth_path, "{0:05d}".format(idx) + "_depth.png"),
                     )
                     torchvision.utils.save_image(
                         depth_gt_image / package.target_depth.amax(),
@@ -473,8 +470,14 @@ def render_set(
                 all_position_gts.append(format_image(package.target_position))
 
                 max_depth = package.target_depth.amax()
-                all_depth_renders.append(format_image(package.depth[0] / max_depth).repeat(1, 1, 3))
-                all_depth_gts.append(format_image(package.target_depth.unsqueeze(0)  / max_depth).repeat(1, 1, 3))
+                all_depth_renders.append(
+                    format_image(package.depth[0] / max_depth).repeat(1, 1, 3)
+                )
+                all_depth_gts.append(
+                    format_image(package.target_depth.unsqueeze(0) / max_depth).repeat(
+                        1, 1, 3
+                    )
+                )
 
                 all_normal_renders.append(format_image(package.normal[0] / 2 + 0.5))
                 all_normal_gts.append(format_image(package.target_normal / 2 + 0.5))

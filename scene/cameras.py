@@ -14,10 +14,10 @@ import os
 import numpy as np
 import torch
 from torch import nn
+from torchvision.utils import save_image
 
 from scene.tonemapping import *
 from utils.graphics_utils import getProjectionMatrix, getWorld2View2
-from torchvision.utils import save_image
 
 
 class Camera(nn.Module):
@@ -104,7 +104,7 @@ class Camera(nn.Module):
         if "ZERO_ROUGHNESS" in os.environ:
             self._roughness_image = self._roughness_image * 0
         self._brdf_image = brdf_image.half().to(image_holding_device)
-        
+
         self._F0_image = (
             (
                 (1.0 - metalness_image)
@@ -133,7 +133,9 @@ class Camera(nn.Module):
 
         self.update()
 
-        self._depth_image = torch.norm(self._position_image - self.camera_center.unsqueeze(-1).unsqueeze(-1), dim=0)
+        self._depth_image = torch.norm(
+            self._position_image - self.camera_center.unsqueeze(-1).unsqueeze(-1), dim=0
+        )
 
     @classmethod
     def from_cam_info(cls, cam_info):

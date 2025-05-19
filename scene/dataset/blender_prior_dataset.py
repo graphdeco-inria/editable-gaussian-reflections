@@ -14,9 +14,9 @@ from utils.depth_utils import (
     linear_least_squares_1d,
     project_pointcloud_to_depth_map,
     transform_depth_to_position_image,
+    transform_distance_to_position_image,
     transform_normals_to_world,
     transform_points,
-    transform_distance_to_position_image
 )
 from utils.graphics_utils import focal2fov, fov2focal
 
@@ -57,24 +57,37 @@ class BlenderPriorDataset:
 
         image = self._get_buffer(frame_name, "image")
         albedo_image = self._get_buffer(frame_name, "albedo")
-        # irradiance_image = self._get_buffer(frame_name, "irradiance")
         diffuse_image = self._get_buffer(frame_name, "diffuse")
         glossy_image = self._get_buffer(frame_name, "glossy")
         roughness_image = self._get_buffer(frame_name, "roughness")
-        if "SKIP_THRESHOLD_ROUGHNESS" not in os.environ:
-            roughness_image[roughness_image < 0.25] = 0.0
-            upsized_roughness = torch.nn.functional.interpolate(roughness_image.moveaxis(-1, 0)[None], scale_factor=4, mode='bicubic', antialias=True)
-            upsized_roughness[upsized_roughness < 0.25] = 0.0
-            roughness_image = torch.nn.functional.interpolate(upsized_roughness, scale_factor=1/4, mode="area")[0].moveaxis(0, -1)
         metalness_image = self._get_buffer(frame_name, "metalness")
-        if "SKIP_THRESHOLD_METALNESS" not in os.environ:
-            upsized_metal = torch.nn.functional.interpolate(metalness_image.moveaxis(-1, 0)[None], scale_factor=4, mode='bicubic', antialias=True)
-            metalness_image = torch.nn.functional.interpolate((upsized_metal > 0.4).float(), scale_factor=1/4, mode="area")[0].moveaxis(0, -1)
-            
-        specular_image = torch.zeros_like(image) + 0.5
         depth_image = self._get_buffer(frame_name, "depth_moge")
         normal_image = self._get_buffer(frame_name, "normal_stable")
+        specular_image = torch.ones_like(image) * 0.5
         brdf_image = torch.zeros_like(image)
+        base_color_image = albedo_image * (1.0 - metalness_image) + metalness_image
+        if "SKIP_THRESHOLD_ROUGHNESS" not in os.environ:
+            roughness_image[roughness_image < 0.25] = 0.0
+            upsized_roughness = torch.nn.functional.interpolate(
+                roughness_image.moveaxis(-1, 0)[None],
+                scale_factor=4,
+                mode="bicubic",
+                antialias=True,
+            )
+            upsized_roughness[upsized_roughness < 0.25] = 0.0
+            roughness_image = torch.nn.functional.interpolate(
+                upsized_roughness, scale_factor=1 / 4, mode="area"
+            )[0].moveaxis(0, -1)
+        if "SKIP_THRESHOLD_METALNESS" not in os.environ:
+            upsized_metal = torch.nn.functional.interpolate(
+                metalness_image.moveaxis(-1, 0)[None],
+                scale_factor=4,
+                mode="bicubic",
+                antialias=True,
+            )
+            metalness_image = torch.nn.functional.interpolate(
+                (upsized_metal > 0.4).float(), scale_factor=1 / 4, mode="area"
+            )[0].moveaxis(0, -1)
 
         # Camera intrinsics
         height, width = image.shape[0], image.shape[1]
@@ -120,9 +133,19 @@ class BlenderPriorDataset:
         position_image = transform_points(position_image, c2w_tensor)
 
 
+        #     ply = PlyData([PlyElement.describe(verts, 'vertex')], text=True)
+        #     ply.write(path)
+        # save_position_image_to_ply(position_image.numpy(), "distance_converted2.ply")
+
         if "ABLATION" in os.environ:
             resolution = image.shape[0]
-            scene_name = os.path.basename(self.data_dir).replace("_128", "").replace("_256", "").replace("_512", "").replace("_768", "")
+            scene_name = (
+                os.path.basename(self.data_dir)
+                .replace("_128", "")
+                .replace("_256", "")
+                .replace("_512", "")
+                .replace("_768", "")
+            )
             assert int(image_name.split("_")[-1]) == idx
             (
                 rendered_image,
@@ -135,10 +158,14 @@ class BlenderPriorDataset:
                 rendered_metalness_image,
                 rendered_base_color_image,
                 rendered_brdf_image,
-            ) = torch.load(f"cache/{resolution}/{scene_name}/{self.split}/render/{idx:04d}.pt".replace("/render/", "/"))
-            
+            ) = torch.load(
+                f"cache/{resolution}/{scene_name}/{self.split}/render/{idx:04d}.pt".replace(
+                    "/render/", "/"
+                )
+            )
+
             ablated_passes = os.environ["ABLATION"].split(",")
-            
+
             if "image" not in ablated_passes:
                 image = rendered_image
             if "diffuse" not in ablated_passes:
@@ -159,8 +186,6 @@ class BlenderPriorDataset:
                 base_color_image = rendered_base_color_image
             else:
                 base_color_image = albedo_image
-        else:
-            base_color_image = albedo_image
 
         cam_info = CameraInfo(
             uid=idx,
@@ -190,9 +215,15 @@ class BlenderPriorDataset:
         file_name = frame_name.split("/")[-1]
         buffer_path = os.path.join(self.buffers_dir, buffer_name, file_name + ".png")
         buffer_image = Image.open(buffer_path)
+        buffer_height = self.model_params.resolution
+        buffer_width = int(
+            buffer_height * (buffer_image.size[0] / buffer_image.size[1])
+        )
+        buffer_image = buffer_image.resize((buffer_width, buffer_height))
         buffer = from_pil_image(buffer_image)
         if buffer_name in ["image", "irradiance", "diffuse", "glossy"]:
             buffer = untonemap(buffer)
+            buffer /= 3.5  # Align exposure
         elif buffer_name == "albedo":
             pass
         elif buffer_name in ["roughness", "metalness", "depth", "depth_moge"]:
@@ -202,8 +233,4 @@ class BlenderPriorDataset:
         else:
             raise ValueError(f"Buffer name not recognized: {buffer_name}")
         buffer = torch.tensor(buffer)
-
-        if buffer_name in ["image", "irradiance", "diffuse", "glossy"]:
-            buffer /= 3.5
-
         return buffer
