@@ -74,7 +74,12 @@ class ColmapDataset:
                 self.keys = []
 
         if "MANUAL_FILTER" in os.environ:
-            self.best_frames = open(os.path.join(data_dir, "best_frames.txt"), "r").read().strip().split(" ")
+            self.best_frames = (
+                open(os.path.join(data_dir, "best_frames.txt"), "r")
+                .read()
+                .strip()
+                .split(" ")
+            )
             self.keys = [k for k in self.keys if k in self.best_frames]
 
     def __len__(self) -> int:

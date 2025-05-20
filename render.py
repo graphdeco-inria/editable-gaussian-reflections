@@ -693,7 +693,7 @@ def render_set(
 @torch.no_grad()
 def render_sets(model_params: ModelParams, iteration: int, pipeline: PipelineParams):
     gaussians = GaussianModel(model_params)
-    
+
     scene = Scene(model_params, gaussians, load_iteration=iteration, shuffle=False)
     if "DBG_FLOATERS" in os.environ:
         mask = scene.select_points_to_prune_near_cameras(

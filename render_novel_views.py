@@ -81,8 +81,15 @@ def render_set(
             "position": package.position[0],
             "depth": package.depth[0] / package.depth[0].amax(),
             "normal": package.normal[0] / 2 + 0.5,
-            "ray_origin": raytracer.cuda_module.output_ray_origin[0].moveaxis(-1, 0).abs() / 5,
-            "ray_direction": raytracer.cuda_module.output_ray_direction[0].moveaxis(-1, 0) / 2 + 0.5,
+            "ray_origin": raytracer.cuda_module.output_ray_origin[0]
+            .moveaxis(-1, 0)
+            .abs()
+            / 5,
+            "ray_direction": raytracer.cuda_module.output_ray_direction[0].moveaxis(
+                -1, 0
+            )
+            / 2
+            + 0.5,
             "roughness": package.roughness[0],
             "F0": package.F0[0],
         }

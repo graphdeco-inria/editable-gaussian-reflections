@@ -132,7 +132,6 @@ class BlenderPriorDataset:
         position_image = transform_depth_to_position_image(depth_image, fovx, fovy)
         position_image = transform_points(position_image, c2w_tensor)
 
-
         #     ply = PlyData([PlyElement.describe(verts, 'vertex')], text=True)
         #     ply.write(path)
         # save_position_image_to_ply(position_image.numpy(), "distance_converted2.ply")

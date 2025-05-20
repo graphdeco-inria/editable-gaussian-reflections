@@ -111,6 +111,7 @@ class Scene:
         self.autoadjust_zplanes()
 
         import sys
+
         sys.path.append(gaussians.model_params.raytracer_version)
         import raytracer_config
 

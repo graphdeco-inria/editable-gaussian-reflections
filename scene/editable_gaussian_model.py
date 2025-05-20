@@ -161,7 +161,7 @@ class EditableGaussianModel(GaussianModel):
 
         self.f0 = f0
         return f0
-    
+
     @property
     def get_normal(self):
         normal = super().get_normal.clone()
@@ -181,11 +181,9 @@ class EditableGaussianModel(GaussianModel):
                 rotation_angles[None]
             )[0]
 
-            normal[self.selections[key].squeeze(1)] = (
-                torch.matmul(
-                    normal[self.selections[key].squeeze(1)],
-                    rotation_matrix.T,
-                )
+            normal[self.selections[key].squeeze(1)] = torch.matmul(
+                normal[self.selections[key].squeeze(1)],
+                rotation_matrix.T,
             )
 
         self.normal = normal
