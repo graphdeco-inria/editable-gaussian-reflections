@@ -126,12 +126,11 @@ class ModelParams(ParamGroup):
 
         self.warmup_diffuse_loss_weight = 10000.0
         self.diffuse_loss_weight = 5.0
-        self.glossy_loss_weight = 5.0
+        self.glossy_loss_weight = 3.0
         if "LEGACY_WEIGHT" in os.environ:
             self.glossy_loss_weight = 0.001 
-        
-        self.normal_loss_weight = 1.0
-        self.position_loss_weight = 3.0
+        self.normal_loss_weight = 2.5
+        self.position_loss_weight = 2.5
         if "REAL_SCENE" in os.environ:
             self.position_loss_weight = 0.0
         self.f0_loss_weight = 1.0
