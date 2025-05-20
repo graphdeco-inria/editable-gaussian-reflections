@@ -19,9 +19,10 @@ from tqdm import tqdm
 
 from arguments import ModelParams
 from scene.dataset import BlenderDataset, BlenderPriorDataset, ColmapDataset
-from scene.dataset.points_utils import get_point_cloud, make_random_point_cloud
+from scene.dataset.points_utils import make_random_point_cloud
 from scene.gaussian_model import BasicPointCloud
 from utils.graphics_utils import getWorld2View2
+from utils.ply_utils import read_ply
 
 from .cameras import Camera
 
@@ -60,6 +61,19 @@ def getNerfppNorm(cameras: List[Camera]) -> dict:
     return {"translate": translate, "radius": radius}
 
 
+def get_dataset(model_params: ModelParams, data_dir: str, split: str):
+    if os.path.exists(os.path.join(data_dir, "transforms_train.json")):
+        if os.path.isdir(os.path.join(data_dir, "train", "preview")) or os.path.isdir(
+            os.path.join(data_dir, "priors", "preview")
+        ):
+            dataset = BlenderPriorDataset(model_params, data_dir, split=split)
+        else:
+            dataset = BlenderDataset(model_params, data_dir, split=split)
+    else:
+        dataset = ColmapDataset(model_params, data_dir, split=split)
+    return dataset
+
+
 def read_dataset(dataset, num_workers=16):
     max_workers = min(num_workers, os.cpu_count() or 1)
     dataloader = torch.utils.data.DataLoader(
@@ -77,90 +91,30 @@ def read_dataset(dataset, num_workers=16):
     return cameras
 
 
-def readColmapSceneInfo(model_params: ModelParams, data_dir: str) -> SceneInfo:
-    point_cloud = get_point_cloud(data_dir)
-    extra_point_cloud = make_random_point_cloud(model_params)
-
-    train_dataset = ColmapDataset(
+def readSceneInfo(model_params: ModelParams, data_dir: str) -> SceneInfo:
+    print("Reading Training Transforms")
+    train_dataset = get_dataset(
         model_params,
         data_dir,
-        point_cloud,
         split="train",
     )
-    test_dataset = ColmapDataset(
-        model_params,
-        data_dir,
-        point_cloud,
-        split="test",
-    )
-    print("Reading Training Transforms")
     train_cameras = read_dataset(train_dataset)
     print("Reading Test Transforms")
+    test_dataset = get_dataset(
+        model_params,
+        data_dir,
+        split="test",
+    )
     test_cameras = read_dataset(test_dataset)
 
-    scene_info = SceneInfo(
-        point_cloud=point_cloud,
-        extra_point_cloud=extra_point_cloud,
-        train_cameras=train_cameras,
-        test_cameras=test_cameras,
-        nerf_normalization=getNerfppNorm(train_cameras),
-        ply_path=os.path.join(data_dir, "sparse/0/points3D.ply"),
+    # Make point clouds
+    points, colors = read_ply(os.path.join(data_dir, "point_cloud_dense.ply"))
+    point_cloud = BasicPointCloud(
+        points=points,
+        colors=colors,
+        normals=np.zeros_like(points),
     )
-    return scene_info
-
-
-def readBlenderSceneInfo(model_params: ModelParams, data_dir: str) -> SceneInfo:
-    point_cloud = get_point_cloud(data_dir)
     extra_point_cloud = make_random_point_cloud(model_params)
-
-    train_dataset = BlenderDataset(
-        model_params,
-        data_dir,
-        point_cloud,
-        split="train",
-    )
-    test_dataset = BlenderDataset(
-        model_params,
-        data_dir,
-        point_cloud,
-        split="test",
-    )
-    print("Reading Training Transforms")
-    train_cameras = read_dataset(train_dataset)
-    print("Reading Test Transforms")
-    test_cameras = read_dataset(test_dataset)
-
-    scene_info = SceneInfo(
-        point_cloud=point_cloud,
-        extra_point_cloud=extra_point_cloud,
-        train_cameras=train_cameras,
-        test_cameras=test_cameras,
-        nerf_normalization=getNerfppNorm(train_cameras),
-        ply_path=os.path.join(data_dir, "sparse/0/points3D.ply"),
-    )
-    return scene_info
-
-
-def readBlenderPriorSceneInfo(model_params: ModelParams, data_dir: str) -> SceneInfo:
-    point_cloud = get_point_cloud(data_dir)
-    extra_point_cloud = make_random_point_cloud(model_params)
-
-    train_dataset = BlenderPriorDataset(
-        model_params,
-        data_dir,
-        point_cloud,
-        split="train",
-    )
-    test_dataset = BlenderPriorDataset(
-        model_params,
-        data_dir,
-        point_cloud,
-        split="test",
-    )
-    print("Reading Training Transforms")
-    train_cameras = read_dataset(train_dataset)
-    print("Reading Test Transforms")
-    test_cameras = read_dataset(test_dataset)
 
     scene_info = SceneInfo(
         point_cloud=point_cloud,

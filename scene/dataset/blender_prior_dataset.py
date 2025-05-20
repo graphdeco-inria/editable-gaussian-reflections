@@ -8,11 +8,13 @@ from einops import repeat
 from PIL import Image
 
 from arguments import ModelParams
+from scene.dataset.colmap_parser import ColmapParser
 from scene.gaussian_model import BasicPointCloud
 from scene.tonemapping import untonemap
 from utils.depth_utils import (
     linear_least_squares_1d,
     project_pointcloud_to_depth_map,
+    ransac_linear_fit,
     transform_depth_to_position_image,
     transform_distance_to_position_image,
     transform_normals_to_world,
@@ -29,14 +31,20 @@ class BlenderPriorDataset:
         self,
         model_params: ModelParams,
         data_dir: str,
-        point_cloud: BasicPointCloud,
         split: str = "train",
         dirname: str = None,
     ):
         self.model_params = model_params
         self.data_dir = data_dir
-        self.point_cloud = point_cloud
         self.split = split
+
+        self.colmap_parser = ColmapParser(data_dir)
+        self.point_cloud = BasicPointCloud(
+            points=self.colmap_parser.points,
+            colors=self.colmap_parser.points_rgb,
+            normals=np.zeros_like(self.colmap_parser.points),
+        )
+
         self.dirname = split if dirname is None else dirname
         self.buffers_dir = os.path.join(self.data_dir, self.dirname)
         transform_path = os.path.join(data_dir, f"transforms_{split}.json")
@@ -52,8 +60,8 @@ class BlenderPriorDataset:
     def __getitem__(self, idx: int) -> CameraInfo:
         frame = self.frames[idx]
         frame_name = frame["file_path"]
-        image_name = Path(frame_name).stem
-        image_path = os.path.join(self.data_dir, frame_name + ".png")
+        image_name = Path(frame_name).stem + ".png"
+        image_path = os.path.join(self.data_dir, image_name)
 
         image = self._get_buffer(frame_name, "image")
         albedo_image = self._get_buffer(frame_name, "albedo")
@@ -61,8 +69,8 @@ class BlenderPriorDataset:
         glossy_image = self._get_buffer(frame_name, "glossy")
         roughness_image = self._get_buffer(frame_name, "roughness")
         metalness_image = self._get_buffer(frame_name, "metalness")
-        depth_image = self._get_buffer(frame_name, "depth_moge")
-        normal_image = self._get_buffer(frame_name, "normal_stable")
+        depth_image = self._get_buffer(frame_name, "depth")
+        normal_image = self._get_buffer(frame_name, "normal")
         specular_image = torch.ones_like(image) * 0.5
         brdf_image = torch.zeros_like(image)
         base_color_image = albedo_image * (1.0 - metalness_image) + metalness_image
@@ -114,27 +122,26 @@ class BlenderPriorDataset:
         R_tensor = torch.tensor(R, dtype=torch.float32)
         normal_image = transform_normals_to_world(normal_image, R_tensor)
 
-        # Postprocess position_image
+        # Postprocess depth_image to position_image
+        depth_image = depth_image[:, :, 0]
         c2w_tensor = torch.tensor(c2w, dtype=torch.float32)
         w2c_tensor = torch.tensor(w2c, dtype=torch.float32)
-        points_tensor = torch.tensor(self.point_cloud.points, dtype=torch.float32)
+        points_tensor = torch.tensor(
+            self.colmap_parser.points[self.colmap_parser.point_indices[image_name]],
+            dtype=torch.float32,
+        )
         points_tensor = transform_points(points_tensor, w2c_tensor)
-        depth_image = depth_image[:, :, 0]
         depth_points_image = project_pointcloud_to_depth_map(
-            points_tensor, fovx, fovy, depth_image.shape
+            points_tensor, fovx, fovy, depth_image.shape[:2]
         )
-        a, b = linear_least_squares_1d(
-            depth_image[depth_points_image != 0],
-            depth_points_image[depth_points_image != 0],
-        )
+        valid_mask = depth_points_image != 0
+        x = depth_image[valid_mask].float()
+        y = depth_points_image[valid_mask]
+        # a, b = linear_least_squares_1d(x, y)
+        (a, b), _ = ransac_linear_fit(x, y)
         depth_image = depth_image * a + b
-
         position_image = transform_depth_to_position_image(depth_image, fovx, fovy)
         position_image = transform_points(position_image, c2w_tensor)
-
-        #     ply = PlyData([PlyElement.describe(verts, 'vertex')], text=True)
-        #     ply.write(path)
-        # save_position_image_to_ply(position_image.numpy(), "distance_converted2.ply")
 
         if "ABLATION" in os.environ:
             resolution = image.shape[0]
@@ -225,9 +232,9 @@ class BlenderPriorDataset:
             buffer /= 3.5  # Align exposure
         elif buffer_name == "albedo":
             pass
-        elif buffer_name in ["roughness", "metalness", "depth", "depth_moge"]:
+        elif buffer_name in ["roughness", "metalness", "depth"]:
             buffer = repeat(buffer, "h w 1 -> h w 3")
-        elif buffer_name in ["normal", "normal_stable"]:
+        elif buffer_name in ["normal"]:
             buffer = buffer * 2.0 - 1.0
         else:
             raise ValueError(f"Buffer name not recognized: {buffer_name}")

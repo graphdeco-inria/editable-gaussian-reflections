@@ -63,6 +63,8 @@ def render_set(
         diffuse_image = tonemap(package.rgb[0]).clamp(0, 1)
         glossy_image = tonemap(package.rgb[1:-1].sum(dim=0)).clamp(0, 1)
         pred_image = tonemap(package.rgb[-1]).clamp(0, 1)
+        ray_origin = raytracer.cuda_module.output_ray_origin[0].moveaxis(-1, 0).abs()
+        ray_direction = raytracer.cuda_module.output_ray_direction[0].moveaxis(-1, 0)
 
         # Match normal image with EnvGS visualization
         R_tensor = torch.tensor(camera.R.T, dtype=torch.float32)
@@ -80,16 +82,9 @@ def render_set(
             "diffuse": diffuse_image,
             "position": package.position[0],
             "depth": package.depth[0] / package.depth[0].amax(),
-            "normal": package.normal[0] / 2 + 0.5,
-            "ray_origin": raytracer.cuda_module.output_ray_origin[0]
-            .moveaxis(-1, 0)
-            .abs()
-            / 5,
-            "ray_direction": raytracer.cuda_module.output_ray_direction[0].moveaxis(
-                -1, 0
-            )
-            / 2
-            + 0.5,
+            "normal": normal_image * 0.5 + 0.5,
+            "ray_origin": ray_origin / 5,
+            "ray_direction": ray_direction * 0.5 + 0.5,
             "roughness": package.roughness[0],
             "F0": package.F0[0],
         }
