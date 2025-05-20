@@ -1,5 +1,6 @@
 import torch
 import math
+import random
 
 def transform_normals_to_world(normals_camera, view_matrix):
     # Invert the direction of the camera normals
@@ -194,17 +195,76 @@ def linear_least_squares_1d(x: torch.Tensor, y: torch.Tensor):
     return w, b
 
 
-def save_position_image_to_ply(position_image, path):
-    import numpy as np
-    from plyfile import PlyData, PlyElement
+def ransac_linear_fit(x, y, num_iters=100, threshold=None, min_inliers=0.5):
+    """
+    Robustly fits y = wx + b using RANSAC.
+    
+    Args:
+        x (Tensor): shape [N]
+        y (Tensor): shape [N]
+        num_iters (int): RANSAC iterations
+        threshold (float): max residual to count as inlier
+        min_inliers (float): min fraction of inliers to accept a model
 
-    H, W, _ = position_image.shape
-    points = position_image.reshape(-1, 3).astype(np.float32)
+    Returns:
+        best_model: (w, b)
+        best_inliers: boolean tensor of inlier flags
+    """
+    assert x.shape == y.shape
+    if threshold is None:
+        # Initial fit (least squares)
+        X = torch.stack([x, torch.ones_like(x)], dim=1)
+        w_b = torch.linalg.lstsq(X, y.unsqueeze(1)).solution.squeeze()
+        residuals = torch.abs(y - (w_b[0] * x + w_b[1]))
 
-    verts = np.array(
-        [(p[0], p[1], p[2]) for p in points],
-        dtype=[('x', 'f4'), ('y', 'f4'), ('z', 'f4')]
-    )
+        # Estimate noise level
+        sigma = residuals.std()
+        threshold = 2.5 * sigma
+        
+    N = x.shape[0]
+    best_model = None
+    best_inliers = None
+    best_inlier_count = 0
 
-    ply = PlyData([PlyElement.describe(verts, 'vertex')], text=True)
-    ply.write(path)
+    for _ in range(num_iters):
+        # 1. Sample 2 random points
+        idxs = random.sample(range(N), 2)
+        x_sample = x[idxs]
+        y_sample = y[idxs]
+
+        # 2. Prepare the design matrix
+        X_sample = torch.stack([x_sample, torch.ones_like(x_sample)], dim=1)
+        y_sample = y_sample.unsqueeze(1)
+
+        # 3. Fit the model using torch.linalg.lstsq
+        result = torch.linalg.lstsq(X_sample, y_sample)
+        w_b = result.solution.squeeze()
+        if w_b.ndim == 0:  # just in case
+            continue
+        w, b = w_b[0], w_b[1]
+
+        # 4. Compute residuals on all data
+        y_pred = w * x + b
+        residuals = torch.abs(y - y_pred)
+
+        # 5. Determine inliers
+        inliers = residuals < threshold
+        inlier_count = inliers.sum().item()
+
+        # 6. Keep the best model
+        if inlier_count > best_inlier_count and inlier_count > min_inliers * N:
+            best_model = (w, b)
+            best_inliers = inliers
+            best_inlier_count = inlier_count
+
+    # Optional: Refit on inliers
+    if best_model is not None and best_inliers is not None:
+        x_in = x[best_inliers]
+        y_in = y[best_inliers]
+        X_in = torch.stack([x_in, torch.ones_like(x_in)], dim=1)
+        y_in = y_in.unsqueeze(1)
+        result = torch.linalg.lstsq(X_in, y_in)
+        w_b = result.solution.squeeze()
+        return (w_b[0], w_b[1]), best_inliers
+
+    return None, None  # No model found

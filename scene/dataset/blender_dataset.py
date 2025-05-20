@@ -8,6 +8,7 @@ import torch
 from einops import rearrange
 
 from arguments import ModelParams
+from scene.dataset.colmap_parser import ColmapParser
 from scene.gaussian_model import BasicPointCloud
 from utils.graphics_utils import focal2fov, fov2focal
 
@@ -19,13 +20,18 @@ class BlenderDataset:
         self,
         model_params: ModelParams,
         data_dir: str,
-        point_cloud: BasicPointCloud,
         split: str = "train",
     ):
         self.model_params = model_params
         self.data_dir = data_dir
-        self.point_cloud = point_cloud
         self.split = split
+
+        self.colmap_parser = ColmapParser(data_dir)
+        self.point_cloud = BasicPointCloud(
+            points=self.colmap_parser.points,
+            colors=self.colmap_parser.points_rgb,
+            normals=np.zeros_like(self.colmap_parser.points),
+        )
 
         downsampled_cache_dir = data_dir.replace(
             "/renders/", f"/cache/{model_params.resolution}/"
@@ -47,8 +53,8 @@ class BlenderDataset:
     def __getitem__(self, idx: int) -> CameraInfo:
         frame = self.frames[idx]
         frame_name = frame["file_path"]
-        image_name = Path(frame_name).stem
-        image_path = os.path.join(self.data_dir, frame_name + ".png")
+        image_name = Path(frame_name).stem + ".png"
+        image_path = os.path.join(self.data_dir, image_name)
 
         if "LOAD_FROM_IMAGE_FILES" not in os.environ:
             cache_name = frame_name.replace("render/render_", "")
@@ -73,12 +79,13 @@ class BlenderDataset:
             )
         else:
             image = self._get_buffer(frame_name, "render")
-            albedo_image = self._get_buffer(frame_name, "albedo")
+            # albedo_image = self._get_buffer(frame_name, "albedo")
             diffuse_image = self._get_buffer(frame_name, "diffuse")
             glossy_image = self._get_buffer(frame_name, "glossy")
             roughness_image = self._get_buffer(frame_name, "roughness")
             metalness_image = self._get_buffer(frame_name, "metalness")
             normal_image = self._get_buffer(frame_name, "normal")
+            # depth_image = self._get_buffer(frame_name, "depth")
             position_image = self._get_buffer(frame_name, "position")
             specular_image = self._get_buffer(frame_name, "specular")
             brdf_image = self._get_buffer(frame_name, "glossy_brdf")

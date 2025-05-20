@@ -45,6 +45,7 @@ do
         -s $SCENE_DIR/$SCENE \
         -m $OUTPUT_DIR/$SCENE \
         -r $RESOLUTION \
+        --init_scale_factor 0.1 \
         --eval \
         --raytracer_version $RAYTRACER_VERSION
 

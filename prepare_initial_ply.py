@@ -3,53 +3,40 @@ import argparse
 from dataclasses import dataclass
 
 import torch
-import numpy as np
 import tyro
 from tqdm import tqdm
-import plyfile
-from collections import defaultdict
+import numpy as np
 
 from arguments import ModelParams
-from scene.dataset import ColmapDataset
-from scene.dataset.points_utils import (
-    get_point_cloud,
-    make_skybox,
-)
+from scene.dataset_readers import get_dataset
+from scene.dataset.colmap_parser import ColmapParser
 from scene.tonemapping import tonemap
-
+from utils.ply_utils import save_ply
 
 @dataclass
 class Config:
     # Path to scene
-    source_path: str = "data/real_datasets_v2_filmic/neural_catacaustics_priors/compost"
+    source_path: str = "data/renders/shiny_kitchen"
+    # Path to output
+    output_dir: str = "output/plys/shiny_kitchen"
     # Scale to bin
     scale: float = 50.0
-
-def read_ply(data_dir):
-    # Read the .ply file
-    plydata = plyfile.PlyData.read(os.path.join(data_dir, 'point_cloud.ply'))
-    vertex_data = plydata['vertex'].data
-    points = np.vstack([vertex_data['x'], vertex_data['y'], vertex_data['z']]).T
-    colors = np.vstack([vertex_data['red'], vertex_data['green'], vertex_data['blue']]).T
-    colors = colors / 255.0
-    print(points.shape)
-    point_cloud = BasicPointCloud(
-        points=points,
-        colors=colors,
-        normals=np.zeros_like(points),
-    )
-    extra_point_cloud = BasicPointCloud(
-        points=np.zeros((0, 3)),
-        colors=np.zeros((0, 3)),
-        normals=np.zeros((0, 3)),
-    )
+    # Resolution
+    resolution: int = 128
 
 
 def main(cfg: Config):
+    if not os.path.isdir(cfg.output_dir):
+        os.makedirs(cfg.output_dir, exist_ok=True)
+
     model_params = ModelParams(parser=argparse.ArgumentParser())
-    model_params.resolution = 256
-    point_cloud = get_point_cloud(cfg.source_path)
-    dataset = ColmapDataset(model_params, cfg.source_path, point_cloud)
+    model_params.resolution = cfg.resolution
+    colmap_parser = ColmapParser(cfg.source_path)
+    print("SFM Point Cloud:", colmap_parser.points.shape)
+    ply_path = os.path.join(cfg.output_dir, "point_cloud_sfm.ply")
+    save_ply(ply_path, colmap_parser.points, colmap_parser.points_rgb)
+
+    dataset = get_dataset(model_params, cfg.source_path, split="train")
     dataloader = torch.utils.data.DataLoader(
         dataset,
         batch_size=1,
@@ -58,58 +45,47 @@ def main(cfg: Config):
         collate_fn=lambda x: x,
     )
 
-    points_dict = defaultdict(int)
-    colors_dict = defaultdict(lambda: torch.zeros(3))
-    # normals_dict = defaultdict(lambda: torch.zeros(3))
+    points_all = []
+    colors_all = []
+
     for idx, cam_info_batch in enumerate(tqdm(dataloader)):
         cam_info = cam_info_batch[0]
-        if idx == 10:
-            break
-
         points = cam_info.position_image.reshape(-1, 3)
         colors = tonemap(cam_info.diffuse_image.reshape(-1, 3))
-        # normals = cam_info.normal_image.reshape(-1, 3)
-        for point, color in zip(points, colors):
-            point_round = (point * cfg.scale).round().int()
-            point_hash = tuple(point_round.numpy().tolist())
 
-            c = points_dict[point_hash]
-            colors_dict[point_hash] = (colors_dict[point_hash] * c + color) / (c + 1)
-            points_dict[point_hash] += 1
+        points_all.append(points.cpu())
+        colors_all.append(colors.cpu())
 
-    # threshold = torch.quantile(points_dict.values(), 2)
-    threshold = 0.0
-    points_list = []
-    colors_list = []
-    for k in points_dict.keys():
-        if points_dict[k] < threshold:
-            continue
-        points_list.append(k)
-        colors_list.append(colors_dict[k])
-    points = np.array(points_list) / cfg.scale
-    colors = (np.array(colors_list) * 255.0).astype(np.uint8)
-    print(points.shape)
+    # Stack everything into tensors
+    points = torch.cat(points_all)      # (N, 3)
+    colors = torch.cat(colors_all)      # (N, 3)
 
-    # Create structured array
-    vertex = np.array(
-        [(*point, *color) for point, color in zip(points, colors)],
-        dtype=[
-            ("x", "f4"),
-            ("y", "f4"),
-            ("z", "f4"),
-            ("red", "u1"),
-            ("green", "u1"),
-            ("blue", "u1"),
-        ],
-    )
+    # Compute voxel indices
+    voxel_coords = (points * cfg.scale).round().int()
 
-    # Create a PlyElement
-    ply_element = plyfile.PlyElement.describe(vertex, "vertex")
+    # Find unique voxel positions
+    unique_coords, inverse_indices, counts = torch.unique(voxel_coords, dim=0, return_inverse=True, return_counts=True)
 
-    # Write to PLY file
-    ply_path = os.path.join(cfg.source_path, "point_cloud.ply")
-    plyfile.PlyData([ply_element], text=True).write(ply_path)
+    # Accumulate color contributions per voxel
+    accum_colors = torch.zeros((unique_coords.shape[0], 3), dtype=colors.dtype)
+    accum_colors.index_add_(0, inverse_indices, colors)
 
+    # Average colors per voxel
+    avg_colors = accum_colors / counts.unsqueeze(1)
+
+    # Select top x% densest voxels
+    # threshold = torch.quantile(counts.float(), 0.02)
+    # print("Percentile threshold:", threshold.item())
+    mask = counts >= 2.0
+    unique_coords = unique_coords[mask]
+    avg_colors = avg_colors[mask]
+
+    # Extract points and colors
+    points_np = (unique_coords.float() / cfg.scale).numpy()  # (n, 3)
+    colors_np = avg_colors.numpy()                       # (n, 3)
+    print("Dense Point Cloud:", points_np.shape)
+    ply_path = os.path.join(cfg.output_dir, "point_cloud_dense.ply")
+    save_ply(ply_path, points_np, colors_np)
     
 if __name__ == "__main__":
     cfg = tyro.cli(Config)
