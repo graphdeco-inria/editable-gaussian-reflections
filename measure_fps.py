@@ -49,7 +49,7 @@ def render_set(
 
     start_event.record()
     for idx, view in enumerate(tqdm(views, desc="Rendering progress")):
-        package = render(view, raytracer, pipeline, background, force_update_bvh=True, targets_available=False)
+        package = render(view, raytracer, pipeline, background, force_update_bvh=False, targets_available=False)
     end_event.record()
     
     torch.cuda.synchronize()

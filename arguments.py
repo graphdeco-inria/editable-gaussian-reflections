@@ -100,7 +100,7 @@ class ModelParams(ParamGroup):
         self.num_farfield_init_points = 75_000 
 
         self.min_opacity = 0.005
-        self.min_weight = 1e-10
+        self.min_weight = 0.1
 
         self.znear_densif_pruning = "REAL_SCENE" not in os.environ
         self.znear_scaledown = 0.8
@@ -111,6 +111,8 @@ class ModelParams(ParamGroup):
 
         self.exposure = 1.0
         self.raytrace_primal = False
+
+        self.f0_decay = False
 
         self.opacity_pruning_threshold = 0.005  # 0.051 #
         self.cap_max = -1  # for mcmc
@@ -238,7 +240,7 @@ class OptimizationParams(ParamGroup):
         self.scale_reg = 0.0  # 0.01 in mcmc
         self.opacity_reg = 0.0  # 0.01 in mcmc
 
-        self.scale_decay = 1.0
+        self.scale_decay = 0.9999
         self.opacity_decay = 1.0
         self.lod_mean_decay = 1.0
         self.lod_scale_decay = 1.0
@@ -275,7 +277,7 @@ class OptimizationParams(ParamGroup):
         self.random_background = False
 
         self.beta_1 = 0.9
-        self.beta_2 = 0.9 # important to be lower than 0.999
+        self.beta_2 = 0.999 # important to be lower than 0.999
 
         super().__init__(parser, "Optimization Parameters")
 

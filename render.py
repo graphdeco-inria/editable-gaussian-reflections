@@ -797,7 +797,7 @@ if __name__ == "__main__":
     # Rendering args
     parser.add_argument("--iteration", default=-1, type=int)
     parser.add_argument("--max_bounces", default=-1, type=int)
-    parser.add_argument("--spp", default=32, type=int)
+    parser.add_argument("--spp", default=128, type=int)
     parser.add_argument("--supersampling", default=1, type=int)
     parser.add_argument("--train_views", action="store_true")
     parser.add_argument("--skip_denoiser", action="store_true")

@@ -22,3 +22,5 @@ renders
 /cache 
 /colmap
 /cache*/
+
+/tmp*
