@@ -107,12 +107,10 @@ def readSceneInfo(model_params: ModelParams, data_dir: str) -> SceneInfo:
     )
     test_cameras = read_dataset(test_dataset)
 
-    # Make point clouds
-    # if "USE_COLMAP_INIT" in os.environ:
-    #     points, colors = read_ply(os.path.join(data_dir, "point_cloud_sfm.ply"))
-    # else:
-    #     
-    points, colors = read_ply(os.path.join(data_dir, "point_cloud_dense.ply"))
+    if "USE_COLMAP_INIT" in os.environ:
+        points, colors = read_ply(os.path.join(data_dir, "point_cloud_sfm.ply"))
+    else:
+        points, colors = read_ply(os.path.join(data_dir, "point_cloud_dense.ply"))
 
     point_cloud = BasicPointCloud(
         points=points,
