@@ -23,22 +23,17 @@ from arguments import ModelParams, PipelineParams, OptimizationParams
 import numpy as np
 import kornia
 import time 
+from diff_gaussian_tracing import make_raytracer, raytracer_config
+
 LOADED = False
 
 
 class GaussianRaytracer:
     
     def __init__(self, pc: GaussianModel, image_width: int, image_height: int):
-        global LOADED
-        if not LOADED:
-            torch.classes.load_library(
-                f"{pc.model_params.raytracer_version}/libgausstracer.so"
-            )
-            LOADED = True
-
         self.image_width: int = image_width
         self.image_height: int = image_height
-        self.cuda_module = torch.classes.gausstracer.Raytracer(image_width, image_height, pc.get_scaling.shape[0])
+        self.cuda_module = make_raytracer(image_width, image_height, pc.get_scaling.shape[0])
 
         os.environ["DIFFUSE_LOSS_WEIGHT"] = str(pc.model_params.diffuse_loss_weight)
         os.environ["GLOSSY_LOSS_WEIGHT"] = str(pc.model_params.glossy_loss_weight)
@@ -60,11 +55,6 @@ class GaussianRaytracer:
         torch.cuda.synchronize()  #!!! remove
         self.cuda_module.rebuild_bvh()
         torch.cuda.synchronize()  #!!! remove
-
-        import sys
-
-        sys.path.append(f"{pc.model_params.raytracer_version}")
-        import raytracer_config
 
         self.config = raytracer_config
         torch.cuda.synchronize()

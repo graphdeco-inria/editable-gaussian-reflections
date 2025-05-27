@@ -17,6 +17,7 @@ import shutil
 
 import numpy as np
 import torch
+from diff_gaussian_tracing import raytracer_config
 
 from arguments import ModelParams
 from scene.cameras import Camera
@@ -98,11 +99,6 @@ class Scene:
         print(f"I have {len(self.train_cameras[resolution_scales[0]])} cameras")
 
         self.autoadjust_zplanes()
-
-        import sys
-
-        sys.path.append(gaussians.model_params.raytracer_version)
-        import raytracer_config
 
         if self.loaded_iter:
             self.gaussians.load_ply(

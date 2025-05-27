@@ -655,8 +655,6 @@ parser.add_argument("--start_checkpoint", type=str, default=None)
 args = parser.parse_args(sys.argv[1:])
 args.save_iterations.append(args.iterations)
 
-assert args.raytracer_version != ""
-
 if "_with_book" in args.source_path:
     args.max_images = 199  ##! crashes if last image is included
 
@@ -993,7 +991,7 @@ for iteration in tqdm(
                 gaussians.prune_points(
                     (
                         raytracer.cuda_module.gaussian_total_weight
-                         / opt_params.densification_interval
+                        / opt_params.densification_interval
                         < model_params.min_weight
                     ).squeeze(1)
                 )
