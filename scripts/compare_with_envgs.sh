@@ -13,7 +13,7 @@ SCENE_LIST="compost concave_bowl2 crazy_blade2 hallway_lamp multibounce silver_v
 
 for SCENE in $SCENE_LIST;
 do
-    VIDEO_PATH0=output/benchmark_${DATASET_NAME}_priors/$SCENE/novel_views/ours_8000/RENDER,DIFFUSE,GLOSSY,NORMAL.mp4
+    VIDEO_PATH0=output/benchmark_${DATASET_NAME}_priors/$SCENE/novel_views/ours_8000/ours_$SCENE.mp4
     VIDEO_PATH1=../EnvGS/data/novel_view/envgs/${DATASET_NAME}/envgs_$SCENE/RENDER,DIFFUSE,REFLECTION,NORMAL.mp4
 
     SAVE_DIR=output/benchmark_${DATASET_NAME}_priors/$SCENE/novel_views
