@@ -28,8 +28,6 @@ python3 -c "import torch; print(torch.cuda.is_available()); print(torch.cuda.get
 # Start
 # ============================================================
 
-RAYTRACER_VERSION="../optix-gaussian-raytracing/build/v74/"
-
 # RESOLUTION=512
 # SCENE_DIR="data/real_datasets_v3_filmic/refnerf_priors"
 # SCENE_LIST="gardenspheres sedan toycar"
@@ -61,22 +59,19 @@ do
         --init_scale_factor 0.1 \
         --no_znear_densif_pruning \
         --position_loss_weight 0.0 \
-        --eval \
-        --raytracer_version $RAYTRACER_VERSION
+        --eval
 
     python render.py \
         -s $SCENE_DIR/$SCENE \
         -m $OUTPUT_DIR/$SCENE \
         -r $RESOLUTION \
-        --eval \
-        --raytracer_version $RAYTRACER_VERSION
+        --eval
 
     ZNEAR=0.5 python render_novel_views.py \
         -s $SCENE_DIR/$SCENE \
         -m $OUTPUT_DIR/$SCENE \
         -r $RESOLUTION \
-        --eval \
-        --raytracer_version $RAYTRACER_VERSION
+        --eval
 
     # Saving videos
     NOVEL_VIEWS_DIR=$OUTPUT_DIR/$SCENE/novel_views/ours_8000
