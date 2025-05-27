@@ -71,7 +71,7 @@ do
         --eval \
         --raytracer_version $RAYTRACER_VERSION
 
-    python render_novel_views.py \
+    ZNEAR=0.5 python render_novel_views.py \
         -s $SCENE_DIR/$SCENE \
         -m $OUTPUT_DIR/$SCENE \
         -r $RESOLUTION \
@@ -79,19 +79,19 @@ do
         --raytracer_version $RAYTRACER_VERSION
 
     # Saving videos
-    IMAGES_DIR=$OUTPUT_DIR/$SCENE/novel_views/ours_8000
-    ffmpeg -y -framerate 30 -pattern_type glob -i "$IMAGES_DIR/render/*.png" -c:v libx264 -vf "pad=ceil(iw/2)*2:ceil(ih/2)*2" -pix_fmt yuv420p "$IMAGES_DIR/RENDER.mp4"
-    ffmpeg -y -framerate 30 -pattern_type glob -i "$IMAGES_DIR/diffuse/*.png" -c:v libx264 -vf "pad=ceil(iw/2)*2:ceil(ih/2)*2" -pix_fmt yuv420p "$IMAGES_DIR/DIFFUSE.mp4"
-    ffmpeg -y -framerate 30 -pattern_type glob -i "$IMAGES_DIR/glossy/*.png" -c:v libx264 -vf "pad=ceil(iw/2)*2:ceil(ih/2)*2" -pix_fmt yuv420p "$IMAGES_DIR/GLOSSY.mp4"
-    ffmpeg -y -framerate 30 -pattern_type glob -i "$IMAGES_DIR/depth/*.png" -c:v libx264 -vf "pad=ceil(iw/2)*2:ceil(ih/2)*2" -pix_fmt yuv420p "$IMAGES_DIR/DEPTH.mp4"
-    ffmpeg -y -framerate 30 -pattern_type glob -i "$IMAGES_DIR/normal/*.png" -c:v libx264 -vf "pad=ceil(iw/2)*2:ceil(ih/2)*2" -pix_fmt yuv420p "$IMAGES_DIR/NORMAL.mp4"
+    NOVEL_VIEWS_DIR=$OUTPUT_DIR/$SCENE/novel_views/ours_8000
+    for BUFFER_DIR in $(find $NOVEL_VIEWS_DIR -mindepth 1 -maxdepth 1 -type d); do
+        echo "Making video from: $BUFFER_DIR"
+        ffmpeg -y -framerate 30 -pattern_type glob -i "$BUFFER_DIR/*.png" -c:v libx264 -vf "pad=ceil(iw/2)*2:ceil(ih/2)*2" -pix_fmt yuv420p "$BUFFER_DIR.mp4"
+    done
+
     ffmpeg -y \
-        -i "$IMAGES_DIR/RENDER.mp4" \
-        -i "$IMAGES_DIR/DIFFUSE.mp4" \
-        -i "$IMAGES_DIR/GLOSSY.mp4" \
-        -i "$IMAGES_DIR/NORMAL.mp4" \
+        -i "$NOVEL_VIEWS_DIR/render.mp4" \
+        -i "$NOVEL_VIEWS_DIR/diffuse.mp4" \
+        -i "$NOVEL_VIEWS_DIR/glossy.mp4" \
+        -i "$NOVEL_VIEWS_DIR/normal.mp4" \
         -filter_complex "[0:v][1:v][2:v][3:v]hstack=inputs=4[v]" \
         -map "[v]" \
-        "$IMAGES_DIR/RENDER,DIFFUSE,GLOSSY,NORMAL.mp4"
+        "$NOVEL_VIEWS_DIR/ours_$SCENE.mp4"
 
 done
