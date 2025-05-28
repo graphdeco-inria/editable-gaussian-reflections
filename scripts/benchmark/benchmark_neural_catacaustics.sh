@@ -35,8 +35,7 @@ python3 -c "import torch; print(torch.cuda.is_available()); print(torch.cuda.get
 
 RESOLUTION=512
 SCENE_DIR="data/real_datasets_v3_filmic/neural_catacaustics_priors"
-# SCENE_LIST="compost concave_bowl2 crazy_blade2 hallway_lamp multibounce silver_vase2 wateringcan2"
-SCENE_LIST="multibounce compost hallway_lamp concave_bowl2 crazy_blade2 silver_vase2 wateringcan2"
+SCENE_LIST="compost concave_bowl2 crazy_blade2 hallway_lamp multibounce silver_vase2 wateringcan2"
 OUTPUT_DIR="output/benchmark_neural_catacaustics_priors"
 
 # RESOLUTION=512

@@ -8,3 +8,9 @@
 [submodule "SIBR_viewers"]
 	path = SIBR_viewers
 	url = https://gitlab.inria.fr/sibr/sibr_core.git
+[submodule "gaussian_tracing/cuda/csrc/third_party/optix"]
+	path = gaussian_tracing/cuda/csrc/third_party/optix
+	url = https://github.com/NVIDIA/optix-dev.git
+[submodule "gaussian_tracing/cuda/csrc/third_party/glm"]
+	path = gaussian_tracing/cuda/csrc/third_party/glm
+	url = https://github.com/g-truc/glm.git
