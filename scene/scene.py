@@ -17,9 +17,9 @@ import shutil
 
 import numpy as np
 import torch
-from diff_gaussian_tracing import raytracer_config
 
 from arguments import ModelParams
+from gaussian_tracing import raytracer_config
 from scene.cameras import Camera
 from scene.dataset_readers import (
     readSceneInfo,

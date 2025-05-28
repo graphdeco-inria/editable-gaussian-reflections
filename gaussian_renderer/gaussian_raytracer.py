@@ -23,7 +23,7 @@ from arguments import ModelParams, PipelineParams, OptimizationParams
 import numpy as np
 import kornia
 import time 
-from diff_gaussian_tracing import make_raytracer, raytracer_config
+from gaussian_tracing import make_raytracer, raytracer_config
 
 LOADED = False
 
