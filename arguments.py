@@ -119,6 +119,8 @@ class ModelParams(ParamGroup):
 
         self.use_opacity_resets = False
         self.init_scale_factor = 1.0  # 1.0 for 3dgs, 0.1 for mcmc
+        if "REAL_SCENE" in os.environ:
+            self.init_scale_factor = 0.1
         self.init_scale_factor_farfield = 0.1
         self.init_opacity = 0.1  # 0.1 for 3dgs, 0.5 for mcmc
         self.init_opacity_farfield = 0.1

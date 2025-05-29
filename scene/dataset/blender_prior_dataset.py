@@ -74,28 +74,28 @@ class BlenderPriorDataset:
         specular_image = torch.ones_like(image) * 0.5
         brdf_image = torch.zeros_like(image)
         base_color_image = albedo_image * (1.0 - metalness_image) + metalness_image
-        if "SKIP_THRESHOLD_ROUGHNESS" not in os.environ:
-            roughness_image[roughness_image < 0.25] = 0.0
-            upsized_roughness = torch.nn.functional.interpolate(
-                roughness_image.moveaxis(-1, 0)[None],
-                scale_factor=4,
-                mode="bicubic",
-                antialias=True,
-            )
-            upsized_roughness[upsized_roughness < 0.25] = 0.0
-            roughness_image = torch.nn.functional.interpolate(
-                upsized_roughness, scale_factor=1 / 4, mode="area"
-            )[0].moveaxis(0, -1)
-        if "SKIP_THRESHOLD_METALNESS" not in os.environ:
-            upsized_metal = torch.nn.functional.interpolate(
-                metalness_image.moveaxis(-1, 0)[None],
-                scale_factor=4,
-                mode="bicubic",
-                antialias=True,
-            )
-            metalness_image = torch.nn.functional.interpolate(
-                (upsized_metal > 0.4).float(), scale_factor=1 / 4, mode="area"
-            )[0].moveaxis(0, -1)
+        # if "SKIP_THRESHOLD_ROUGHNESS" not in os.environ:
+        #     roughness_image[roughness_image < 0.25] = 0.0
+        #     upsized_roughness = torch.nn.functional.interpolate(
+        #         roughness_image.moveaxis(-1, 0)[None],
+        #         scale_factor=4,
+        #         mode="bicubic",
+        #         antialias=True,
+        #     )
+        #     upsized_roughness[upsized_roughness < 0.25] = 0.0
+        #     roughness_image = torch.nn.functional.interpolate(
+        #         upsized_roughness, scale_factor=1 / 4, mode="area"
+        #     )[0].moveaxis(0, -1)
+        # if "SKIP_THRESHOLD_METALNESS" not in os.environ:
+        #     upsized_metal = torch.nn.functional.interpolate(
+        #         metalness_image.moveaxis(-1, 0)[None],
+        #         scale_factor=4,
+        #         mode="bicubic",
+        #         antialias=True,
+        #     )
+        #     metalness_image = torch.nn.functional.interpolate(
+        #         (upsized_metal > 0.4).float(), scale_factor=1 / 4, mode="area"
+        #     )[0].moveaxis(0, -1)
 
         # Camera intrinsics
         height, width = image.shape[0], image.shape[1]
@@ -152,7 +152,7 @@ class BlenderPriorDataset:
                 .replace("_512", "")
                 .replace("_768", "")
             )
-            assert int(image_name.split("_")[-1]) == idx
+            assert int(image_name.replace(".png", "").split("_")[-1]) == idx
             (
                 rendered_image,
                 rendered_diffuse_image,

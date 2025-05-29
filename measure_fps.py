@@ -49,7 +49,11 @@ def render_set(
 
     start_event.record()
     for idx, view in enumerate(tqdm(views, desc="Rendering progress")):
-        package = render(view, raytracer, pipeline, background, force_update_bvh=False, targets_available=False)
+        if args.include_backprop:
+            with torch.enable_grad():
+                package = render(view, raytracer, pipeline, background, force_update_bvh=True, targets_available=False)
+        else:
+            package = render(view, raytracer, pipeline, background, force_update_bvh=False, targets_available=False)
     end_event.record()
     
     torch.cuda.synchronize()
@@ -59,6 +63,7 @@ def render_set(
     print(f"{fps:.2f} FPS")
 
     if "SKIP_WRITE" not in os.environ:
+        file_name = "fps_with_update.txt" if args.include_backprop else "fps.txt"
         with open(os.path.join(model_path, "fps.txt"), "w") as f:
             f.write(f"{fps:.2f}\n")
 
@@ -146,6 +151,7 @@ if __name__ == "__main__":
     parser.add_argument("--iteration", default=-1, type=int)
     parser.add_argument("--train_views", action="store_true")
     parser.add_argument("--skip_denoise", action="store_true")
+    parser.add_argument("--include_backprop", action="store_true")
     parser.add_argument("--quiet", action="store_true")
     parser.add_argument(
         "--modes",
