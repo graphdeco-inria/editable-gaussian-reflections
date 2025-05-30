@@ -6,7 +6,7 @@ We have included the official OptiX SDK header files in the third_party/optix di
 
 The default installation is as follows:
 
-```
+```bash
 git clone git@gitlab.inria.fr:ypoirier/gaussian-splatting-raytraced.git --recursive
 cd gaussian-splatting-raytraced
 
@@ -20,11 +20,19 @@ pip install -v -e .
 ```
 
 To test if installed correctly, run
-```
+```bash
 bash ./scripts/test.sh
 bash ./scripts/dryrun.sh
 ```
 
+## Debugging
+
+If you run into cmake or gcc version issues, try using conda to install newer versions.
+
+```bash
+conda install -c conda-forge cxx-compiler==1.6.0 -y
+conda install anaconda::cmake -y
+```
 
 # 3D Gaussian Splatting for Real-Time Radiance Field Rendering
 Bernhard Kerbl*, Georgios Kopanas*, Thomas Leimkühler, George Drettakis (* indicates equal contribution)<br>
