@@ -1,25 +1,23 @@
-#include "glm/glm.hpp"
 #include "cuda_fp16.h"
+#include "glm/glm.hpp"
 
-
-__device__ __inline__ void atomicAdd4(float4* address, float4 val) {
-	atomicAdd(&address->x, val.x);
-	atomicAdd(&address->y, val.y);
-	atomicAdd(&address->z, val.z);
-	atomicAdd(&address->w, val.w);
+__device__ __inline__ void atomicAdd4(float4 *address, float4 val) {
+    atomicAdd(&address->x, val.x);
+    atomicAdd(&address->y, val.y);
+    atomicAdd(&address->z, val.z);
+    atomicAdd(&address->w, val.w);
 }
 
-__device__ __inline__ void atomicAdd3(float3* address, float3 val) {
-	atomicAdd(&address->x, val.x);
-	atomicAdd(&address->y, val.y);
-	atomicAdd(&address->z, val.z);
+__device__ __inline__ void atomicAdd3(float3 *address, float3 val) {
+    atomicAdd(&address->x, val.x);
+    atomicAdd(&address->y, val.y);
+    atomicAdd(&address->z, val.z);
 }
 
-__device__ int lcg_hash(int x) {
-    return (1103515245 * x + 12345);  
-}
+__device__ int lcg_hash(int x) { return (1103515245 * x + 12345); }
 
-// __device__ float3 computeCov2D(const float3 _scale, float mod, const float4 _rot, const float3 _mean)
+// __device__ float3 computeCov2D(const float3 _scale, float mod, const float4
+// _rot, const float3 _mean)
 // {
 //     glm::vec3 scale = glm::vec3(_scale.x, _scale.y, _scale.z);
 //     glm::vec4 rot = glm::vec4(_rot.x, _rot.y, _rot.z, _rot.w);
@@ -34,7 +32,8 @@ __device__ int lcg_hash(int x) {
 
 //     // float focal_x, float focal_y, float tan_fovx, float tan_fovy,
 //     // const float* viewmatrix
-//     // todo hard-code focal_x, focal_y, tan_fovx, tan_fovy based on the results from the 3dgs code
+//     // todo hard-code focal_x, focal_y, tan_fovx, tan_fovy based on the
+//     results from the 3dgs code
 
 // 	// Create scaling matrix
 // 	glm::mat3 S = glm::mat3(1.0f);
@@ -51,9 +50,13 @@ __device__ int lcg_hash(int x) {
 
 // 	// Compute rotation matrix from quaternion
 // 	glm::mat3 R = glm::mat3(
-// 		1.f - 2.f * (y * y + z * z), 2.f * (x * y - r * z), 2.f * (x * z + r * y),
-// 		2.f * (x * y + r * z), 1.f - 2.f * (x * x + z * z), 2.f * (y * z - r * x),
-// 		2.f * (x * z - r * y), 2.f * (y * z + r * x), 1.f - 2.f * (x * x + y * y)
+// 		1.f - 2.f * (y * y + z * z), 2.f * (x * y - r * z), 2.f * (x * z
+// +
+// r * y), 		2.f * (x * y + r * z), 1.f - 2.f * (x * x + z * z), 2.f
+// * (y * z - r
+// * x), 		2.f * (x * z - r * y), 2.f * (y * z + r * x), 1.f - 2.f
+// * (x
+// * x + y * y)
 // 	);
 
 // 	glm::mat3 M = S * R;
@@ -71,14 +74,15 @@ __device__ int lcg_hash(int x) {
 // 	cov3D[5] = Sigma[2][2];
 
 // 	// The following models the steps outlined by equations 29
-// 	// and 31 in "EWA Splatting" (Zwicker et al., 2002). 
+// 	// and 31 in "EWA Splatting" (Zwicker et al., 2002).
 // 	// Additionally considers aspect / scaling of viewport.
 // 	// Transposes used to account for row-/column-major conventions.
 // 	// float3 t = transformPoint4x3(mean, viewmatrix);
 //     float3 t = {
-// 		viewmatrix[0] * mean.x + viewmatrix[4] * mean.y + viewmatrix[8] * mean.z + viewmatrix[12],
-// 		viewmatrix[1] * mean.x + viewmatrix[5] * mean.y + viewmatrix[9] * mean.z + viewmatrix[13],
-// 		viewmatrix[2] * mean.x + viewmatrix[6] * mean.y + viewmatrix[10] * mean.z + viewmatrix[14],
+// 		viewmatrix[0] * mean.x + viewmatrix[4] * mean.y + viewmatrix[8]
+// * mean.z + viewmatrix[12], 		viewmatrix[1] * mean.x + viewmatrix[5] *
+// mean.y + viewmatrix[9] * mean.z + viewmatrix[13], 		viewmatrix[2] *
+// mean.x + viewmatrix[6] * mean.y + viewmatrix[10] * mean.z + viewmatrix[14],
 // 	}; //?
 
 // 	// const float limx = 1.3f * tan_fovx;
@@ -89,7 +93,7 @@ __device__ int lcg_hash(int x) {
 // 	// t.y = min(limy, max(-limy, tytz)) * t.z;
 
 // 	float size_x = 2048.0 / 2;
-// 	float size_y = 2048.0 / 2; 
+// 	float size_y = 2048.0 / 2;
 
 // 	glm::mat3 J = glm::mat3(
 // 		size_y, 0.0f, 0.0, //-t.x
@@ -112,93 +116,81 @@ __device__ int lcg_hash(int x) {
 
 // 	// Apply low-pass filter: every Gaussian should be at least
 // 	// one pixel wide/high. Discard 3rd row and column.
-// 	cov[0][0] += 0.3f; 
+// 	cov[0][0] += 0.3f;
 // 	cov[1][1] += 0.3f;
 // 	return { float(cov[0][0]), float(cov[0][1]), float(cov[1][1]) };
 // }
 
-
-__forceinline__ __device__ void getRect(const float2 p, int max_radius, uint2& rect_min, uint2& rect_max)
-{
-	rect_min = {
-		(unsigned int) max((int)0, (int)((p.x - max_radius) / 16)),
-		(unsigned int)max((int)0, (int)((p.y - max_radius) / 16))
-	};
-	rect_max = {
-		(unsigned int)max((int)0, (int)((p.x + max_radius + 16 - 1) / 16)),
-		(unsigned int)max((int)0, (int)((p.y + max_radius + 16 - 1) / 16))
-	};
+__forceinline__ __device__ void
+getRect(const float2 p, int max_radius, uint2 &rect_min, uint2 &rect_max) {
+    rect_min = {
+        (unsigned int)max((int)0, (int)((p.x - max_radius) / 16)),
+        (unsigned int)max((int)0, (int)((p.y - max_radius) / 16))};
+    rect_max = {
+        (unsigned int)max((int)0, (int)((p.x + max_radius + 16 - 1) / 16)),
+        (unsigned int)max((int)0, (int)((p.y + max_radius + 16 - 1) / 16))};
 }
 
-__forceinline__ __device__ float ndc2Pix(float v, int S)
-{
-	return ((v + 1.0) * S - 1.0) * 0.5;
+__forceinline__ __device__ float ndc2Pix(float v, int S) {
+    return ((v + 1.0) * S - 1.0) * 0.5;
 }
 
-template<typename T>
-__device__ void fill_array(T* arr, uint32_t size, T val) {
-	for (int i = 0; i < size; i++) {
-		arr[i] = val;
-	}
+template <typename T> __device__ void fill_array(T *arr, uint32_t size, T val) {
+    for (int i = 0; i < size; i++) {
+        arr[i] = val;
+    }
 }
 
 //!!
 // #if STORAGE_MODE != PER_PIXEL_LINKED_LIST
-// 	__device__ unsigned int packFloats(const float& distance, const float& alpha) {
-// 		__half2 packed_halves = __halves2half2(__float2half(distance), __float2half(alpha));
-// 		return *reinterpret_cast<const unsigned int*>(&packed_halves);
+// 	__device__ unsigned int packFloats(const float& distance, const float&
+// alpha) {
+// 		__half2 packed_halves = __halves2half2(__float2half(distance),
+// __float2half(alpha)); 		return *reinterpret_cast<const unsigned
+// int*>(&packed_halves);
 // 	}
 
 // 	__device__ float unpackDistance(const unsigned int& packed_bits) {
-// 		__half2 packed_halves = *reinterpret_cast<const __half2*>(&packed_bits);
-// 		return __half2float(packed_halves.x);
+// 		__half2 packed_halves = *reinterpret_cast<const
+// __half2*>(&packed_bits); 		return __half2float(packed_halves.x);
 // 	}
 
 // 	__device__ float unpackAlpha(const unsigned int& packed_bits) {
-// 		__half2 packed_halves = *reinterpret_cast<const __half2*>(&packed_bits);
-// 		return __half2float(packed_halves.y);
+// 		__half2 packed_halves = *reinterpret_cast<const
+// __half2*>(&packed_bits); 		return __half2float(packed_halves.y);
 // 	}
 // #else
-	__device__ unsigned int packFloats(const float& distance, const float& alpha) {
-		return __float_as_uint(distance);
-	}
+__device__ unsigned int packFloats(const float &distance, const float &alpha) {
+    return __float_as_uint(distance);
+}
 
-	__device__ float unpackDistance(const float& packed) {
-		return __uint_as_float(packed);
-	}
+__device__ float unpackDistance(const float &packed) {
+    return __uint_as_float(packed);
+}
 
-	__device__ float unpackAlpha(const float& packed) {
-		return __uint_as_float(packed);
-	}
+__device__ float unpackAlpha(const float &packed) {
+    return __uint_as_float(packed);
+}
 // #endif
 
-
 #ifdef SORT_BY_COUNTING
-	__device__ unsigned int packId(const uint32_t gaussian_id, uint32_t count) {
-		// store the last 4 bits of count into the 4 most significant bits of gaussian_id
-		return (gaussian_id << 4) | (count & 0xF);
-	}
+__device__ unsigned int packId(const uint32_t gaussian_id, uint32_t count) {
+    // store the last 4 bits of count into the 4 most significant bits of
+    // gaussian_id
+    return (gaussian_id << 4) | (count & 0xF);
+}
 
-	__device__ uint32_t unpackId(const uint32_t& packed) {
-		return packed >> 4;
-	}
+__device__ uint32_t unpackId(const uint32_t &packed) { return packed >> 4; }
 
-	__device__ uint32_t unpackCount(const uint32_t& packed) {
-		return packed & 0xF;	
-	}
+__device__ uint32_t unpackCount(const uint32_t &packed) { return packed & 0xF; }
 #else
-	__device__ unsigned int packId(const uint32_t gaussian_id, uint32_t count) {
-		// store the last 4 bits of count into the 4 most significant bits of gaussian_id
-		return gaussian_id;
-	}
+__device__ unsigned int packId(const uint32_t gaussian_id, uint32_t count) {
+    // store the last 4 bits of count into the 4 most significant bits of
+    // gaussian_id
+    return gaussian_id;
+}
 
-	__device__ uint32_t unpackId(const uint32_t& packed) {
-		return packed;
-	}
+__device__ uint32_t unpackId(const uint32_t &packed) { return packed; }
 
-	__device__ uint32_t unpackCount(const uint32_t& packed) {
-		return 0;
-	}
+__device__ uint32_t unpackCount(const uint32_t &packed) { return 0; }
 #endif
-
-

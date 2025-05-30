@@ -1,4 +1,5 @@
-// todo separate out the first trace from the bounces in the code before all of this
+// todo separate out the first trace from the bounces in the code before all of
+// this
 
 float3 output_rgb = make_float3(0.0f, 0.0f, 0.0f);
 
@@ -23,28 +24,48 @@ for (int i = 0; i < 6; i++) {
     float3 output_surface_brdf = make_float3(1.0f, 1.0f, 1.0f);
 
     // float3 tile_origin = // todo set to origin from the first raytrace
-    // float3 tile_direction = // todo select from a predetermined list of directions and rotate so z = the surface normal 
-    
-    froward_pass(
-        step, 
-        ray_id, tile_origin, tile_direction, 
-        origin, direction,
-        output_rgb, output_t, output_position, output_normal, output_f0, output_roughness, output_specular, output_albedo, output_metalness,
-        remaining_rgb, remaining_position, remaining_normal, remaining_f0, remaining_roughness, remaining_specular, remaining_albedo, remaining_metalness,
-        num_hits
-    );
+    // float3 tile_direction = // todo select from a predetermined list of
+    // directions and rotate so z = the surface normal
 
-    // todo multiply by the same brdf here 
+    froward_pass(
+        step,
+        ray_id,
+        tile_origin,
+        tile_direction,
+        origin,
+        direction,
+        output_rgb,
+        output_t,
+        output_position,
+        output_normal,
+        output_f0,
+        output_roughness,
+        output_specular,
+        output_albedo,
+        output_metalness,
+        remaining_rgb,
+        remaining_position,
+        remaining_normal,
+        remaining_f0,
+        remaining_roughness,
+        remaining_specular,
+        remaining_albedo,
+        remaining_metalness,
+        num_hits);
+
+    // todo multiply by the same brdf here
 }
 
-// todo would need to pass in dummy values, here, but wigthin the code, aim for target diffuse after 
-// for (int step = 6; step >= 0; step--) {
+// todo would need to pass in dummy values, here, but wigthin the code, aim for
+// target diffuse after for (int step = 6; step >= 0; step--) {
 //     backward_pass(
-//         step, 
-//         ray_id, tile_origin, tile_direction, 
+//         step,
+//         ray_id, tile_origin, tile_direction,
 //         origin, direction,
-//         output_rgb, output_t,  output_position, output_normal, output_f0, output_roughness, output_specular, output_albedo, output_metalness,
-//         remaining_rgb, remaining_position, remaining_normal, remaining_f0, remaining_roughness, remaining_specular, remaining_albedo, remaining_metalness,
-//         num_hits, output_surface_brdf
+//         output_rgb, output_t,  output_position, output_normal, output_f0,
+//         output_roughness, output_specular, output_albedo, output_metalness,
+//         remaining_rgb, remaining_position, remaining_normal, remaining_f0,
+//         remaining_roughness, remaining_specular, remaining_albedo,
+//         remaining_metalness, num_hits, output_surface_brdf
 //     );
 // }

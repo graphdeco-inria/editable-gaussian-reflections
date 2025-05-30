@@ -68,6 +68,7 @@ setup(
     ],
     extras_require={
         "dev": [
+            "clang-format",
             "pytest",
             "ruff",
         ],

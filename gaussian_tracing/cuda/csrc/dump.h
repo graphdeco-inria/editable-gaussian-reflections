@@ -22,7 +22,7 @@ struct __align__(64) Dump {
 
     float full_T[MAX_BOUNCES + 1];
     float3 remaining_rgb[MAX_BOUNCES + 1];
-    
+
     // One entry per hit:
 
     int step[MAX_DUMPED_HITS];
@@ -38,7 +38,7 @@ struct __align__(64) Dump {
     float4 xforms_0[MAX_DUMPED_HITS];
     float4 xforms_1[MAX_DUMPED_HITS];
     float4 xforms_2[MAX_DUMPED_HITS];
-    
+
     float4 inv_xforms_0[MAX_DUMPED_HITS];
     float4 inv_xforms_1[MAX_DUMPED_HITS];
     float4 inv_xforms_2[MAX_DUMPED_HITS];
@@ -52,7 +52,7 @@ struct __align__(64) Dump {
     float3 backward_weighted_rgb_deltas[MAX_DUMPED_HITS];
     float3 backward_prev_gaussian_rgb[MAX_DUMPED_HITS];
     float backward_T[MAX_DUMPED_HITS];
-    
+
     float dL_dalpha[MAX_DUMPED_HITS];
     float dL_dgaussval[MAX_DUMPED_HITS];
     float3 dL_dx_local[MAX_DUMPED_HITS];
