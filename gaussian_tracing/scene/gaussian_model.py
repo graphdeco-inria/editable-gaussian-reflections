@@ -18,7 +18,7 @@ from plyfile import PlyData, PlyElement
 from simple_knn._C import distCUDA2
 from torch import nn
 
-from arguments import ModelParams
+from gaussian_tracing.arguments import ModelParams
 from gaussian_tracing.utils.general_utils import (
     build_rotation,
     build_scaling_rotation,

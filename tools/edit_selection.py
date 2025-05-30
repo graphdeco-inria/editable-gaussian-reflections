@@ -18,7 +18,7 @@ from gaussian_renderer import render
 import torchvision
 from gaussian_tracing.utils.general_utils import safe_state
 from argparse import ArgumentParser
-from arguments import ModelParams, PipelineParams, get_combined_args, OptimizationParams
+from gaussian_tracing.arguments import ModelParams, PipelineParams, get_combined_args, OptimizationParams
 from gaussian_renderer import GaussianModel, GaussianRaytracer, render
 import copy
 import imageio

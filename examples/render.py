@@ -19,9 +19,14 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 import torchvision
-from arguments import ModelParams, OptimizationParams, PipelineParams, get_combined_args
 from tqdm import tqdm
 
+from gaussian_tracing.arguments import (
+    ModelParams,
+    OptimizationParams,
+    PipelineParams,
+    get_combined_args,
+)
 from gaussian_tracing.renderer import GaussianRaytracer, render
 from gaussian_tracing.scene import GaussianModel, Scene
 from gaussian_tracing.utils.general_utils import safe_state

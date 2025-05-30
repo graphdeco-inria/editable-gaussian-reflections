@@ -4,9 +4,9 @@ from dataclasses import dataclass
 
 import torch
 import tyro
-from arguments import ModelParams
 from tqdm import tqdm
 
+from gaussian_tracing.arguments import ModelParams
 from gaussian_tracing.scene.dataset.colmap_parser import ColmapParser
 from gaussian_tracing.scene.dataset_readers import get_dataset
 from gaussian_tracing.scene.tonemapping import tonemap

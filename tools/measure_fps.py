@@ -23,7 +23,7 @@ import torch.nn.functional as F
 import torchvision
 from tqdm import tqdm
 
-from arguments import ModelParams, OptimizationParams, PipelineParams, get_combined_args
+from gaussian_tracing.arguments import ModelParams, OptimizationParams, PipelineParams, get_combined_args
 from gaussian_renderer import GaussianModel, GaussianRaytracer, render
 from gaussian_tracing.scene import Scene
 from gaussian_tracing.scene.tonemapping import *

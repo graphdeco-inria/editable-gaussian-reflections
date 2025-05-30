@@ -16,10 +16,15 @@ from copy import deepcopy
 import numpy as np
 import torch
 import torchvision
-from arguments import ModelParams, OptimizationParams, PipelineParams, get_combined_args
 from einops import rearrange
 from tqdm import tqdm
 
+from gaussian_tracing.arguments import (
+    ModelParams,
+    OptimizationParams,
+    PipelineParams,
+    get_combined_args,
+)
 from gaussian_tracing.renderer import GaussianRaytracer, render
 from gaussian_tracing.scene import GaussianModel, Scene
 from gaussian_tracing.utils.cam_utils import generate_spiral_path

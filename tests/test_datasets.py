@@ -7,7 +7,7 @@ import torch
 from PIL import Image
 from tqdm import tqdm
 
-from arguments import ModelParams
+from gaussian_tracing.arguments import ModelParams
 from gaussian_tracing.dataset import BlenderDataset, BlenderPriorDataset
 
 
