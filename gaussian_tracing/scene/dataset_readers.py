@@ -17,7 +17,7 @@ import numpy as np
 import torch
 from tqdm import tqdm
 
-from arguments import ModelParams
+from gaussian_tracing.arguments import ModelParams
 from gaussian_tracing.dataset import BlenderDataset, BlenderPriorDataset, ColmapDataset
 from gaussian_tracing.dataset.points_utils import make_random_point_cloud
 from gaussian_tracing.utils.graphics_utils import BasicPointCloud, getWorld2View2

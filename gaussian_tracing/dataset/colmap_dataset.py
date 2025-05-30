@@ -5,7 +5,7 @@ import torch
 from einops import repeat
 from PIL import Image
 
-from arguments import ModelParams
+from gaussian_tracing.arguments import ModelParams
 from gaussian_tracing.dataset.colmap_parser import ColmapParser
 from gaussian_tracing.utils.depth_utils import (
     project_pointcloud_to_depth_map,

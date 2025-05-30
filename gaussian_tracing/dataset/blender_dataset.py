@@ -7,7 +7,7 @@ import numpy as np
 import torch
 from einops import rearrange
 
-from arguments import ModelParams
+from gaussian_tracing.arguments import ModelParams
 from gaussian_tracing.dataset.colmap_parser import ColmapParser
 from gaussian_tracing.utils.graphics_utils import BasicPointCloud, focal2fov, fov2focal
 

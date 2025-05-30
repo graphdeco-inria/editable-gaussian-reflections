@@ -107,7 +107,7 @@ class GaussianViewer(Viewer):
         from scene import GaussianModel
 
         global PipelineParams, ModelParams
-        from arguments import PipelineParams, ModelParams
+        from gaussian_tracing.arguments import PipelineParams, ModelParams
 
         global MiniCam
         from gaussian_tracing.scene.cameras import MiniCam

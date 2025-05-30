@@ -15,8 +15,8 @@ import random
 
 import torch
 
-from arguments import ModelParams
 from gaussian_tracing import raytracer_config
+from gaussian_tracing.arguments import ModelParams
 from gaussian_tracing.scene.dataset_readers import (
     readSceneInfo,
 )

@@ -14,7 +14,7 @@ from types import SimpleNamespace
 import kornia
 import torch
 
-from arguments import PipelineParams
+from gaussian_tracing.arguments import PipelineParams
 from gaussian_tracing.renderer.gaussian_raytracer import GaussianRaytracer
 from gaussian_tracing.scene.cameras import Camera
 

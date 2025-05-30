@@ -20,10 +20,10 @@ from threading import Thread
 import pandas as pd
 import plotly.express as px
 import torch
-from arguments import ModelParams, OptimizationParams, PipelineParams
 from torchvision.utils import save_image
 from tqdm import tqdm
 
+from gaussian_tracing.arguments import ModelParams, OptimizationParams, PipelineParams
 from gaussian_tracing.renderer import GaussianRaytracer, render
 from gaussian_tracing.scene import GaussianModel, Scene
 from gaussian_tracing.utils.general_utils import (

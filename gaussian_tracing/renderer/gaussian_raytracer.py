@@ -14,8 +14,8 @@ import os
 import numpy as np
 import torch
 
-from arguments import PipelineParams
 from gaussian_tracing import make_raytracer, raytracer_config
+from gaussian_tracing.arguments import PipelineParams
 
 # from diff_gaussian_rasterization import (
 #     GaussianRasterizationSettings,
