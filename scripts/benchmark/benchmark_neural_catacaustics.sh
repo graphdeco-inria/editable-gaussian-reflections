@@ -51,7 +51,7 @@ OUTPUT_DIR="output/benchmark_neural_catacaustics_priors"
 
 for SCENE in $SCENE_LIST;
 do
-    python train.py \
+    python examples/train.py \
         -s $SCENE_DIR/$SCENE \
         -m $OUTPUT_DIR/$SCENE \
         -r $RESOLUTION \
@@ -60,13 +60,13 @@ do
         --position_loss_weight 0.0 \
         --eval
 
-    python render.py \
+    python examples/render.py \
         -s $SCENE_DIR/$SCENE \
         -m $OUTPUT_DIR/$SCENE \
         -r $RESOLUTION \
         --eval
 
-    ZNEAR=0.5 python render_novel_views.py \
+    ZNEAR=0.5 python examples/render_novel_views.py \
         -s $SCENE_DIR/$SCENE \
         -m $OUTPUT_DIR/$SCENE \
         -r $RESOLUTION \

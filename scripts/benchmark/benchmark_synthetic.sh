@@ -39,20 +39,20 @@ OUTPUT_DIR="output/benchmark_synthetic"
 
 for SCENE in $SCENE_LIST;
 do
-    python train.py \
+    python examples/train.py \
         -s $SCENE_DIR/$SCENE \
         -m $OUTPUT_DIR/$SCENE \
         -r $RESOLUTION \
         --init_scale_factor 0.1 \
         --eval
 
-    python render.py \
+    python examples/render.py \
         -s $SCENE_DIR/$SCENE \
         -m $OUTPUT_DIR/$SCENE \
         -r $RESOLUTION \
         --eval
 
-    python render_novel_views.py \
+    python examples/render_novel_views.py \
         -s $SCENE_DIR/$SCENE \
         -m $OUTPUT_DIR/$SCENE \
         -r $RESOLUTION \

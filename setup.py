@@ -1,18 +1,18 @@
-import glob
-import os
 import importlib.util
+import os
 
 from setuptools import find_packages, setup
-from torch.utils.cpp_extension import CUDAExtension, BuildExtension
+from torch.utils.cpp_extension import BuildExtension, CUDAExtension
 
 __version__ = None
 exec(open("gaussian_tracing/version.py", "r").read())
+
 
 def get_package_path(package_name):
     """
     Returns the filesystem path to the root of the given package,
     whether it's installed in editable mode or normally.
-    
+
     :param package_name: The name of the package to locate.
     :return: Absolute path to the package directory.
     :raises ImportError: If the package cannot be found.
@@ -20,7 +20,7 @@ def get_package_path(package_name):
     spec = importlib.util.find_spec(package_name)
     if spec is None or spec.origin is None:
         raise ImportError(f"Cannot find package '{package_name}'")
-    
+
     # If it's a module (not a package), return the file's directory
     if spec.submodule_search_locations is None:
         return os.path.dirname(spec.origin)
@@ -44,9 +44,15 @@ class CustomBuildExtension(BuildExtension):
         if not os.path.exists(pkg_target):
             os.makedirs(pkg_target, exist_ok=True)
 
-        os.system(f'mkdir -p {pkg_source}/gaussian_tracing/cuda/build && cd {pkg_source}/gaussian_tracing/cuda/build && cmake .. && make')
-        os.system(f'cp {pkg_source}/gaussian_tracing/cuda/build/libgausstracer.so {pkg_target}')
-        os.system(f'cp {pkg_source}/gaussian_tracing/cuda/build/raytracer_config.py {pkg_target}')
+        os.system(
+            f"mkdir -p {pkg_source}/gaussian_tracing/cuda/build && cd {pkg_source}/gaussian_tracing/cuda/build && cmake .. && make"
+        )
+        os.system(
+            f"cp {pkg_source}/gaussian_tracing/cuda/build/libgausstracer.so {pkg_target}"
+        )
+        os.system(
+            f"cp {pkg_source}/gaussian_tracing/cuda/build/raytracer_config.py {pkg_target}"
+        )
 
 
 setup(
@@ -70,11 +76,9 @@ setup(
         CUDAExtension(
             name="gaussian_tracing._C",
             sources=["gaussian_tracing/cuda/ext.cpp"],
-            include_dirs=[]
+            include_dirs=[],
         ),
     ],
-    cmdclass={
-        'build_ext': CustomBuildExtension
-    },
+    cmdclass={"build_ext": CustomBuildExtension},
     packages=find_packages(),
 )
