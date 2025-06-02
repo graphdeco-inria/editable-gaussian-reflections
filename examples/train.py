@@ -992,20 +992,6 @@ for iteration in tqdm(
                 gaussians.prune_znear_only(scene)
             raytracer.cuda_module.gaussian_total_weight.zero_()
             assert "DENSIFY" not in os.environ
-            # if "DENSIFY" in os.environ:
-            #     if (
-            #         iteration % opt_params.densification_interval == 0
-            #         and iteration > opt_params.densify_from_iter
-            #     ):
-            #         if iteration < opt_params.densify_until_iter:
-            #             max_ws_size = 99999999999.999999
-            #             densif_args = (
-            #                 scene,
-            #                 opt_params,
-            #                 model_params.min_opacity,
-            #                 max_ws_size,
-            #             )
-            #             trace = gaussians.densify_and_prune_top_k(*densif_args)
 
             torch.cuda.synchronize()
             raytracer.rebuild_bvh()
@@ -1039,61 +1025,6 @@ for iteration in tqdm(
                     print("NANs in lod_mean or _scaling")
                     quit()
 
-        # # Might help for roughness or for tint spehres, doesn't help in the regular case
-        # if (
-        #     "SKIP_CLAMP_RELMINSIZE" not in os.environ
-        #     and "_with_book" not in args.source_path
-        # ):
-        #     with torch.no_grad():
-        #         farfield_mask = ~gaussians.comes_from_colmap_pc.bool()
-        #         max_scaling = gaussians.get_scaling.amax(dim=-1)
-        #         clamped_size_farfield = gaussians._scaling.data.clamp(
-        #             min=torch.log(
-        #                 max_scaling * float(os.getenv("RELMINSIZE_FARFIELD", 0.20))
-        #             ).unsqueeze(-1)
-        #         )
-        #         clamped_size_nearfield = gaussians._scaling.data.clamp(
-        #             min=torch.log(
-        #                 max_scaling * float(os.getenv("RELMINSIZE_NEARFIELD", 0.05))
-        #             ).unsqueeze(-1)
-        #         )
-        #         gaussians._scaling.data.copy_(
-        #             torch.where(
-        #                 farfield_mask.repeat(1, 3),
-        #                 clamped_size_farfield,
-        #                 clamped_size_nearfield,
-        #             )
-        #         )
-
-        # # Might help for rough chromespheres, but leads to slight blurry and no gain in other scenes (0.05)
-        # if "SKIP_CLAMP_SIZEDIST" not in os.environ:
-        #     with torch.no_grad():
-        #         farfield_mask = ~gaussians.comes_from_colmap_pc.bool()
-        #         distance_to_zero = gaussians.get_xyz.norm(dim=-1)
-        #         clamped_size = gaussians._scaling.clamp(
-        #             min=torch.log(
-        #                 distance_to_zero * float(os.getenv("SIZEDIST", 0.0025)) + 1e-8
-        #             ).unsqueeze(-1)
-        #         )
-        #         # using indexing failed to overwrite in place, going with this ugly solution
-        #         gaussians._scaling.data.copy_(
-        #             torch.where(
-        #                 farfield_mask.repeat(1, 3), clamped_size, gaussians._scaling
-        #             )
-        #         )
-
-        # if "OPACITY_CAP" in os.environ:
-        #     with torch.no_grad():
-        #         gaussians._opacity.data.clamp_(
-        #             max=torch.logit(
-        #                 torch.tensor(float(os.environ["OPACITY_CAP"]), device="cuda")
-        #             )
-        #         )
-
-        # if not model_params.f0_decay:
-        #     with torch.no_grad():
-        #         gaussians._f0 -= opt_params.f0_lr / 1.25
-
         if iteration in args.checkpoint_iterations:
             print("\n[ITER {}] Saving Checkpoint".format(iteration))
             torch.save(
@@ -1112,10 +1043,6 @@ for iteration in tqdm(
             raytracer.cuda_module.num_bounces.copy_(
                 min(raytracer.config.MAX_BOUNCES, 1)
             )
-
-        # if "_with_book" in args.source_path:
-        #     print("------- limit to 1 bounce --------")
-        #     raytracer.cuda_module.num_bounces.copy_(min(raytracer.cuda_module.num_bounces.item(), 1))
 
         if "SKIP_INIT_FARFIELD" not in os.environ:
             torch.cuda.synchronize()
