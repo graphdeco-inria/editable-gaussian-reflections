@@ -1,1 +1,0 @@
-REFLECTION_LOSS_WEIGHT=0.1 python train.py --raytracer_version build_v0.1_attached_brdf -s colmap/hard_kitchen_mirror/ -m output_current_state/baseline_v0.1

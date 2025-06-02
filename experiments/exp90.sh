@@ -1,2 +1,0 @@
-
-q a40 <<< "bash run.sh --raytracer_version v23_t0.001 -s colmap/shiny_bedroom -m output_exp90/sanity_check_prob_blur_0%_with_densif_noclamp --init_lod_prob_0 1.0 --lod_init_scale 0.002 --prob_blur_targets 0.0 "
