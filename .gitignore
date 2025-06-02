@@ -13,6 +13,7 @@ dist/
 .eggs/
 *.egg
 MANIFEST
+tmp/
 
 # Editable install egg-link file
 *.egg-link
@@ -63,6 +64,8 @@ coverage.xml
 
 # Logs
 *.log
+*.stdout 
+*.stderr
 
 # Mac and Linux file cruft
 .DS_Store
@@ -84,6 +87,9 @@ Thumbs.db
 *.swp
 *.swo
 *.bak
+
+# Local history
+.bash_history
 
 # Custom: ignore any local config overrides
 config.local.*
