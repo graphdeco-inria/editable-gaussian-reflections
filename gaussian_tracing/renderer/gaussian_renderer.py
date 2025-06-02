@@ -17,11 +17,6 @@ import torch
 from gaussian_tracing.arguments import PipelineParams
 from gaussian_tracing.renderer.gaussian_raytracer import GaussianRaytracer
 from gaussian_tracing.scene.cameras import Camera
-
-# from diff_gaussian_rasterization import (
-#     GaussianRasterizationSettings,
-#     GaussianRasterizer,
-# )
 from gaussian_tracing.utils.tonemapping import tonemap, untonemap
 
 

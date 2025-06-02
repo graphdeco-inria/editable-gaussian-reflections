@@ -16,11 +16,6 @@ import torch
 
 from gaussian_tracing import make_raytracer, raytracer_config
 from gaussian_tracing.arguments import PipelineParams
-
-# from diff_gaussian_rasterization import (
-#     GaussianRasterizationSettings,
-#     GaussianRasterizer,
-# )
 from gaussian_tracing.scene.gaussian_model import GaussianModel
 
 LOADED = False
