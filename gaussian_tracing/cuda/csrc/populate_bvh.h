@@ -1,0 +1,45 @@
+void populateBVH(
+    OptixInstance *instances,
+    OptixTraversableHandle gasHandle,
+    int num_gaussians,
+    float3 *camera_position_world,
+    float3 *scales,
+    float4 *rotations,
+    float3 *means,
+    float *opacity,
+    float *lod_means,
+    float *lod_scales,
+    bool *mask,
+    float global_scale_factor,
+    float alpha_threshold,
+#if OPTIMIZE_EXP_POWER == true
+    float *exp_power
+#else
+    float exp_power
+#endif
+);
+
+void transformVerts(
+    float *mesh_cage_verts,
+    int num_verts_per_gaussian,
+    int *mesh_cage_faces,
+    int num_faces_per_gaussian,
+    float *output_verts,
+    int *output_faces,
+    int num_gaussians,
+    float3 *camera_position_world,
+    float3 *scales,
+    float4 *rotations,
+    float3 *means,
+    float *opacities,
+    float *lod_means,
+    float *lod_scales,
+    bool *mask,
+    float global_scaling_factor,
+    float alpha_threshold,
+#if OPTIMIZE_EXP_POWER == true
+    float *exp_power
+#else
+    float exp_power
+#endif
+);

@@ -1,3 +1,39 @@
+# Editable Physically-based Reflections in Raytraced Gaussian Radiance Fields 
+
+## Installation
+
+We have included the official OptiX SDK header files in the third_party/optix directory as a submodule, so by default, you don't need to download the OptiX SDK from the NVIDIA official website, just add the --recursive flag when cloning the repository.
+
+The default installation is as follows:
+
+```bash
+git clone git@gitlab.inria.fr:ypoirier/gaussian-splatting-raytraced.git --recursive
+cd gaussian-splatting-raytraced
+
+conda create -n gausstracer python=3.12
+conda activate gausstracer
+
+pip install torch==2.5.1 torchvision==0.20.1 torchaudio==2.5.1 --index-url https://download.pytorch.org/whl/cu121
+pip install -r requirements.txt
+
+pip install -v -e .[dev]
+```
+
+To test if installed correctly, run
+```bash
+bash ./scripts/test.sh
+bash ./scripts/dryrun.sh
+```
+
+## Debugging
+
+If you run into cmake or gcc version issues, try using conda to install newer versions.
+
+```bash
+conda install -c conda-forge cxx-compiler==1.6.0 -y
+conda install anaconda::cmake -y
+```
+
 # 3D Gaussian Splatting for Real-Time Radiance Field Rendering
 Bernhard Kerbl*, Georgios Kopanas*, Thomas Leimkühler, George Drettakis (* indicates equal contribution)<br>
 | [Webpage](https://repo-sam.inria.fr/fungraph/3d-gaussian-splatting/) | [Full Paper](https://repo-sam.inria.fr/fungraph/3d-gaussian-splatting/3d_gaussian_splatting_high.pdf) | [Video](https://youtu.be/T_kXY43VZnk) | [Other GRAPHDECO Publications](http://www-sop.inria.fr/reves/publis/gdindex.php) | [FUNGRAPH project page](https://fungraph.inria.fr) |<br>

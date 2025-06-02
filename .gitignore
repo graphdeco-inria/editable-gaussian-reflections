@@ -1,26 +1,91 @@
-*.pyc
-.vscode
-output
-build
-diff_rasterization/diff_rast.egg-info
-diff_rasterization/dist
-tensorboard_3d
-screenshots
-/output*
-*.mp4
-/.bash_history
-submodules/diff-surfel-rasterization/
-renders
-*.ply
-*.std
-*.stderr
-*.stdout
-/raytracer_builds/
-/dump/
-*.ignore.*
-/data
-/cache 
-/colmap
-/cache*/
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
 
-/tmp*
+# C extensions
+*.so
+
+# Distribution / packaging
+build/
+dist/
+*.egg-info/
+.eggs/
+*.egg
+MANIFEST
+
+# Editable install egg-link file
+*.egg-link
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Virtual environment
+venv/
+env/
+ENV/
+.venv/
+.virtualenv/
+
+# PyInstaller
+*.manifest
+*.spec
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+
+# Pytest
+.pytest_cache/
+
+# MyPy
+.mypy_cache/
+
+# VS Code
+.vscode/
+
+# IDEs
+.idea/
+*.sublime-workspace
+*.sublime-project
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# Logs
+*.log
+
+# Mac and Linux file cruft
+.DS_Store
+Thumbs.db
+
+# Local environment variables
+.env
+.env.*
+
+# Static type checker
+.pytype/
+
+# Profiling data
+.prof
+*.lprof
+
+# Editor backups
+*~
+*.swp
+*.swo
+*.bak
+
+# Custom: ignore any local config overrides
+config.local.*
+/data
+/output
