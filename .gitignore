@@ -88,10 +88,11 @@ Thumbs.db
 *.swo
 *.bak
 
-# Local history
-.bash_history
-
 # Custom: ignore any local config overrides
 config.local.*
 /data
 /output
+
+# Local files
+/.bash_history
+/TODO.md
