@@ -179,14 +179,11 @@ if __name__ == "__main__":
                         else:
                             assert pred.size[1] == conf.image_height, method
 
-                    pred = to_tensor(pred)
-                    gt = to_tensor(gt)
+                    pred = to_tensor(pred)[None].to(device)
+                    gt = to_tensor(gt)[None].to(device)
 
-                    images[render_pass] = (pred, gt)
-
-                for render_pass in conf.render_passes:
                     for metric, metric_fn in metrics.items():
-                        scores[method][render_pass][metric] += metric_fn(images[render_pass][0][None].to(device), images[render_pass][1][None].to(device)).item() / conf.num_frames
+                        scores[method][render_pass][metric] += metric_fn(pred, gt).item() / conf.num_frames
 
         scores_by_scene[scene] = scores
         with open(base_path + f"/scores.json", "w") as f:
