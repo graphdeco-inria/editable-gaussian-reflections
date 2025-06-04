@@ -2,6 +2,64 @@ import json
 import pandas as pd
 import copy
 
+metrics_arrow = { "psnr": "up", "ssim": "up", "lpips": "down", "num_gaussians": "down", "time": "down", "flip": "low" }
+
+method_ordering = [
+    "3dgs",  
+    "2dgs",
+    "gaussian_shader", 
+    "3dgs_dr", 
+    "ref_gaussian",
+    "envgs_network", 
+    "ours_network",
+    "envgs_gt",
+    "ours"
+]
+pass_ordering = [ "diffuse", "glossy", "render" ]
+
+pass_renaming = {
+    "normal": "\makebox[0pt][l]{\scriptsize Normal}",
+    "render": "\makebox[0pt][l]{\scriptsize Final}",
+    "diffuse": "\makebox[0pt][l]{\scriptsize Diffuse}",
+    "glossy": "\makebox[0pt][l]{\scriptsize Residual}"
+}
+
+method_renaming = {
+    "2dgs": "2DGS",
+    "3dgs": "3DGS",
+    "r3dg": "Relightable 3DGS",
+    "3dgs_dr": "3DGS-DR",
+    "gaussian_shader": "Gaussian Shader",
+    "ref_gaussian": "Reflective GS",
+    "envgs_network": "EnvGS (network)",
+    "envgs_gt": "EnvGS (optimal)",
+    "ours_network": "Ours (network)",
+    "ours": "Ours (optimal)",
+    "ground_truth": "Ground Truth"
+}
+
+method_renaming_short = {
+    "2dgs": "2DGS",
+    "3dgs": "3DGS",
+    "r3dg": "R3DGS",
+    "3dgs_dr": "3DGS-DR",
+    "gaussian_shader": "GShader",
+    "ref_gaussian": "ReflGS",
+    "envgs_network": "EnvGS\_{net}",
+    "envgs_gt": "EnvGS\_{opt}",
+    "ours_network": "Ours\_{net}",
+    "ours": "Ours\_{opt}",
+    "ground_truth": "G.T."
+}
+
+scene_renaming = {
+    "shiny_kitchen": "Shiny Kitchen",
+    "shiny_bedroom": "Shiny Bedroom",
+    "shiny_office": "Shiny Office",
+    "shiny_livingroom": "Shiny Livingroom"
+}
+
+
 def load_json(file_path):
     with open(file_path, 'r') as file:
         data = json.load(file)
@@ -22,43 +80,6 @@ def process_data(data):
                     })
     return records
 
-metrics_arrow = { "psnr": "up", "ssim": "up", "lpips": "down"}
-
-method_ordering = [
-    "3dgs",  
-    "2dgs",
-    "r3dg",
-    "gaussian_shader", 
-    "3dgs_dr", 
-    "ref_gaussian", 
-    "ours"
-]
-pass_ordering = ["normal", "diffuse", "glossy", "render"]
-
-pass_renaming = {
-    "normal": "{\scriptsize Norm.}",
-    "render": "{\scriptsize Final}",
-    "diffuse": "{\scriptsize Diff.}",
-    "glossy": "{\scriptsize Spec.}"
-}
-
-method_renaming = {
-    "2dgs": "2DGS",
-    "3dgs": "3DGS",
-    "r3dg": "Relightable 3DGS",
-    "3dgs_dr": "3DGS-DR",
-    "gaussian_shader": "Gaussian Shader",
-    "ref_gaussian": "Reflective GS",
-    "ours": "Ours (gt+1bounce+500k)"
-}
-
-scene_renaming = {
-    "shiny_kitchen": "Shiny Kitchen",
-    "shiny_bedroom": "Shiny Bedroom",
-    "shiny_office": "Shiny Office",
-    "shiny_livingroom": "Shiny Livingroom"
-}
-
 if __name__ == "__main__":
     file_path = 'scores.json' 
     data = load_json(file_path)
@@ -72,9 +93,9 @@ if __name__ == "__main__":
         latex_file.write("\\usepackage[table]{xcolor}\n")
         latex_file.write("\\geometry{left=2.5cm, right=2.5cm, top=2.5cm, bottom=2.5cm}\n")
         latex_file.write("\\begin{document}\n")
-        latex_file.write("\\setlength{\\tabcolsep}{5.0pt}\n")
+        latex_file.write("\\setlength{\\tabcolsep}{8.0pt}\n")
         
-        for metric in metrics_arrow.keys():
+        for metric in ["psnr", "ssim"]: # "psnr", "ssim", "lpips"
             # Filter records to only include the current metric and exclude 'normal' render pass
             filtered_records = [record for record in records if record['Metric'] == metric]
             
@@ -122,19 +143,9 @@ if __name__ == "__main__":
             # Write the table to the LaTeX file without escaping cell values
             latex_file.write(
                 df_pivot.to_latex(index=True, escape=False)
-                .replace("\multicolumn{4}{r}", "\multicolumn{4}{r@{\hspace{6mm}}}", len(scene_renaming.keys()) - 1).replace("\multicolumn{4}{l}", "\multicolumn{4}{r}")
-                .replace("{lllllllllllllllll}", "{l@{\hspace{6mm}}rrrr@{\hspace{6mm}}rrrr@{\hspace{6mm}}rrrr@{\hspace{6mm}}rrrr}").replace("Scene", "").replace("Render Pass", "")
+                .replace("\multicolumn{3}{r}", "\multicolumn{3}{l}")
+                .replace("Scene", "").replace("Render Pass", "")
             )
-
-            
             latex_file.write("\n\n")
             
-        # potential other comaprions: beta splatting, interreflective 3dgs, envgs, 
-        
-        latex_file.write("\\subsubsection*{Notes}\n")
-        latex_file.write("TONEMAPPING IS INCORRECT IN ALL EVALS --- only the final render scores are valid. Need to figure out what to do with tonemapping.\\\\")
-        latex_file.write("Our method uses ground truths for all targets (but fits the values to the guassians), 1 bounce of reflection, and 500k gaussians.\\\\")
-        latex_file.write("R3DG diffuse maps seem wrong/way overexposed.\\\\")
-        latex_file.write("Normal + Depth maps should be given to R3DG since its what they do for tanks and temples, however they don't provide the method for this. Best is we give them the same maps we use.\\\\")
-
         latex_file.write("\\end{document}\n")
