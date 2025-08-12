@@ -16,11 +16,7 @@ set -xe
 hostname 
 nvidia-smi 
 
-module load cuda
-
 # make use of a python torch environment
-source ~/.bashrc
-conda activate gausstracer
 python3 -c "import torch; print(torch.cuda.is_available()); print(torch.cuda.get_device_name(0))";
 
 
@@ -51,7 +47,7 @@ OUTPUT_DIR="output/benchmark_neural_catacaustics_priors"
 
 for SCENE in $SCENE_LIST;
 do
-    python examples/train.py \
+    python train.py \
         -s $SCENE_DIR/$SCENE \
         -m $OUTPUT_DIR/$SCENE \
         -r $RESOLUTION \
@@ -60,13 +56,13 @@ do
         --position_loss_weight 0.0 \
         --eval
 
-    python examples/render.py \
+    python render.py \
         -s $SCENE_DIR/$SCENE \
         -m $OUTPUT_DIR/$SCENE \
         -r $RESOLUTION \
         --eval
 
-    ZNEAR=0.5 python examples/render_novel_views.py \
+    ZNEAR=0.5 python render_novel_views.py \
         -s $SCENE_DIR/$SCENE \
         -m $OUTPUT_DIR/$SCENE \
         -r $RESOLUTION \

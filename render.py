@@ -691,6 +691,8 @@ def render_set(
                     )
 
         print(f"PSNR: {psnr_test}")
+        with open(os.path.join(model_path, split, "psnr.txt"), "w") as f:
+            f.write(f"{psnr_test}\n")
 
 
 @torch.no_grad()
