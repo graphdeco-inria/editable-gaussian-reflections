@@ -53,13 +53,11 @@ target_include_directories(gausstracer PRIVATE
     ${CUDA_INCLUDE_DIRS}
     ${PYTHON_INCLUDE_DIRS}
     ${OptiX8_INCLUDE_DIRS}
-    ${CMAKE_SOURCE_DIR}/csrc/third_party/glm
     ${CMAKE_CUDA_TOOLKIT_INCLUDE_DIRECTORIES}
 )
 
 target_include_directories(optix_program PRIVATE
     ${OptiX8_INCLUDE_DIRS}
-    ${CMAKE_SOURCE_DIR}/csrc/third_party/glm
 )
 
 # === Definitions ===
@@ -79,7 +77,6 @@ target_compile_definitions(optix_program PRIVATE
 
 # === Compile Options ===
 target_compile_options(gausstracer PRIVATE
-    -isystem ${CMAKE_SOURCE_DIR}/csrc/third_party/glm
     -Wno-everything
     -Wno-macro-redefined
     $<$<COMPILE_LANGUAGE:CUDA>:-ffast-math -ftz=true -prec-div=false -prec-sqrt=false>
