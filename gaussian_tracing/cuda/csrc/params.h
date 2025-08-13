@@ -32,8 +32,6 @@
 #include <cuda.h>
 #include <optix.h>
 
-#define GLM_FORCE_CUDA
-
 #if ENABLE_DEBUG_DUMP == true
 #include "dump.h"
 #endif
