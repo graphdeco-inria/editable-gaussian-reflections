@@ -72,6 +72,7 @@ coverage.xml
 Thumbs.db
 
 # Local environment variables
+.envrc
 .env
 .env.*
 
@@ -91,7 +92,9 @@ Thumbs.db
 # Custom: ignore any local config overrides
 config.local.*
 /data
+/gaussian_tracing/cuda/data
 /output
+/results*
 
 # Local files
 /.bash_history
