@@ -15,7 +15,6 @@ import random
 
 import torch
 
-from gaussian_tracing import raytracer_config
 from gaussian_tracing.arguments import ModelParams
 from gaussian_tracing.scene.dataset_readers import (
     readSceneInfo,
@@ -111,7 +110,6 @@ class Scene:
                 self.cameras_extent,
                 self.train_cameras[1.0][0].FoVy,
                 self.max_zfar,
-                raytracer_config,
             )
 
         self.gaussians.scene = self

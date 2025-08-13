@@ -11,7 +11,6 @@
 
 import os
 
-import cv2
 import numpy as np
 import torch
 from plyfile import PlyData, PlyElement
@@ -78,19 +77,7 @@ class GaussianModel:
         self.setup_functions()
 
         self.schedule = None
-
         self.num_densification_steps = 0
-
-        if "lut" in self.model_params.brdf_mode:
-            brdf_lut_path = "data/ibl_brdf_lut.png"
-            brdf_lut = cv2.imread(brdf_lut_path)
-            brdf_lut = cv2.cvtColor(brdf_lut, cv2.COLOR_BGR2RGB)
-            brdf_lut = brdf_lut.astype(np.float32)
-            brdf_lut /= 255.0
-            brdf_lut = torch.tensor(brdf_lut).to("cuda")
-            self._brdf_lut = brdf_lut.permute((2, 0, 1))
-            if self.model_params.brdf_mode == "finetuned_lut":
-                self._brdf_lut_residual = nn.Parameter(torch.zeros_like(self._brdf_lut))
 
     def capture(self):
         return (
@@ -161,14 +148,6 @@ class GaussianModel:
         self._rotation.grad = torch.zeros_like(self._rotation)
 
     @property
-    def get_brdf_lut(self):
-        if self.model_params.brdf_mode == "finetuned_lut":
-            return self._brdf_lut * torch.exp(self._brdf_lut_residual)
-        else:
-            assert self.model_params.brdf_mode == "static_lut"
-            return self._brdf_lut
-
-    @property
     def get_scaling(self):
         return self.scaling_activation(self._scaling)
 
@@ -236,20 +215,8 @@ class GaussianModel:
         spatial_lr_scale: float,
         fovY_radians: float,
         max_camera_zfar: float,
-        raytracer_config,
     ):
         self.spatial_lr_scale = spatial_lr_scale
-
-        if raytracer_config.USE_LEVEL_OF_DETAIL:
-            init_N = len(pcd.points)
-            num_new_points = int(
-                self.model_params.lod_init_frac_extra_points * len(pcd.points)
-            )
-            indices = np.random.choice(len(pcd.points), num_new_points, replace=False)
-            new_points = np.concatenate([pcd.points, pcd.points[indices]])
-            new_colors = np.concatenate([pcd.colors, pcd.colors[indices]])
-            new_normals = np.concatenate([pcd.normals, pcd.normals[indices]])
-            pcd = BasicPointCloud(new_points, new_colors, new_normals)
 
         fused_point_cloud = torch.tensor(np.asarray(pcd.points)).float().cuda()
         fused_color = torch.tensor(np.asarray(pcd.colors)).float().cuda()
@@ -257,36 +224,21 @@ class GaussianModel:
 
         print("Number of points at initialisation : ", fused_point_cloud.shape[0])
 
-        if self.model_params.force_mcmc_custom_init:
-            dist2 = torch.clamp_min(
-                distCUDA2(torch.from_numpy(np.asarray(pcd.points)).float().cuda()),
-                0.0000001,
+        dist2 = torch.clamp_min(
+            distCUDA2(torch.from_numpy(np.asarray(pcd.points)).float().cuda()),
+            0.0000001,
+        )
+        scales = torch.log(torch.sqrt(dist2) * self.model_params.init_scale_factor)[
+            ..., None
+        ].repeat(1, 3)
+        rots = torch.zeros((fused_point_cloud.shape[0], 4), device="cuda")
+        rots[:, 0] = 1
+        opacities = inverse_sigmoid(
+            self.model_params.init_opacity
+            * torch.ones(
+                (fused_point_cloud.shape[0], 1), dtype=torch.float, device="cuda"
             )
-            scales = torch.log(torch.sqrt(dist2) * 0.1)[..., None].repeat(1, 3)
-            rots = torch.zeros((fused_point_cloud.shape[0], 4), device="cuda")
-            rots[:, 0] = 1
-            opacities = inverse_sigmoid(
-                0.5
-                * torch.ones(
-                    (fused_point_cloud.shape[0], 1), dtype=torch.float, device="cuda"
-                )
-            )
-        else:
-            dist2 = torch.clamp_min(
-                distCUDA2(torch.from_numpy(np.asarray(pcd.points)).float().cuda()),
-                0.0000001,
-            )
-            scales = torch.log(torch.sqrt(dist2) * self.model_params.init_scale_factor)[
-                ..., None
-            ].repeat(1, 3)
-            rots = torch.zeros((fused_point_cloud.shape[0], 4), device="cuda")
-            rots[:, 0] = 1
-            opacities = inverse_sigmoid(
-                self.model_params.init_opacity
-                * torch.ones(
-                    (fused_point_cloud.shape[0], 1), dtype=torch.float, device="cuda"
-                )
-            )
+        )
 
         print("Number of points at initialisation : ", fused_point_cloud.shape[0])
 
@@ -304,7 +256,7 @@ class GaussianModel:
         )
         if "SKIP_TONEMAPPING" not in os.environ and "DIRECT_INIT" not in os.environ:
             self._diffuse = nn.Parameter(
-                untonemap(fused_color.clone()).clamp(0, 1)
+                untonemap(fused_color.clone()).clamp(0, 1) * 0.2
             )  # should be used even when targets aren't tonemapped, since colmap was run on tonemapped
         else:
             self._diffuse = nn.Parameter(fused_color.clone())
@@ -324,26 +276,6 @@ class GaussianModel:
         self._round_counter = torch.zeros(
             (fused_point_cloud.shape[0], 1), device="cuda"
         )
-
-        if (
-            raytracer_config.USE_LEVEL_OF_DETAIL
-            and "DISABLE_LOD_INIT" not in os.environ
-        ):
-            with torch.no_grad():
-                self._lod_mean.copy_(
-                    torch.distributions.Beta(1.5, 5.0).sample(
-                        (self._lod_mean.shape[0],)
-                    )[:, None]
-                    * self.model_params.lod_max_world_size_blur
-                )
-                self._lod_mean[:init_N] = 0.0
-            if self.model_params.lod_clamp_minsize:
-                with torch.no_grad():
-                    self._scaling.data.clamp_(
-                        min=torch.log(
-                            self._lod_mean * self.model_params.lod_clamp_minsize_factor
-                        )
-                    )
 
         self.max_radii2D = torch.zeros((self.get_xyz.shape[0]), device="cuda")
 
@@ -383,7 +315,7 @@ class GaussianModel:
         if add_book_points:
             num_book_pts = int(os.getenv("NUM_BOOK_PTS", 5000))
             extra_pts = torch.rand(num_book_pts, 3, device="cuda") * 0.3 + torch.tensor(
-                [-0.15, -0.1, -0.15], device="cuda"
+                [-0.15, -0.10, -0.15], device="cuda"
             )
             new_xyz = torch.cat([new_xyz, extra_pts])
             print("ADDED EXTRA POINTS FOR BOOK")
@@ -483,11 +415,11 @@ class GaussianModel:
                 "lr": training_args.position_lr_init * self.spatial_lr_scale,
                 "name": "xyz",
             },
-            {
-                "params": [self._position],
-                "lr": training_args.position_lr_init * self.spatial_lr_scale,
-                "name": "position",
-            },
+            # {
+            #     "params": [self._position],
+            #     "lr": training_args.position_lr_init * self.spatial_lr_scale,
+            #     "name": "position",
+            # },
             {"params": [self._normal], "lr": training_args.normal_lr, "name": "normal"},
             {
                 "params": [self._roughness],
@@ -495,12 +427,12 @@ class GaussianModel:
                 "name": "roughness",
             },
             {"params": [self._f0], "lr": training_args.f0_lr, "name": "f0"},
+            {"params": [self._diffuse], "lr": training_args.diffuse_lr, "name": "f_dc"},
             {
                 "params": [self._opacity],
                 "lr": training_args.opacity_lr,
                 "name": "opacity",
             },
-            {"params": [self._diffuse], "lr": training_args.diffuse_lr, "name": "f_dc"},
             {
                 "params": [self._scaling],
                 "lr": training_args.scaling_lr,
@@ -511,26 +443,17 @@ class GaussianModel:
                 "lr": training_args.rotation_lr,
                 "name": "rotation",
             },
-            {
-                "params": [self._lod_mean],
-                "lr": training_args.lod_mean_lr,
-                "name": "lod_mean",
-            },
-            {
-                "params": [self._lod_scale],
-                "lr": training_args.lod_scale_lr,
-                "name": "lod_scale",
-            },
+            # {
+            #     "params": [self._lod_mean],
+            #     "lr": training_args.lod_mean_lr,
+            #     "name": "lod_mean",
+            # },
+            # {
+            #     "params": [self._lod_scale],
+            #     "lr": training_args.lod_scale_lr,
+            #     "name": "lod_scale",
+            # },
         ]
-
-        if self.model_params.brdf_mode == "finetuned_lut":
-            opt_list.append(
-                {
-                    "params": [self._brdf_lut_residual],
-                    "lr": training_args.brdf_lut_lr,
-                    "name": "brdf_lut_residual",
-                }
-            )
 
         self.optimizer = torch.optim.Adam(
             opt_list,
@@ -559,11 +482,11 @@ class GaussianModel:
         xyz = self._xyz.detach().cpu().numpy()
         f_dc = self._diffuse.detach().cpu().numpy()
         opacities = self._opacity.detach().cpu().numpy()
-        lod_mean = self._lod_mean.detach().cpu().numpy()
-        lod_scale = self._lod_scale.detach().cpu().numpy()
+        # lod_mean = self._lod_mean.detach().cpu().numpy()
+        # lod_scale = self._lod_scale.detach().cpu().numpy()
         scale = self._scaling.detach().cpu().numpy()
         rotation = self._rotation.detach().cpu().numpy()
-        position = self._position.detach().cpu().numpy()
+        # position = self._position.detach().cpu().numpy()
         normal = self._normal.detach().cpu().numpy()
         roughness = self._roughness.detach().cpu().numpy()
         f0 = self._f0.detach().cpu().numpy()
@@ -583,9 +506,9 @@ class GaussianModel:
             "rot_1",
             "rot_2",
             "rot_3",
-            "pos_0",
-            "pos_1",
-            "pos_2",
+            # "pos_0",
+            # "pos_1",
+            # "pos_2",
             "normal_0",
             "normal_1",
             "normal_2",
@@ -593,8 +516,8 @@ class GaussianModel:
             "f0_0",
             "f0_1",
             "f0_2",
-            "lod_mean",
-            "lod_scale",
+            # "lod_mean",
+            # "lod_scale",
         ]
         dtype_full = [(attribute, "f4") for attribute in all_attributes]
 
@@ -606,22 +529,18 @@ class GaussianModel:
                 opacities,
                 scale,
                 rotation,
-                position,
+                # position,
                 normal,
                 roughness,
                 f0,
-                lod_mean,
-                lod_scale,
+                # lod_mean,
+                # lod_scale,
             ),
             axis=1,
         )
         elements[:] = list(map(tuple, attributes))
         el = PlyElement.describe(elements, "vertex")
         PlyData([el]).write(path)
-
-        if self.model_params.brdf_mode == "finetuned_lut":
-            brdf_lut_path = path.replace("point_cloud.ply", "brdf_lut_residuals.pt")
-            torch.save(self._brdf_lut_residual, brdf_lut_path)
 
     def reset_opacity(self):
         opacities_new = inverse_sigmoid(
@@ -667,13 +586,13 @@ class GaussianModel:
         for idx, attr_name in enumerate(rot_names):
             rots[:, idx] = np.asarray(plydata.elements[0][attr_name])
 
-        pos_names = [
-            p.name for p in plydata.elements[0].properties if p.name.startswith("pos")
-        ]
-        pos_names = sorted(pos_names, key=lambda x: int(x.split("_")[-1]))
-        positions = np.zeros((xyz.shape[0], len(pos_names)))
-        for idx, attr_name in enumerate(pos_names):
-            positions[:, idx] = np.asarray(plydata.elements[0][attr_name])
+        # pos_names = [
+        #     p.name for p in plydata.elements[0].properties if p.name.startswith("pos")
+        # ]
+        # pos_names = sorted(pos_names, key=lambda x: int(x.split("_")[-1]))
+        # positions = np.zeros((xyz.shape[0], len(pos_names)))
+        # for idx, attr_name in enumerate(pos_names):
+        #     positions[:, idx] = np.asarray(plydata.elements[0][attr_name])
 
         normal_names = [
             p.name
@@ -705,17 +624,17 @@ class GaussianModel:
         self._opacity = nn.Parameter(
             torch.tensor(opacities, dtype=torch.float, device="cuda")
         )
-        self._lod_mean = nn.Parameter(torch.zeros((xyz.shape[0], 1), device="cuda"))
-        self._lod_scale = nn.Parameter(torch.zeros((xyz.shape[0], 1), device="cuda"))
+        # self._lod_mean = nn.Parameter(torch.zeros((xyz.shape[0], 1), device="cuda"))
+        # self._lod_scale = nn.Parameter(torch.zeros((xyz.shape[0], 1), device="cuda"))
         self._scaling = nn.Parameter(
             torch.tensor(scales, dtype=torch.float, device="cuda")
         )
         self._rotation = nn.Parameter(
             torch.tensor(rots, dtype=torch.float, device="cuda")
         )
-        self._position = nn.Parameter(
-            torch.tensor(positions, dtype=torch.float, device="cuda")
-        )
+        # self._position = nn.Parameter(
+        #     torch.tensor(positions, dtype=torch.float, device="cuda")
+        # )
         self._normal = nn.Parameter(
             torch.tensor(normals, dtype=torch.float, device="cuda")
         )
@@ -727,13 +646,6 @@ class GaussianModel:
         self._round_counter = torch.zeros(
             (xyz.shape[0], 1), dtype=torch.float, device="cuda"
         )
-
-        if self.model_params.brdf_mode == "finetuned_lut":
-            self._brdf_lut_residual = nn.Parameter(
-                torch.load(path.replace("point_cloud.ply", "brdf_lut_residuals.pt")).to(
-                    "cuda"
-                )
-            )
 
     def replace_tensor_to_optimizer(self, tensor, name):
         optimizable_tensors = {}
@@ -753,8 +665,6 @@ class GaussianModel:
     def _prune_optimizer(self, mask):
         optimizable_tensors = {}
         for group in self.optimizer.param_groups:
-            if group["name"] == "brdf_lut_residual":
-                continue
             stored_state = self.optimizer.state.get(group["params"][0], None)
             if stored_state is not None:
                 stored_state["exp_avg"] = stored_state["exp_avg"][mask]
@@ -777,8 +687,8 @@ class GaussianModel:
         self._xyz = optimizable_tensors["xyz"]
         self._xyz.grad = torch.zeros_like(self._xyz)
         #
-        self._position = optimizable_tensors["position"]
-        self._position.grad = torch.zeros_like(self._position)
+        # self._position = optimizable_tensors["position"]
+        # self._position.grad = torch.zeros_like(self._position)
         #
         self._normal = optimizable_tensors["normal"]
         self._normal.grad = torch.zeros_like(self._normal)
@@ -795,11 +705,11 @@ class GaussianModel:
         self._opacity = optimizable_tensors["opacity"]
         self._opacity.grad = torch.zeros_like(self._opacity)
         #
-        self._lod_mean = optimizable_tensors["lod_mean"]
-        self._lod_mean.grad = torch.zeros_like(self._lod_mean)
-        #
-        self._lod_scale = optimizable_tensors["lod_scale"]
-        self._lod_scale.grad = torch.zeros_like(self._lod_scale)
+        # self._lod_mean = optimizable_tensors["lod_mean"]
+        # self._lod_mean.grad = torch.zeros_like(self._lod_mean)
+        # #
+        # self._lod_scale = optimizable_tensors["lod_scale"]
+        # self._lod_scale.grad = torch.zeros_like(self._lod_scale)
         #
         self._scaling = optimizable_tensors["scaling"]
         self._scaling.grad = torch.zeros_like(self._scaling)
@@ -823,8 +733,6 @@ class GaussianModel:
     def cat_tensors_to_optimizer(self, tensors_dict):
         optimizable_tensors = {}
         for group in self.optimizer.param_groups:
-            if group["name"] == "brdf_lut_residual":
-                continue
             assert len(group["params"]) == 1
             extension_tensor = tensors_dict[group["name"]]
             stored_state = self.optimizer.state.get(group["params"][0], None)
@@ -888,14 +796,13 @@ class GaussianModel:
         }
 
         optimizable_tensors = self.cat_tensors_to_optimizer(d)
-
         optimizable_tensors["xyz"].grad = torch.zeros_like(optimizable_tensors["xyz"])
         self._xyz = optimizable_tensors["xyz"]
 
-        optimizable_tensors["position"].grad = torch.zeros_like(
-            optimizable_tensors["position"]
-        )
-        self._position = optimizable_tensors["position"]
+        # optimizable_tensors["position"].grad = torch.zeros_like(
+        #     optimizable_tensors["position"]
+        # )
+        # self._position = optimizable_tensors["position"]
 
         optimizable_tensors["normal"].grad = torch.zeros_like(
             optimizable_tensors["normal"]
@@ -918,15 +825,15 @@ class GaussianModel:
         )
         self._opacity = optimizable_tensors["opacity"]
 
-        optimizable_tensors["lod_mean"].grad = torch.zeros_like(
-            optimizable_tensors["lod_mean"]
-        )
-        self._lod_mean = optimizable_tensors["lod_mean"]
+        # optimizable_tensors["lod_mean"].grad = torch.zeros_like(
+        #     optimizable_tensors["lod_mean"]
+        # )
+        # self._lod_mean = optimizable_tensors["lod_mean"]
 
-        optimizable_tensors["lod_scale"].grad = torch.zeros_like(
-            optimizable_tensors["lod_scale"]
-        )
-        self._lod_scale = optimizable_tensors["lod_scale"]
+        # optimizable_tensors["lod_scale"].grad = torch.zeros_like(
+        #     optimizable_tensors["lod_scale"]
+        # )
+        # self._lod_scale = optimizable_tensors["lod_scale"]
 
         optimizable_tensors["scaling"].grad = torch.zeros_like(
             optimizable_tensors["scaling"]
@@ -1178,7 +1085,7 @@ class GaussianModel:
             if "GRAD_RANKING_ONLY" in os.environ:
                 score = grad_ranking
 
-            if opt.densif_lod_ranking_weight != 0.0:  #!!!! tmp
+            if opt.densif_lod_ranking_weight != 0.0:
                 print("lod ranking is enabled")
                 score = (
                     grad_ranking.log()

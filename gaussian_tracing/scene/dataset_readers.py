@@ -74,7 +74,7 @@ def get_dataset(model_params: ModelParams, data_dir: str, split: str):
 
 
 def read_dataset(dataset, num_workers=16):
-    max_workers = min(num_workers, os.cpu_count() or 1)
+    max_workers = min(num_workers, os.cpu_count() // 2 or 1)
     dataloader = torch.utils.data.DataLoader(
         dataset,
         batch_size=1,

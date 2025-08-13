@@ -71,13 +71,7 @@ class GaussianRaytracer:
         self.cuda_module.gaussian_rotations.copy_(self.pc._get_rotation)
         self.cuda_module.gaussian_means.copy_(self.pc.get_xyz)
         self.cuda_module.gaussian_opacity.copy_(self.pc._opacity)
-        if self.cuda_module.gaussian_lod_mean is not None:
-            self.cuda_module.gaussian_lod_mean.copy_(self.pc._lod_mean)
-        if self.cuda_module.gaussian_lod_scale is not None:
-            self.cuda_module.gaussian_lod_scale.copy_(self.pc._lod_scale)
         self.cuda_module.gaussian_rgb.copy_(self.pc.get_diffuse)
-        if self.cuda_module.gaussian_position is not None:
-            self.cuda_module.gaussian_position.copy_(self.pc.get_position)
         if self.cuda_module.gaussian_normal is not None:
             self.cuda_module.gaussian_normal.copy_(self.pc.get_normal)
         if self.cuda_module.gaussian_roughness is not None:
@@ -89,15 +83,9 @@ class GaussianRaytracer:
     def _import_param_gradients(self):
         self.pc._xyz.grad.add_(self.cuda_module.gaussian_means.grad)
         self.pc._opacity.grad.add_(self.cuda_module.gaussian_opacity.grad)
-        if self.cuda_module.gaussian_lod_mean is not None:
-            self.pc._lod_mean.grad.add_(self.cuda_module.gaussian_lod_mean.grad)
-        if self.cuda_module.gaussian_lod_scale is not None:
-            self.pc._lod_scale.grad.add_(self.cuda_module.gaussian_lod_scale.grad)
         self.pc._scaling.grad.add_(self.cuda_module.gaussian_scales.grad)
         self.pc._rotation.grad.add_(self.cuda_module.gaussian_rotations.grad)
         self.pc._diffuse.grad.add_(self.cuda_module.gaussian_rgb.grad)
-        if self.cuda_module.gaussian_position is not None:
-            self.pc._position.grad.add_(self.cuda_module.gaussian_position.grad)
         if self.cuda_module.gaussian_normal is not None:
             self.pc._normal.grad.add_(self.cuda_module.gaussian_normal.grad)
         if self.cuda_module.gaussian_roughness is not None:
@@ -112,12 +100,6 @@ class GaussianRaytracer:
         self.cuda_module.gaussian_rotations.grad.zero_()
         self.cuda_module.gaussian_means.grad.zero_()
         #
-        if self.cuda_module.gaussian_lod_mean is not None:
-            self.cuda_module.gaussian_lod_mean.grad.zero_()
-        if self.cuda_module.gaussian_lod_scale is not None:
-            self.cuda_module.gaussian_lod_scale.grad.zero_()
-        if self.cuda_module.gaussian_position is not None:
-            self.cuda_module.gaussian_position.grad.zero_()
         if self.cuda_module.gaussian_normal is not None:
             self.cuda_module.gaussian_normal.grad.zero_()
         if self.cuda_module.gaussian_roughness is not None:
