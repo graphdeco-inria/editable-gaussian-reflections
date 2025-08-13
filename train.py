@@ -17,8 +17,6 @@ from datetime import datetime
 from random import randint
 from threading import Thread
 
-import pandas as pd
-import plotly.express as px
 import torch
 from torchvision.utils import save_image
 from tqdm import tqdm
@@ -183,24 +181,17 @@ def training_report(tb_writer, iteration):
                     )
                     roughness_image = torch.clamp(package.roughness[0], 0.0, 1.0)
                     normal_image = torch.clamp(package.normal[0] / 2 + 0.5, 0.0, 1.0)
-                    position_image = torch.clamp(package.position[0], 0.0, 1.0)
                     depth_image = package.depth[0]
 
                     F0_image = torch.clamp(package.F0[0], 0.0, 1.0)
-                    if model_params.brdf_mode != "disabled":
-                        brdf_image = torch.clamp(package.brdf[0], 0.0, 1.0)
-
                     normal_gt_image = torch.clamp(
                         viewpoint.normal_image / 2 + 0.5, 0.0, 1.0
                     )
                     depth_gt_image = viewpoint.depth_image
-                    position_gt_image = torch.clamp(viewpoint.position_image, 0.0, 1.0)
                     F0_gt_image = torch.clamp(viewpoint.F0_image, 0.0, 1.0)
                     roughness_gt_image = torch.clamp(
                         viewpoint.roughness_image, 0.0, 1.0
                     )
-                    if model_params.brdf_mode != "disabled":
-                        brdf_gt_image = torch.clamp(viewpoint.brdf_image, 0.0, 1.0)
 
                     diffuse_l1_test += (
                         l1_loss(diffuse_image, diffuse_gt_image).mean().double()
@@ -241,13 +232,6 @@ def training_report(tb_writer, iteration):
                                 padding=0,
                             )
                             save_image(
-                                torch.clamp(package.position, 0.0, 1.0),
-                                tb_writer.log_dir
-                                + "/"
-                                + f"{config['name']}_view/iter_{iteration:09}_view_{viewpoint.colmap_id}_pos_all_rays.png",
-                                padding=0,
-                            )
-                            save_image(
                                 package.depth
                                 / package.depth.amax(dim=(1, 2, 3), keepdim=True),
                                 tb_writer.log_dir
@@ -260,99 +244,6 @@ def training_report(tb_writer, iteration):
                                 tb_writer.log_dir
                                 + "/"
                                 + f"{config['name']}_view/iter_{iteration:09}_view_{viewpoint.colmap_id}_brdf_all_rays.png",
-                                padding=0,
-                            )
-                            if (
-                                raytracer.cuda_module.output_incident_radiance
-                                is not None
-                            ):
-                                save_image(
-                                    raytracer.cuda_module.output_incident_radiance.moveaxis(
-                                        -1, 1
-                                    ).clamp(0, 1),
-                                    tb_writer.log_dir
-                                    + "/"
-                                    + f"{config['name']}_view/iter_{iteration:09}_view_{viewpoint.colmap_id}_incident_radiance_all_rays.png",
-                                    padding=0,
-                                )
-                        if raytracer.config.SAVE_RAY_IMAGES:
-                            save_image(
-                                raytracer.cuda_module.output_ray_origin[0]
-                                .moveaxis(-1, 0)
-                                .abs()
-                                / 5,
-                                tb_writer.log_dir
-                                + "/"
-                                + f"{config['name']}_view/iter_{iteration:09}_view_{viewpoint.colmap_id}_ray_origin.png",
-                                padding=0,
-                            )
-                            save_image(
-                                raytracer.cuda_module.output_ray_direction[0].moveaxis(
-                                    -1, 0
-                                )
-                                / 2
-                                + 0.5,
-                                tb_writer.log_dir
-                                + "/"
-                                + f"{config['name']}_view/iter_{iteration:09}_view_{viewpoint.colmap_id}_ray_direction.png",
-                                padding=0,
-                            )
-
-                        if raytracer.config.SAVE_LOD_IMAGES:
-                            save_image(
-                                raytracer.cuda_module.output_lod_mean,
-                                tb_writer.log_dir
-                                + "/"
-                                + f"{config['name']}_view/iter_{iteration:09}_view_{viewpoint.colmap_id}_lod_mean_all_rays.png",
-                                padding=0,
-                            )
-                            save_image(
-                                raytracer.cuda_module.output_lod_scale,
-                                tb_writer.log_dir
-                                + "/"
-                                + f"{config['name']}_view/iter_{iteration:09}_view_{viewpoint.colmap_id}_lod_scale_all_rays.png",
-                                padding=0,
-                            )
-                            save_image(
-                                raytracer.cuda_module.output_ray_lod,
-                                tb_writer.log_dir
-                                + "/"
-                                + f"{config['name']}_view/iter_{iteration:09}_view_{viewpoint.colmap_id}_ray_lod_all_rays.png",
-                                padding=0,
-                            )
-
-                        if raytracer.config.SAVE_HIT_STATS:
-                            torch.save(
-                                raytracer.cuda_module.num_hits_per_pixel,
-                                tb_writer.log_dir
-                                + "/"
-                                + f"{config['name']}_view/iter_{iteration:09}_view_{viewpoint.colmap_id}_num_hits_per_pixel.pt",
-                            )
-                            torch.save(
-                                raytracer.cuda_module.num_traversed_per_pixel,
-                                tb_writer.log_dir
-                                + "/"
-                                + f"{config['name']}_view/iter_{iteration:09}_view_{viewpoint.colmap_id}_num_traversed_per_pixel.pt",
-                            )
-                            # also save them as normalized png
-                            save_image(
-                                (
-                                    raytracer.cuda_module.num_hits_per_pixel.float()
-                                    / raytracer.cuda_module.num_hits_per_pixel.max()
-                                ),
-                                tb_writer.log_dir
-                                + "/"
-                                + f"{config['name']}_view/iter_{iteration:09}_view_{viewpoint.colmap_id}_num_hits_per_pixel.png",
-                                padding=0,
-                            )
-                            save_image(
-                                (
-                                    raytracer.cuda_module.num_traversed_per_pixel.float()
-                                    / raytracer.cuda_module.num_traversed_per_pixel.max()
-                                ),
-                                tb_writer.log_dir
-                                + "/"
-                                + f"{config['name']}_view/iter_{iteration:09}_view_{viewpoint.colmap_id}_num_traversed_per_pixel.png",
                                 padding=0,
                             )
 
@@ -408,16 +299,6 @@ def training_report(tb_writer, iteration):
                             nrow=2,
                             padding=0,
                         )
-                        save_image(
-                            torch.stack(
-                                [position_image.cuda(), position_gt_image]
-                            ).clamp(0, 1),
-                            tb_writer.log_dir
-                            + "/"
-                            + f"{config['name']}_view/iter_{iteration:09}_view_{viewpoint.colmap_id}_position_vs_target.png",
-                            nrow=2,
-                            padding=0,
-                        )
 
                         save_image(
                             (
@@ -443,117 +324,6 @@ def training_report(tb_writer, iteration):
                             nrow=2,
                             padding=0,
                         )
-                        if model_params.brdf_mode != "disabled":
-                            save_image(
-                                torch.stack([brdf_image, brdf_gt_image.cuda()]).clamp(
-                                    0, 1
-                                ),
-                                tb_writer.log_dir
-                                + "/"
-                                + f"{config['name']}_view/iter_{iteration:09}_view_{viewpoint.colmap_id}_brdf_vs_target.png",
-                                nrow=2,
-                                padding=0,
-                            )
-
-                        if raytracer.cuda_module.output_incident_radiance is not None:
-                            save_image(
-                                raytracer.cuda_module.output_incident_radiance[1]
-                                .clamp(0, 1)
-                                .moveaxis(-1, 0),
-                                tb_writer.log_dir
-                                + "/"
-                                + f"{config['name']}_view/iter_{iteration:09}_view_{viewpoint.colmap_id}_incident_radiance_vs_target.png",
-                                padding=0,
-                            )
-
-                        if raytracer.config.USE_LEVEL_OF_DETAIL:
-                            for k, alpha in enumerate(torch.linspace(0.0, 1.0, 4)):
-                                package = render(
-                                    viewpoint,
-                                    raytracer,
-                                    pipe_params,
-                                    bg,
-                                    blur_sigma=alpha * scene.max_pixel_blur_sigma
-                                    if not model_params.lod_force_blur_sigma >= 0.0
-                                    else torch.tensor(
-                                        model_params.lod_force_blur_sigma, device="cuda"
-                                    ),
-                                )
-
-                                diffuse_gt_image = package.target_diffuse
-                                glossy_gt_image = package.target_glossy
-                                gt_image = package.target
-
-                                if raytracer.config.TONEMAP:
-                                    diffuse_image = tonemap(package.rgb[0]).clamp(0, 1)
-                                    glossy_image = tonemap(
-                                        package.rgb[1:-1].sum(dim=0)
-                                    ).clamp(0, 1)
-                                    pred_image = tonemap(package.rgb[-1]).clamp(0, 1)
-                                else:
-                                    diffuse_image = package.rgb[0].clamp(0, 1)
-                                    glossy_image = (
-                                        package.rgb[1:-1].sum(dim=0).clamp(0, 1)
-                                    )
-                                    pred_image = package.rgb[-1].clamp(0, 1)
-
-                                # save_image(
-                                #     torch.stack(
-                                #         [
-                                #             diffuse_pred,
-                                #             diffuse_gt_image,
-                                #             glossy_pred,
-                                #             glossy_gt_image,
-                                #             pred,
-                                #             gt_image,
-                                #         ]
-                                #     ).clamp(0, 1),
-                                #     tb_writer.log_dir
-                                #     + "/"
-                                #     + f"{config['name']}_view/iter_{iteration:09}_view_{viewpoint.colmap_id}_blurred_{k}÷3.png",
-                                #     nrow=2,
-                                #     padding=0,
-                                # )
-
-                if model_params.brdf_mode == "static_lut":
-                    save_image(
-                        torch.stack([gaussians.get_brdf_lut]).abs(),
-                        os.path.join(
-                            tb_writer.log_dir,
-                            f"{config['name']}_view/lut_iter_{iteration:09}.png",
-                        ),
-                        nrow=1,
-                        padding=0,
-                    )
-                elif model_params.brdf_mode == "finetuned_lut":
-                    save_image(
-                        torch.stack([gaussians._brdf_lut, gaussians.get_brdf_lut]),
-                        os.path.join(
-                            tb_writer.log_dir,
-                            f"{config['name']}_view/lut_iter_{iteration:09}.png",
-                        ),
-                        nrow=1,
-                        padding=0,
-                    )
-                    save_image(
-                        torch.stack(
-                            [
-                                gaussians._brdf_lut_residual,
-                                gaussians._brdf_lut_residual * 5,
-                                gaussians._brdf_lut_residual * 10,
-                                gaussians._brdf_lut_residual * 20,
-                                gaussians._brdf_lut_residual * 50,
-                                gaussians._brdf_lut_residual * 200,
-                                gaussians._brdf_lut_residual * 10000,
-                            ]
-                        ).abs(),
-                        os.path.join(
-                            tb_writer.log_dir,
-                            f"{config['name']}_view/lut_residual_amplified_iter_{iteration:09}.png",
-                        ),
-                        nrow=1,
-                        padding=0,
-                    )
 
                 psnr_test /= len(config["cameras"])
                 l1_test /= len(config["cameras"])
@@ -678,9 +448,6 @@ if opt_params.timestretch != 1:
     opt_params.densification_interval = int(
         opt_params.timestretch * opt_params.densification_interval
     )
-    opt_params.position_lr_max_steps = int(
-        opt_params.timestretch * opt_params.position_lr_max_steps
-    )
     opt_params.densify_from_iter = int(
         opt_params.timestretch * opt_params.densify_from_iter
     )
@@ -725,7 +492,6 @@ if "KEYVIEW" in os.environ:
     keyview = [
         x for x in scene.getTrainCameras() if x.colmap_id == int(os.environ["KEYVIEW"])
     ][0]
-# raytracer.cuda_module.num_samples.fill_(model_params.num_samples)
 
 if args.viewer:
     from gaussianviewer import GaussianViewer
@@ -775,23 +541,8 @@ for iteration in tqdm(
 
     bg = torch.rand((3), device="cuda") if opt_params.random_background else background
 
-    # *** run fused forward + backprop
-    if (
-        raytracer.config.USE_LEVEL_OF_DETAIL
-        and random.random() < model_params.lod_prob_blur_targets
-    ):
-        if model_params.lod_force_blur_sigma >= 0.0:
-            blur_sigma = torch.tensor(model_params.lod_force_blur_sigma, device="cuda")
-        else:
-            blur_sigma = (
-                torch.rand(1, device="cuda") ** model_params.lod_schedule_power
-                * scene.max_pixel_blur_sigma
-            )
-    else:
-        blur_sigma = None
-
     torch.cuda.synchronize()  # todo may be needed or not, idk, occasional crash. double check after deadline
-    package = render(viewpoint_cam, raytracer, pipe_params, bg, blur_sigma=blur_sigma)
+    package = render(viewpoint_cam, raytracer, pipe_params, bg)
 
     if opt_params.opacity_reg > 0:
         gaussians._opacity.grad += torch.autograd.grad(
@@ -833,75 +584,6 @@ for iteration in tqdm(
 
         if iteration % 1000 == 0 or iteration == 1:
             os.makedirs(os.path.join(args.model_path, "plots"), exist_ok=True)
-
-            if False:
-                # Save a histogram of gaussian opacities
-                opacities = gaussians.get_opacity.cpu().numpy()
-                df = pd.DataFrame(opacities, columns=["opacity"])
-                fig = px.histogram(
-                    df, x="opacity", nbins=50, title="Histogram of Gaussian Opacities"
-                )
-                fig.write_image(
-                    os.path.join(
-                        args.model_path,
-                        f"plots/opacity_histogram_{iteration:05d}.png",
-                        padding=0,
-                    )
-                )
-
-                # Save a histogram of gaussian _lod_mean
-                lod_mean = gaussians.get_lod_mean.cpu().numpy()
-                df = pd.DataFrame(lod_mean, columns=["lod_mean"])
-                fig = px.histogram(
-                    df, x="lod_mean", nbins=50, title="Histogram of Gaussian LOD Mean"
-                )
-                fig.write_image(
-                    os.path.join(
-                        args.model_path,
-                        f"plots/lod_mean_histogram_{iteration:05d}.png",
-                        padding=0,
-                    )
-                )
-
-                # Save a histogram of gaussian _lod_scale
-                lod_scale = gaussians.get_lod_scale.cpu().numpy()
-                df = pd.DataFrame(lod_scale, columns=["lod_scale"])
-                fig = px.histogram(
-                    df, x="lod_scale", nbins=50, title="Histogram of Gaussian LOD Scale"
-                )
-                fig.write_image(
-                    os.path.join(
-                        args.model_path,
-                        f"plots/lod_scale_histogram_{iteration:05d}.png",
-                        padding=0,
-                    )
-                )
-
-            if False:
-                # Save a scatter plot of gaussian round counter vs lod_mean
-                sample_indices = random.sample(
-                    range(gaussians._round_counter.shape[0]),
-                    int(0.20 * gaussians._round_counter.shape[0]),
-                )
-                round_counter = gaussians._round_counter[sample_indices].cpu().numpy()
-                lod_mean = gaussians.get_lod_mean[sample_indices].cpu().numpy()
-                df = pd.DataFrame(
-                    {"round_counter": round_counter[:, 0], "lod_mean": lod_mean[:, 0]}
-                )
-                fig = px.scatter(
-                    df,
-                    x="lod_mean",
-                    y="round_counter",
-                    title="Scatter Plot of Gaussian Densification Round Counter vs LOD Mean",
-                    opacity=0.01,
-                )
-                fig.write_image(
-                    os.path.join(
-                        args.model_path,
-                        f"plots/round_counter_vs_lod_mean_{iteration:05d}.png",
-                        padding=0,
-                    )
-                )
 
             # Save the elapsed time
             delta = time.time() - start
@@ -970,12 +652,6 @@ for iteration in tqdm(
             print("\n[ITER {}] Saving Gaussians".format(iteration))
             scene.save(iteration)
 
-        if opt_params.densif_use_top_k and iteration <= opt_params.densify_until_iter:
-            gaussians.add_densification_stats_3d(
-                raytracer.cuda_module.densification_gradient_diffuse,
-                raytracer.cuda_module.densification_gradient_glossy,
-            )
-
         if iteration % opt_params.densification_interval == 0:
             if (
                 iteration > model_params.no_bounces_until_iter + 500
@@ -1005,36 +681,12 @@ for iteration in tqdm(
             gaussians._roughness.data.clamp_(min=0.0, max=1.0)
             gaussians._f0.data.clamp_(min=0.0, max=1.0)
 
-        if raytracer.config.USE_LEVEL_OF_DETAIL:
-            with torch.no_grad():
-                gaussians._lod_mean.data.clamp_(min=0)
-
-            if model_params.lod_clamp_minsize:
-                with torch.no_grad():
-                    gaussians._scaling.data.clamp_(
-                        min=torch.log(
-                            gaussians._lod_mean.clamp(
-                                min=float(os.getenv("LOD_CLAMP_EPS", 0.0))  # was 1e-8
-                            )
-                        )
-                    )
-                if (
-                    torch.isnan(gaussians._lod_mean).any()
-                    or torch.isnan(gaussians._scaling).any()
-                ):
-                    print("NANs in lod_mean or _scaling")
-                    quit()
-
         if iteration in args.checkpoint_iterations:
             print("\n[ITER {}] Saving Checkpoint".format(iteration))
             torch.save(
                 (gaussians.capture(), iteration),
                 scene.model_path + "/chkpnt" + str(iteration) + ".pth",
             )
-
-    if iteration == model_params.warmup_until_iter:
-        os.environ["DIFFUSE_LOSS_WEIGHT"] = str(model_params.diffuse_loss_weight)
-        raytracer.cuda_module.set_losses(True)
 
     if iteration == model_params.no_bounces_until_iter:
         if model_params.max_one_bounce_until_iter in [0, -1]:
@@ -1071,10 +723,6 @@ for iteration in tqdm(
         os.environ["DIFFUSE_LOSS_WEIGHT"] = str(
             model_params.diffuse_loss_weight_after_rebalance
         )
-        raytracer.cuda_module.set_losses(True)
-
-    if iteration == model_params.enable_regular_loss_at_iter:
-        os.environ["REGULAR_LOSS_WEIGHT"] = "1.0"
         raytracer.cuda_module.set_losses(True)
 
     if args.viewer:
