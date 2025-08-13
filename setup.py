@@ -48,9 +48,6 @@ class CustomBuildExtension(BuildExtension):
             f"mkdir -p {pkg_source}/gaussian_tracing/cuda/build && cd {pkg_source}/gaussian_tracing/cuda/build && cmake .. && make"
         )
         os.system(
-            f"cp {pkg_source}/gaussian_tracing/cuda/build/libgausstracer.so {pkg_target}"
-        )
-        os.system(
             f"cp {pkg_source}/gaussian_tracing/cuda/build/raytracer_config.py {pkg_target}"
         )
 

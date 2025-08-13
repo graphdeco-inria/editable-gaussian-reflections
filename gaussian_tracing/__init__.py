@@ -3,12 +3,16 @@ import os
 import torch
 
 GAUSS_TRACER_PATH = os.path.join(
-    os.path.dirname(os.path.abspath(__file__)), "libgausstracer.so"
+    os.path.dirname(os.path.abspath(__file__)), "cuda", "build", "libgausstracer.so"
 )
 LOADED = False
 
 
-def make_raytracer(image_width: int, image_height: int, num_gaussians: int):
+def make_raytracer(
+    image_width: int,
+    image_height: int,
+    num_gaussians: int,
+):
     global LOADED
     if not LOADED:
         torch.classes.load_library(GAUSS_TRACER_PATH)

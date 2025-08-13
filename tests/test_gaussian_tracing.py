@@ -1,13 +1,16 @@
 import torch
 
-from gaussian_tracing import make_raytracer
-
 
 def test_raytracer_init():
+    build_dir = "./gaussian_tracing/cuda/build"
+    torch.classes.load_library(f"{build_dir}/libgausstracer.so")
+
     image_width = 1536
     image_height = 1024
     num_gaussians = 1
-    raytracer = make_raytracer(image_width, image_height, num_gaussians)
+    raytracer = torch.classes.gausstracer.Raytracer(
+        image_width, image_height, num_gaussians
+    )
 
     rot = torch.eye(3)
     pos = torch.ones(3)
