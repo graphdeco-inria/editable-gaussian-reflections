@@ -7,6 +7,6 @@ find gaussian_tracing/cuda \
   -exec clang-format -i {} \;
 
 # Currently only for select files and directories
-SELECT_PATHS="gaussian_tracing/ examples/ tests/ setup.py"
+SELECT_PATHS="gaussian_tracing/ tests/ setup.py train.py render.py render_novel_views.py prepare_initial_ply.py"
 ruff check --extend-select I --fix $SELECT_PATHS
 ruff format $SELECT_PATHS
