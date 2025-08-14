@@ -33,11 +33,12 @@ from gaussian_tracing.utils.tonemapping import tonemap
 def render_set(
     cfg,
     cameras,
-    pipe_params,
     background,
     raytracer,
     save_dir,
 ):
+    pipe_params = cfg.pipe_params
+
     for idx, camera in enumerate(tqdm(cameras, desc="Rendering progress")):
         raytracer.cuda_module.denoise.copy_(not cfg.skip_denoiser)
 
@@ -101,15 +102,12 @@ def render_set(
 
 
 def main(cfg: TyroConfig):
-    model_params = cfg.model_params
-    pipe_params = cfg.pipe_params
-
     # Initialize system state (RNG)
     safe_state(cfg.quiet)
     torch.autograd.set_detect_anomaly(cfg.detect_anomaly)
 
-    gaussians = GaussianModel(model_params)
-    scene = Scene(model_params, gaussians, load_iteration=cfg.iteration, shuffle=False)
+    gaussians = GaussianModel(cfg)
+    scene = Scene(cfg, gaussians, load_iteration=cfg.iteration, shuffle=False)
     views = scene.getTrainCameras()
     background = torch.tensor([0, 0, 0], dtype=torch.float32, device="cuda")
 
@@ -151,7 +149,6 @@ def main(cfg: TyroConfig):
     render_set(
         cfg,
         cameras,
-        pipe_params,
         background,
         raytracer,
         save_dir,
