@@ -17,6 +17,7 @@ from threading import Thread
 
 import torch
 import tyro
+import yaml
 from torchvision.utils import save_image
 from tqdm import tqdm
 
@@ -50,6 +51,9 @@ def prepare_output_and_logger(cfg: TyroConfig):
     # Set up output folder
     print("Output folder: {}".format(cfg.model_path))
     os.makedirs(cfg.model_path, exist_ok=True)
+    # Dump cfg.
+    with open(f"{cfg.model_path}/cfg.yml", "w") as f:
+        yaml.dump(vars(cfg), f)
 
     # Create Tensorboard writer
     tb_writer = None
