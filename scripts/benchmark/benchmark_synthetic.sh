@@ -16,7 +16,6 @@ set -xe
 hostname 
 nvidia-smi 
 
-
 # make use of a python torch environment
 python3 -c "import torch; print(torch.cuda.is_available()); print(torch.cuda.get_device_name(0))";
 
@@ -29,14 +28,14 @@ export LOAD_FROM_IMAGE_FILES=1
 export OPENCV_IO_ENABLE_OPENEXR=1
 
 RESOLUTION=512
-SCENE_DIR="data/renders"
+SCENE_DIR="data/renders_compressed"
 SCENE_LIST="shiny_kitchen shiny_bedroom shiny_livingroom shiny_office"
 # SCENE_LIST="multichromeball_kitchen_v2 multichromeball_identical_kitchen_v2 multichromeball_tint_kitchen_v2 multichromeball_value_kitchen_v2"
 OUTPUT_DIR="output/benchmark_synthetic"
 
 for SCENE in $SCENE_LIST;
 do
-    python train.py \
+    python examples/train.py \
         -s $SCENE_DIR/$SCENE \
         -m $OUTPUT_DIR/$SCENE \
         -r $RESOLUTION \

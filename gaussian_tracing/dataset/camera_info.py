@@ -16,8 +16,10 @@ class CameraInfo:
     width: int
     height: int
 
+    albedo_image: None
     glossy_image: None
     diffuse_image: None
+    depth_image: None
     position_image: None
     normal_image: None
     roughness_image: None

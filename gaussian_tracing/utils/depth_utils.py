@@ -16,6 +16,14 @@ def transform_normals_to_world(normals_camera, view_matrix):
     return normals_world
 
 
+def transform_normals_world_to_camera(normals_world, view_matrix):
+    # Transform normals from world to camera space
+    normals_camera = torch.einsum("ij,...j->...i", view_matrix.T, normals_world)
+    # Invert the direction of the camera normals
+    normals_camera = -1 * normals_camera
+    return normals_camera
+
+
 def transform_depth_to_position_image(depth, fov_x_rad, fov_y_rad):
     """
     Convert a depth image to a position image using FoV and image size.
@@ -202,76 +210,76 @@ def linear_least_squares_1d(x: torch.Tensor, y: torch.Tensor):
     return w, b
 
 
-def ransac_linear_fit(x, y, num_iters=100, threshold=None, min_inliers=0.5):
+def ransac_linear_fit(
+    x, y, num_iters=100, sample_fraction=0.1, max_sample_size=50, best_fraction=0.1
+):
     """
-    Robustly fits y = wx + b using RANSAC.
+    Robustly fits y = wx + b using RANSAC,
+    keeping only the best `best_fraction` of points (lowest residuals) for scoring and final fit.
+    Automatically chooses sample size for candidate fits.
 
     Args:
         x (Tensor): shape [N]
         y (Tensor): shape [N]
         num_iters (int): RANSAC iterations
-        threshold (float): max residual to count as inlier
-        min_inliers (float): min fraction of inliers to accept a model
+        sample_fraction (float): fraction of points to sample for candidate fits
+        max_sample_size (int): max number of points to sample in a single iteration
+        best_fraction (float): fraction of points to keep for scoring/refitting (0 < best_fraction <= 1)
 
     Returns:
         best_model: (w, b)
         best_inliers: boolean tensor of inlier flags
     """
     assert x.shape == y.shape
-    if threshold is None:
-        # Initial fit (least squares)
-        X = torch.stack([x, torch.ones_like(x)], dim=1)
-        w_b = torch.linalg.lstsq(X, y.unsqueeze(1)).solution.squeeze()
-        residuals = torch.abs(y - (w_b[0] * x + w_b[1]))
-
-        # Estimate noise level
-        sigma = residuals.std()
-        threshold = 2.5 * sigma
+    assert 0 < best_fraction <= 1, "best_fraction must be between 0 and 1"
 
     N = x.shape[0]
+
+    # Auto-scale sample size
+    sample_size = min(max(2, math.ceil(N * sample_fraction)), max_sample_size)
+
+    top_k = max(1, math.ceil(N * best_fraction))
     best_model = None
     best_inliers = None
-    best_inlier_count = 0
+    best_error = None
 
     for _ in range(num_iters):
-        # 1. Sample 2 random points
-        idxs = random.sample(range(N), 2)
+        # 1. Randomly sample points from all data (classic RANSAC)
+        idxs = random.sample(range(N), sample_size)
         x_sample = x[idxs]
         y_sample = y[idxs]
 
-        # 2. Prepare the design matrix
+        # Fit y = wx + b
         X_sample = torch.stack([x_sample, torch.ones_like(x_sample)], dim=1)
-        y_sample = y_sample.unsqueeze(1)
-
-        # 3. Fit the model using torch.linalg.lstsq
-        result = torch.linalg.lstsq(X_sample, y_sample)
-        w_b = result.solution.squeeze()
-        if w_b.ndim == 0:  # just in case
+        w_b = torch.linalg.lstsq(X_sample, y_sample.unsqueeze(1)).solution.squeeze()
+        if w_b.ndim == 0:
             continue
         w, b = w_b[0], w_b[1]
 
-        # 4. Compute residuals on all data
+        # 2. Compute residuals
         y_pred = w * x + b
         residuals = torch.abs(y - y_pred)
 
-        # 5. Determine inliers
-        inliers = residuals < threshold
-        inlier_count = inliers.sum().item()
+        # 3. Find top `best_fraction` smallest residuals
+        _, best_idx = torch.topk(-residuals, top_k)
+        inliers = torch.zeros_like(residuals, dtype=torch.bool)
+        inliers[best_idx] = True
 
-        # 6. Keep the best model
-        if inlier_count > best_inlier_count and inlier_count > min_inliers * N:
+        # 4. Compute SSE on these inliers
+        error = residuals[best_idx].pow(2).sum()
+
+        # 5. Keep best model
+        if best_error is None or error < best_error:
             best_model = (w, b)
             best_inliers = inliers
-            best_inlier_count = inlier_count
+            best_error = error
 
-    # Optional: Refit on inliers
+    # 6. Refit on best `best_fraction` inliers
     if best_model is not None and best_inliers is not None:
         x_in = x[best_inliers]
         y_in = y[best_inliers]
         X_in = torch.stack([x_in, torch.ones_like(x_in)], dim=1)
-        y_in = y_in.unsqueeze(1)
-        result = torch.linalg.lstsq(X_in, y_in)
-        w_b = result.solution.squeeze()
+        w_b = torch.linalg.lstsq(X_in, y_in.unsqueeze(1)).solution.squeeze()
         return (w_b[0], w_b[1]), best_inliers
 
-    return None, None  # No model found
+    return None, None

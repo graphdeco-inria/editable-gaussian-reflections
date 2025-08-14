@@ -62,12 +62,18 @@ def getNerfppNorm(cameras: List[Camera]) -> dict:
 
 def get_dataset(model_params: ModelParams, data_dir: str, split: str):
     if os.path.exists(os.path.join(data_dir, "transforms_train.json")):
-        if os.path.isdir(os.path.join(data_dir, "train", "preview")) or os.path.isdir(
-            os.path.join(data_dir, "priors", "preview")
-        ):
-            dataset = BlenderPriorDataset(model_params, data_dir, split=split)
+        if os.path.isfile(os.path.join(data_dir, split, "render", "render_0000.exr")):
+            dataset = BlenderDataset(
+                data_dir,
+                split=split,
+                resolution=model_params.resolution,
+                max_images=model_params.max_images,
+                exposure=model_params.exposure,
+            )
         else:
-            dataset = BlenderDataset(model_params, data_dir, split=split)
+            dataset = BlenderPriorDataset(
+                data_dir, split=split, resolution=model_params.resolution
+            )
     else:
         dataset = ColmapDataset(model_params, data_dir, split=split)
     return dataset
@@ -106,10 +112,8 @@ def readSceneInfo(model_params: ModelParams, data_dir: str) -> SceneInfo:
     )
     test_cameras = read_dataset(test_dataset)
 
-    if "USE_COLMAP_INIT" in os.environ:
-        points, colors = read_ply(os.path.join(data_dir, "point_cloud_sfm.ply"))
-    else:
-        points, colors = read_ply(os.path.join(data_dir, "point_cloud_dense.ply"))
+    init_type = "dense" if "INIT_TYPE" not in os.environ else os.environ["INIT_TYPE"]
+    points, colors = read_ply(os.path.join(data_dir, f"point_cloud_{init_type}.ply"))
 
     point_cloud = BasicPointCloud(
         points=points,

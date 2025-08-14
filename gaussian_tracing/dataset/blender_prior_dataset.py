@@ -4,14 +4,12 @@ from pathlib import Path
 
 import numpy as np
 import torch
-from einops import repeat
+from einops import rearrange, repeat
 from PIL import Image
+from torch import Tensor
 
-from gaussian_tracing.arguments import ModelParams
 from gaussian_tracing.dataset.colmap_parser import ColmapParser
 from gaussian_tracing.utils.depth_utils import (
-    project_pointcloud_to_depth_map,
-    ransac_linear_fit,
     transform_depth_to_position_image,
     transform_normals_to_world,
     transform_points,
@@ -26,14 +24,26 @@ from .image_utils import from_pil_image
 class BlenderPriorDataset:
     def __init__(
         self,
-        model_params: ModelParams,
         data_dir: str,
         split: str = "train",
-        dirname: str = None,
+        resolution: int | None = None,
     ):
-        self.model_params = model_params
         self.data_dir = data_dir
         self.split = split
+        self.resolution = resolution
+        self.buffer_names = [
+            "render",
+            "albedo",
+            "base_color",
+            "diffuse",
+            "glossy",
+            "roughness",
+            "metalness",
+            "depth",
+            "normal",
+            "specular",
+            "brdf",
+        ]
 
         self.colmap_parser = ColmapParser(data_dir)
         self.point_cloud = BasicPointCloud(
@@ -42,13 +52,11 @@ class BlenderPriorDataset:
             normals=np.zeros_like(self.colmap_parser.points),
         )
 
-        self.dirname = split if dirname is None else dirname
-        self.buffers_dir = os.path.join(self.data_dir, self.dirname)
+        self.buffers_dir = os.path.join(self.data_dir, split)
         transform_path = os.path.join(data_dir, f"transforms_{split}.json")
         with open(transform_path) as json_file:
             self.contents = json.load(json_file)
         self.frames = sorted(self.contents["frames"], key=lambda x: x["file_path"])
-        self.frames = self.frames[: self.model_params.max_images]
         assert len(self.frames) != 0, "Dataset is empty"
 
     def __len__(self) -> int:
@@ -60,42 +68,16 @@ class BlenderPriorDataset:
         image_name = Path(frame_name).stem + ".png"
         image_path = os.path.join(self.data_dir, image_name)
 
-        image = self._get_buffer(frame_name, "image")
-        albedo_image = self._get_buffer(frame_name, "albedo")
-        diffuse_image = self._get_buffer(frame_name, "diffuse")
-        glossy_image = self._get_buffer(frame_name, "glossy")
-        roughness_image = self._get_buffer(frame_name, "roughness")
-        metalness_image = self._get_buffer(frame_name, "metalness")
-        depth_image = self._get_buffer(frame_name, "depth")
-        normal_image = self._get_buffer(frame_name, "normal")
-        specular_image = torch.ones_like(image) * 0.5
-        brdf_image = torch.zeros_like(image)
-        base_color_image = albedo_image * (1.0 - metalness_image) + metalness_image
-        # if "SKIP_THRESHOLD_ROUGHNESS" not in os.environ:
-        #     roughness_image[roughness_image < 0.25] = 0.0
-        #     upsized_roughness = torch.nn.functional.interpolate(
-        #         roughness_image.moveaxis(-1, 0)[None],
-        #         scale_factor=4,
-        #         mode="bicubic",
-        #         antialias=True,
-        #     )
-        #     upsized_roughness[upsized_roughness < 0.25] = 0.0
-        #     roughness_image = torch.nn.functional.interpolate(
-        #         upsized_roughness, scale_factor=1 / 4, mode="area"
-        #     )[0].moveaxis(0, -1)
-        # if "SKIP_THRESHOLD_METALNESS" not in os.environ:
-        #     upsized_metal = torch.nn.functional.interpolate(
-        #         metalness_image.moveaxis(-1, 0)[None],
-        #         scale_factor=4,
-        #         mode="bicubic",
-        #         antialias=True,
-        #     )
-        #     metalness_image = torch.nn.functional.interpolate(
-        #         (upsized_metal > 0.4).float(), scale_factor=1 / 4, mode="area"
-        #     )[0].moveaxis(0, -1)
+        buffers = {
+            buffer_name: self._get_buffer(frame_name, buffer_name)
+            for buffer_name in self.buffer_names
+        }
+        # buffers["brdf"] = torch.zeros_like(buffers["render"])
+        # buffers["specular"] = torch.ones_like(buffers["render"]) * 0.5
+        # buffers["base_color"] = buffers["albedo"] * (1.0 - buffers["metalness"]) + buffers["metalness"]
 
         # Camera intrinsics
-        height, width = image.shape[0], image.shape[1]
+        height, width = buffers["render"].shape[:2]
         if "camera_angle_y" in self.contents:
             fovy = self.contents["camera_angle_y"]
             fovx = self.contents["camera_angle_x"]
@@ -112,83 +94,24 @@ class BlenderPriorDataset:
         w2c = np.linalg.inv(c2w)
         # R is stored transposed due to 'glm' in CUDA code
         R = np.transpose(w2c[:3, :3])
-
         T = w2c[:3, 3]
 
         # Postprocess normal_image
         R_tensor = torch.tensor(R, dtype=torch.float32)
-        normal_image = transform_normals_to_world(normal_image, R_tensor)
+        buffers["normal"] = transform_normals_to_world(buffers["normal"], R_tensor)
 
         # Postprocess depth_image to position_image
-        depth_image = depth_image[:, :, 0]
+        depth_image = buffers["depth"][:, :, 0]
         c2w_tensor = torch.tensor(c2w, dtype=torch.float32)
-        w2c_tensor = torch.tensor(w2c, dtype=torch.float32)
-        points_tensor = torch.tensor(
-            self.colmap_parser.points[self.colmap_parser.point_indices[image_name]],
-            dtype=torch.float32,
-        )
-        points_tensor = transform_points(points_tensor, w2c_tensor)
-        depth_points_image = project_pointcloud_to_depth_map(
-            points_tensor, fovx, fovy, depth_image.shape[:2]
-        )
-        valid_mask = depth_points_image != 0
-        x = depth_image[valid_mask].float()
-        y = depth_points_image[valid_mask]
-        # a, b = linear_least_squares_1d(x, y)
-        (a, b), _ = ransac_linear_fit(x, y)
+        a, b = 4.0, 0.0
         depth_image = depth_image * a + b
         position_image = transform_depth_to_position_image(depth_image, fovx, fovy)
-        position_image = transform_points(position_image, c2w_tensor)
+        buffers["position"] = transform_points(position_image, c2w_tensor)
 
-        if "ABLATION" in os.environ:
-            resolution = image.shape[0]
-            scene_name = (
-                os.path.basename(self.data_dir)
-                .replace("_128", "")
-                .replace("_256", "")
-                .replace("_512", "")
-                .replace("_768", "")
-            )
-            assert int(image_name.replace(".png", "").split("_")[-1]) == idx
-            (
-                rendered_image,
-                rendered_diffuse_image,
-                rendered_glossy_image,
-                rendered_normal_image,
-                rendered_position_image,
-                rendered_roughness_image,
-                rendered_specular_image,
-                rendered_metalness_image,
-                rendered_base_color_image,
-                rendered_brdf_image,
-            ) = torch.load(
-                f"cache/{resolution}/{scene_name}/{self.split}/render/{idx:04d}.pt".replace(
-                    "/render/", "/"
-                )
-            )
-
-            ablated_passes = os.environ["ABLATION"].split(",")
-
-            if "image" not in ablated_passes:
-                image = rendered_image
-            if "diffuse" not in ablated_passes:
-                diffuse_image = rendered_diffuse_image
-            if "glossy" not in ablated_passes:
-                glossy_image = rendered_glossy_image
-            if "normals" not in ablated_passes and "normal" not in ablated_passes:
-                normal_image = rendered_normal_image
-            if "position" not in ablated_passes:
-                position_image = rendered_position_image
-            if "roughness" not in ablated_passes:
-                roughness_image = rendered_roughness_image
-            if "specular" not in ablated_passes:
-                specular_image = rendered_specular_image
-            if "metalness" not in ablated_passes:
-                metalness_image = rendered_metalness_image
-            if "base_color" not in ablated_passes:
-                base_color_image = rendered_base_color_image
-            else:
-                base_color_image = albedo_image
+        # Resize all buffers
+        if self.resolution is not None:
+            for k, v in buffers.items():
+                buffers[k] = _resize_image_tensor(v, self.resolution)
 
         cam_info = CameraInfo(
             uid=idx,
@@ -196,40 +119,41 @@ class BlenderPriorDataset:
             T=T,
             FovY=fovy,
             FovX=fovx,
-            image=image,
+            image=buffers["render"],
             image_path=image_path,
             image_name=image_name,
             width=width,
             height=height,
             #
-            diffuse_image=diffuse_image,
-            glossy_image=glossy_image,
-            position_image=position_image,
-            normal_image=normal_image,
-            roughness_image=roughness_image,
-            metalness_image=metalness_image,
-            base_color_image=base_color_image,
-            brdf_image=brdf_image,
-            specular_image=specular_image,
+            albedo_image=buffers["albedo"],
+            diffuse_image=buffers["diffuse"],
+            glossy_image=buffers["glossy"],
+            depth_image=buffers["depth"],
+            position_image=buffers["position"],
+            normal_image=buffers["normal"],
+            roughness_image=buffers["roughness"],
+            metalness_image=buffers["metalness"],
+            base_color_image=buffers["base_color"],
+            brdf_image=buffers["brdf"],
+            specular_image=buffers["specular"],
         )
         return cam_info
 
-    def _get_buffer(self, frame_name: str, buffer_name: str):
+    def _get_buffer(self, frame_name: str, buffer_name: str) -> Tensor:
         file_name = frame_name.split("/")[-1]
-        buffer_path = os.path.join(self.buffers_dir, buffer_name, file_name + ".png")
-        buffer_image = Image.open(buffer_path)
-        buffer_height = self.model_params.resolution
-        buffer_width = int(
-            buffer_height * (buffer_image.size[0] / buffer_image.size[1])
+        frame_id = file_name.split("_")[-1]
+        buffer_path = os.path.join(
+            self.buffers_dir, buffer_name, f"{buffer_name}_{frame_id}" + ".png"
         )
-        buffer_image = buffer_image.resize((buffer_width, buffer_height))
+
+        buffer_image = Image.open(buffer_path)
         buffer = from_pil_image(buffer_image)
-        if buffer_name in ["image", "irradiance", "diffuse", "glossy"]:
+        if buffer_name in ["render", "irradiance", "diffuse", "glossy"]:
             buffer = untonemap(buffer)
             buffer /= 3.5  # Align exposure
-        elif buffer_name == "albedo":
+        elif buffer_name in ["albedo", "base_color", "brdf"]:
             pass
-        elif buffer_name in ["roughness", "metalness", "depth"]:
+        elif buffer_name in ["roughness", "metalness", "specular", "depth"]:
             buffer = repeat(buffer, "h w 1 -> h w 3")
         elif buffer_name in ["normal"]:
             buffer = buffer * 2.0 - 1.0
@@ -237,3 +161,17 @@ class BlenderPriorDataset:
             raise ValueError(f"Buffer name not recognized: {buffer_name}")
         buffer = torch.tensor(buffer)
         return buffer
+
+
+def _resize_image_tensor(image, resolution):
+    height = image.shape[0]
+    width = image.shape[1]
+    aspect_ratio = width / height
+    image = rearrange(image, "h w c -> 1 c h w")
+    image = torch.nn.functional.interpolate(
+        image.float(),
+        (resolution, int(resolution * aspect_ratio)),
+        mode="area",
+    ).half()
+    image = rearrange(image, "1 c h w -> h w c")
+    return image
