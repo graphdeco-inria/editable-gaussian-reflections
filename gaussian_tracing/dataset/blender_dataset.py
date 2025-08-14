@@ -7,7 +7,6 @@ import numpy as np
 import torch
 from einops import rearrange
 
-from gaussian_tracing.arguments import ModelParams
 from gaussian_tracing.dataset.colmap_parser import ColmapParser
 from gaussian_tracing.utils.graphics_utils import BasicPointCloud, focal2fov, fov2focal
 
@@ -17,13 +16,17 @@ from .camera_info import CameraInfo
 class BlenderDataset:
     def __init__(
         self,
-        model_params: ModelParams,
         data_dir: str,
         split: str = "train",
+        resolution: int | None = None,
+        exposure: float = 1.0,
+        max_images: int | None = None,
     ):
-        self.model_params = model_params
         self.data_dir = data_dir
         self.split = split
+        self.resolution = resolution
+        self.exposure = exposure
+        self.max_images = max_images
 
         self.colmap_parser = ColmapParser(data_dir)
         self.point_cloud = BasicPointCloud(
@@ -33,7 +36,7 @@ class BlenderDataset:
         )
 
         downsampled_cache_dir = data_dir.replace(
-            "/renders/", f"/cache/{model_params.resolution}/"
+            "/renders/", f"/cache/{self.resolution}/"
         )
         if os.path.exists(downsampled_cache_dir):
             self.cache_dir = downsampled_cache_dir
@@ -43,7 +46,8 @@ class BlenderDataset:
         with open(transform_path) as json_file:
             self.contents = json.load(json_file)
         self.frames = sorted(self.contents["frames"], key=lambda x: x["file_path"])
-        self.frames = self.frames[: self.model_params.max_images]
+        if self.max_images is not None:
+            self.frames = self.frames[: self.max_images]
         assert len(self.frames) != 0, "Dataset is empty"
 
     def __len__(self) -> int:
@@ -78,13 +82,13 @@ class BlenderDataset:
             )
         else:
             image = self._get_buffer(frame_name, "render")
-            # albedo_image = self._get_buffer(frame_name, "albedo")
+            albedo_image = self._get_buffer(frame_name, "albedo")
             diffuse_image = self._get_buffer(frame_name, "diffuse")
             glossy_image = self._get_buffer(frame_name, "glossy")
             roughness_image = self._get_buffer(frame_name, "roughness")
             metalness_image = self._get_buffer(frame_name, "metalness")
             normal_image = self._get_buffer(frame_name, "normal")
-            # depth_image = self._get_buffer(frame_name, "depth")
+            depth_image = self._get_buffer(frame_name, "depth")
             position_image = self._get_buffer(frame_name, "position")
             specular_image = self._get_buffer(frame_name, "specular")
             brdf_image = self._get_buffer(frame_name, "glossy_brdf")
@@ -92,8 +96,8 @@ class BlenderDataset:
             # specular_image = torch.ones_like(image) * 0.5
             # brdf_image = torch.zeros_like(image)
             # base_color_image = albedo_image * (1.0 - metalness_image) + metalness_image
-        diffuse_image = diffuse_image * self.model_params.exposure
-        glossy_image = glossy_image * self.model_params.exposure
+        diffuse_image = diffuse_image * self.exposure
+        glossy_image = glossy_image * self.exposure
 
         # Camera intrinsics
         height, width = image.shape[0], image.shape[1]
@@ -122,9 +126,11 @@ class BlenderDataset:
             image_name=image_name,
             width=width,
             height=height,
+            albedo_image=albedo_image,
             diffuse_image=diffuse_image,
             glossy_image=glossy_image,
             position_image=position_image,
+            depth_image=depth_image,
             normal_image=normal_image,
             roughness_image=roughness_image,
             metalness_image=metalness_image,
@@ -140,19 +146,20 @@ class BlenderDataset:
         assert os.path.exists(buffer_path), f"{buffer_name} not found at {buffer_path}"
         image = cv2.imread(buffer_path, cv2.IMREAD_UNCHANGED)
         image = torch.tensor(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
-        image = self._resize_image_tensor(image)
+        if self.resolution is not None:
+            image = _resize_image_tensor(image, self.resolution)
         return image
 
-    def _resize_image_tensor(self, image):
-        height = image.shape[0]
-        width = image.shape[1]
-        aspect_ratio = width / height
-        resolution = self.model_params.resolution
-        image = rearrange(image, "h w c -> 1 c h w")
-        image = torch.nn.functional.interpolate(
-            image.float(),
-            (resolution, int(resolution * aspect_ratio)),
-            mode="area",
-        ).half()
-        image = rearrange(image, "1 c h w -> h w c")
-        return image
+
+def _resize_image_tensor(image, resolution):
+    height = image.shape[0]
+    width = image.shape[1]
+    aspect_ratio = width / height
+    image = rearrange(image, "h w c -> 1 c h w")
+    image = torch.nn.functional.interpolate(
+        image.float(),
+        (resolution, int(resolution * aspect_ratio)),
+        mode="area",
+    ).half()
+    image = rearrange(image, "1 c h w -> h w c")
+    return image
