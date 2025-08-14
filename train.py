@@ -10,18 +10,19 @@
 #
 import os
 import random
-import sys
 import time
-from argparse import ArgumentParser, Namespace
 from datetime import datetime
 from random import randint
 from threading import Thread
 
 import torch
+import tyro
 from torchvision.utils import save_image
 from tqdm import tqdm
 
-from gaussian_tracing.arguments import ModelParams, OptimizationParams, PipelineParams
+from gaussian_tracing.arguments import (
+    TyroConfig,
+)
 from gaussian_tracing.renderer import GaussianRaytracer, render
 from gaussian_tracing.scene import GaussianModel, Scene
 from gaussian_tracing.utils.general_utils import (
@@ -40,33 +41,36 @@ except ImportError:
     TENSORBOARD_FOUND = False
 
 
-def prepare_output_and_logger(args: ModelParams, opt_params):
-    if not args.model_path:
-        args.model_path = os.path.join(
+def prepare_output_and_logger(cfg: TyroConfig):
+    if not cfg.model_path:
+        cfg.model_path = os.path.join(
             "./output/", datetime.now().isoformat(timespec="seconds")
         )
 
     # Set up output folder
-    print("Output folder: {}".format(args.model_path))
-    os.makedirs(args.model_path, exist_ok=True)
-    with open(os.path.join(args.model_path, "model_params"), "w") as cfg_log_f:
-        cfg_log_f.write(str(Namespace(**vars(args))))
-
-    with open(os.path.join(args.model_path, "opt_params"), "w") as cfg_log_f:
-        cfg_log_f.write(str(Namespace(**vars(opt_params))))
+    print("Output folder: {}".format(cfg.model_path))
+    os.makedirs(cfg.model_path, exist_ok=True)
 
     # Create Tensorboard writer
     tb_writer = None
     if TENSORBOARD_FOUND:
-        tb_writer = SummaryWriter(args.model_path)
+        tb_writer = SummaryWriter(cfg.model_path)
     else:
         print("Tensorboard not available: not logging progress")
     return tb_writer
 
 
 @torch.no_grad()
-def training_report(tb_writer, iteration):
-    if iteration in args.test_iterations:
+def training_report(
+    cfg: TyroConfig,
+    scene,
+    raytracer,
+    pipe_params,
+    bg,
+    tb_writer,
+    iteration,
+):
+    if iteration in cfg.test_iterations:
         torch.cuda.empty_cache()
         validation_configs = (
             {"name": "test", "cameras": scene.getTestCameras()},
@@ -76,7 +80,7 @@ def training_report(tb_writer, iteration):
                     sorted(scene.getTrainCameras(), key=lambda x: x.image_name)[
                         idx % len(scene.getTrainCameras())
                     ]
-                    for idx in args.val_views
+                    for idx in cfg.val_views
                 ],
             },
         )
@@ -135,7 +139,7 @@ def training_report(tb_writer, iteration):
                         glossy_gt_image = tonemap(viewpoint.glossy_image).clamp(0, 1)
                         gt_image = tonemap(viewpoint.original_image).clamp(0, 1)
 
-                    if tb_writer and (idx < len(args.val_views)):
+                    if tb_writer and (idx < len(cfg.val_views)):
                         error_diffuse = diffuse_image - diffuse_gt_image
                         error_glossy = glossy_image - glossy_gt_image
                         error_final = pred_image - gt_image
@@ -208,7 +212,7 @@ def training_report(tb_writer, iteration):
                     l1_test += l1_loss(pred_image, gt_image).mean().double()
                     psnr_test += psnr(pred_image, gt_image).mean().double()
 
-                    if tb_writer and (idx < len(args.val_views)):
+                    if tb_writer and (idx < len(cfg.val_views)):
                         if package.rgb.shape[0] > 2:
                             save_image(
                                 package.rgb[:-1].clamp(0, 1),
@@ -385,348 +389,325 @@ def training_report(tb_writer, iteration):
         torch.cuda.empty_cache()
 
 
-# Set up command line argument parser
-parser = ArgumentParser(description="Training script parameters")
-lp = ModelParams(parser)
-op = OptimizationParams(parser)
-pp = PipelineParams(parser)
-parser.add_argument("--ip", type=str, default="127.0.0.1")
-parser.add_argument("--port", type=int, default=8000)
-parser.add_argument("--viewer", action="store_true")
-parser.add_argument("--viewer_mode", type=str, default="local")
-parser.add_argument("--detect_anomaly", action="store_true", default=False)
-parser.add_argument("--flip_camera", action="store_true", default=False)
-parser.add_argument(
-    "--val_views", nargs="+", type=int, default=[75, 175]
-)  # 135 for teaser book scene
-parser.add_argument(
-    "--test_iterations",
-    nargs="+",
-    type=int,
-    default=[4, 6_000, 12_000, 18_000, 24_000, 32_000],
-)
-parser.add_argument(
-    "--save_iterations",
-    nargs="+",
-    type=int,
-    default=[4, 6_000, 12_000, 16_000, 24_000, 32_000],
-)
-parser.add_argument("--quiet", action="store_true")
-parser.add_argument("--checkpoint_iterations", nargs="+", type=int, default=[])
-parser.add_argument("--start_checkpoint", type=str, default=None)
-args = parser.parse_args(sys.argv[1:])
-args.save_iterations.append(args.iterations)
+def main(cfg: TyroConfig):
+    model_params = cfg.model_params
+    opt_params = cfg.opt_params
+    pipe_params = cfg.pipe_params
 
-if "_with_book" in args.source_path:
-    args.max_images = 199  ##! crashes if last image is included
+    # Initialize system state (RNG)
+    safe_state(cfg.quiet)
+    torch.autograd.set_detect_anomaly(cfg.detect_anomaly)
 
-torch.autograd.set_detect_anomaly(args.detect_anomaly)
-model_params = lp.extract(args)
-opt_params = op.extract(args)
-pipe_params = pp.extract(args)
+    tb_writer = prepare_output_and_logger(cfg)
+    gaussians = GaussianModel(cfg)
+    scene = Scene(cfg, gaussians)
+    gaussians.training_setup(opt_params)
 
-if args.viewer:
-    args.test_iterations.clear()
+    first_iter = 0
+    if cfg.start_checkpoint:
+        (capture_data, first_iter) = torch.load(
+            cfg.start_checkpoint, weights_only=False
+        )  #!!! Cant release like this, security risk
+        gaussians.restore(capture_data, opt_params)
+    first_iter += 1
 
-if opt_params.timestretch != 1:
-    model_params.no_bounces_until_iter = int(
-        model_params.no_bounces_until_iter * opt_params.timestretch
-    )
-    model_params.max_one_bounce_until_iter = int(
-        model_params.max_one_bounce_until_iter * opt_params.timestretch
-    )
-    model_params.rebalance_losses_at_iter = int(
-        model_params.rebalance_losses_at_iter * opt_params.timestretch
-    )
-    args.test_iterations = [
-        int(x * opt_params.timestretch) for x in args.test_iterations
-    ]
-    args.save_iterations = [
-        int(x * opt_params.timestretch) for x in args.save_iterations
-    ]
-    opt_params.iterations = int(opt_params.timestretch * opt_params.iterations)
-    opt_params.densification_interval = int(
-        opt_params.timestretch * opt_params.densification_interval
-    )
-    opt_params.densify_from_iter = int(
-        opt_params.timestretch * opt_params.densify_from_iter
-    )
-    opt_params.densify_until_iter = int(
-        opt_params.timestretch * opt_params.densify_until_iter
+    bg_color = [1, 1, 1] if model_params.white_background else [0, 0, 0]
+    background = torch.tensor(bg_color, dtype=torch.float32, device="cuda")
+
+    iter_start = torch.cuda.Event(enable_timing=True)
+    iter_end = torch.cuda.Event(enable_timing=True)
+
+    viewpoint_stack = scene.getTrainCameras().copy()
+    raytracer = GaussianRaytracer(
+        gaussians, viewpoint_stack[0].image_width, viewpoint_stack[0].image_height
     )
 
-print("Optimizing " + args.model_path)
+    if "KEYVIEW" in os.environ:
+        keyview = [
+            x
+            for x in scene.getTrainCameras()
+            if x.colmap_id == int(os.environ["KEYVIEW"])
+        ][0]
 
-# Initialize system state (RNG)
-safe_state(args.quiet)
+    if cfg.viewer:
+        from gaussianviewer import GaussianViewer
 
-tb_writer = prepare_output_and_logger(model_params, opt_params)
+        from viewer.types import ViewerMode
 
-gaussians = GaussianModel(model_params)
-
-scene = Scene(model_params, gaussians)
-
-gaussians.training_setup(opt_params)
-
-
-first_iter = 0
-if args.start_checkpoint:
-    (capture_data, first_iter) = torch.load(
-        args.start_checkpoint, weights_only=False
-    )  #!!! Cant release like this, security risk
-    gaussians.restore(capture_data, opt_params)
-first_iter += 1
-
-bg_color = [1, 1, 1] if model_params.white_background else [0, 0, 0]
-background = torch.tensor(bg_color, dtype=torch.float32, device="cuda")
-
-iter_start = torch.cuda.Event(enable_timing=True)
-iter_end = torch.cuda.Event(enable_timing=True)
-
-viewpoint_stack = scene.getTrainCameras().copy()
-raytracer = GaussianRaytracer(
-    gaussians, viewpoint_stack[0].image_width, viewpoint_stack[0].image_height
-)
-
-if "KEYVIEW" in os.environ:
-    keyview = [
-        x for x in scene.getTrainCameras() if x.colmap_id == int(os.environ["KEYVIEW"])
-    ][0]
-
-if args.viewer:
-    from gaussianviewer import GaussianViewer
-
-    from viewer.types import ViewerMode
-
-    mode = ViewerMode.LOCAL if args.viewer_mode == "local" else ViewerMode.SERVER
-    SPARSE_ADAM_AVAILABLE = False
-    viewer = GaussianViewer.from_gaussians(
-        raytracer, model_params, opt_params, gaussians, SPARSE_ADAM_AVAILABLE, mode
-    )
-    viewer.accumulate_samples = False
-    if args.viewer_mode != "none":
-        viewer_thd = Thread(target=viewer.run, daemon=True)
-        viewer_thd.start()
-
-ema_loss_for_log = 0.0
-start = time.time()
-
-if model_params.no_bounces_until_iter > 0:
-    raytracer.cuda_module.num_bounces.copy_(0)
-elif model_params.max_one_bounce_until_iter > 0:
-    raytracer.cuda_module.num_bounces.copy_(min(raytracer.config.MAX_BOUNCES, 1))
-
-if model_params.warmup_until_iter > 0:
-    os.environ["DIFFUSE_LOSS_WEIGHT"] = str(model_params.warmup_diffuse_loss_weight)
-    raytracer.cuda_module.set_losses(True)
-
-for iteration in tqdm(
-    range(first_iter, opt_params.iterations + 1),
-    desc="Training progress",
-    total=opt_params.iterations,
-    initial=first_iter,
-):
-    iter_start.record()
-
-    if args.viewer:
-        viewer.gaussian_lock.acquire()
-
-    xyz_lr = gaussians.update_learning_rate(iteration)
-    if not viewpoint_stack:
-        viewpoint_stack = scene.getTrainCameras().copy()
-    viewpoint_cam = viewpoint_stack.pop(randint(0, len(viewpoint_stack) - 1))
-
-    if "KEYVIEW" in os.environ and random.random() < 0.5:
-        viewpoint_cam = keyview
-
-    bg = torch.rand((3), device="cuda") if opt_params.random_background else background
-
-    torch.cuda.synchronize()  # todo may be needed or not, idk, occasional crash. double check after deadline
-    package = render(viewpoint_cam, raytracer, pipe_params, bg)
-
-    if opt_params.opacity_reg > 0:
-        gaussians._opacity.grad += torch.autograd.grad(
-            args.opacity_reg * torch.abs(gaussians.get_opacity).mean(),
-            gaussians._opacity,
-        )[0]
-    if opt_params.scale_reg > 0:
-        gaussians._scaling.grad += torch.autograd.grad(
-            args.scale_reg * torch.abs(gaussians.get_scaling).mean(), gaussians._scaling
-        )[0]
-
-    with torch.no_grad():
-        if opt_params.opacity_decay < 1.0:
-            gaussians._opacity.copy_(
-                inverse_sigmoid(gaussians.get_opacity * opt_params.opacity_decay)
-            )
-        if opt_params.scale_decay < 1.0:
-            gaussians._scaling.copy_(
-                torch.log(gaussians.get_scaling * opt_params.scale_decay)
-            )
-        if opt_params.lod_mean_decay < 1.0:
-            gaussians._lod_mean.copy_(
-                torch.log(gaussians.get_lod_mean * opt_params.lod_mean_decay)
-            )
-        if opt_params.lod_scale_decay < 1.0:
-            gaussians._lod_scale.copy_(
-                torch.log(gaussians.get_lod_scale * opt_params.lod_scale_decay)
-            )
-
-    # todo clamp the min opacities so they don't go under ALPHA_THRESHOLD
-    iter_end.record()
-
-    with torch.no_grad():
-        # Log and save
-        NOW = time.time()
-
-        training_report(tb_writer, iteration)
-        torch.cuda.synchronize()  # not sure if needed
-
-        if iteration % 1000 == 0 or iteration == 1:
-            os.makedirs(os.path.join(args.model_path, "plots"), exist_ok=True)
-
-            # Save the elapsed time
-            delta = time.time() - start
-            with open(os.path.join(args.model_path, "time.txt"), "a") as f:
-                minutes, seconds = divmod(int(delta), 60)
-                timestamp = f"{minutes:02}:{seconds:02}"
-                print("Elapsed time: ", timestamp)
-                f.write(
-                    "\n[ITER {}] elapsed {}".format(
-                        iteration, time.strftime("%H:%M:%S", time.gmtime(NOW - start))
-                    )
-                )
-
-            # Save the average and std opacity
-            with open(os.path.join(args.model_path, "opacity.txt"), "a") as f:
-                f.write(
-                    f"{iteration:5}: {gaussians.get_opacity.mean().item():.3f} +- {gaussians.get_opacity.std().item():.3f}\n"
-                )
-
-            # Save the average and std size
-            with open(os.path.join(args.model_path, "size.txt"), "a") as f:
-                f.write(
-                    f"{iteration:5}: {gaussians.get_scaling.mean().item():.3f} +- {gaussians.get_scaling.std().item():.3f}\n"
-                )
-
-            # Save the average and std size of the largest axis per gaussian
-            with open(os.path.join(args.model_path, "size_axis_max.txt"), "a") as f:
-                f.write(
-                    f"{iteration:5}: {gaussians.get_scaling.amax(dim=1).mean().item():.5f} +- {gaussians.get_scaling.amax(dim=1).std().item():.5f}\n"
-                )
-
-            # same but for the median axis
-            with open(os.path.join(args.model_path, "size_axis_median.txt"), "a") as f:
-                f.write(
-                    f"{iteration:5}: {gaussians.get_scaling.median(dim=1).values.mean().item():.5f} +- {gaussians.get_scaling.median(dim=1).values.std().item():.5f}\n"
-                )
-
-            # Same but for the smallest axis
-            with open(os.path.join(args.model_path, "size_axis_min.txt"), "a") as f:
-                f.write(
-                    f"{iteration:5}: {gaussians.get_scaling.amin(dim=1).mean().item():.5f} +- {gaussians.get_scaling.amin(dim=1).std().item():.5f}\n"
-                )
-
-            # From raytracer.num_hits, print the mean, max, and std
-            num_hits = raytracer.cuda_module.num_hits_per_pixel.float()
-            with open(os.path.join(args.model_path, "num_hits.txt"), "a") as f:
-                f.write(
-                    f"{iteration:5}: {num_hits.mean().item():.3f} +- {num_hits.std().item():.3f}\n"
-                )
-
-            num_traversed = raytracer.cuda_module.num_traversed_per_pixel.float()
-            with open(os.path.join(args.model_path, "num_traversed.txt"), "a") as f:
-                f.write(
-                    f"{iteration:5}: {num_traversed.mean().item():.3f} +- {num_traversed.std().item():.3f}\n"
-                )
-
-            with open(os.path.join(args.model_path, "num_gaussians.txt"), "a") as f:
-                f.write(
-                    "\n[ITER {}] # {}".format(
-                        iteration, scene.gaussians.get_xyz.shape[0]
-                    )
-                )
-                print("Number of gaussians: ", gaussians.get_xyz.shape[0])
-
-        if iteration in args.save_iterations:
-            print("\n[ITER {}] Saving Gaussians".format(iteration))
-            scene.save(iteration)
-
-        if iteration % opt_params.densification_interval == 0:
-            if (
-                iteration > model_params.no_bounces_until_iter + 500
-                and model_params.min_weight > 0
-            ):
-                gaussians.prune_points(
-                    (
-                        raytracer.cuda_module.gaussian_total_weight
-                        / opt_params.densification_interval
-                        < model_params.min_weight
-                    ).squeeze(1)
-                )
-            if model_params.znear_densif_pruning:
-                gaussians.prune_znear_only(scene)
-            raytracer.cuda_module.gaussian_total_weight.zero_()
-            assert "DENSIFY" not in os.environ
-
-            torch.cuda.synchronize()
-            raytracer.rebuild_bvh()
-
-        gaussians.optimizer.step()
-        gaussians.optimizer.zero_grad(set_to_none=False)
-        raytracer.zero_grad()
-
-        with torch.no_grad():
-            gaussians._diffuse.data.clamp_(min=0.0)
-            gaussians._roughness.data.clamp_(min=0.0, max=1.0)
-            gaussians._f0.data.clamp_(min=0.0, max=1.0)
-
-        if iteration in args.checkpoint_iterations:
-            print("\n[ITER {}] Saving Checkpoint".format(iteration))
-            torch.save(
-                (gaussians.capture(), iteration),
-                scene.model_path + "/chkpnt" + str(iteration) + ".pth",
-            )
-
-    if iteration == model_params.no_bounces_until_iter:
-        if model_params.max_one_bounce_until_iter in [0, -1]:
-            raytracer.cuda_module.num_bounces.copy_(raytracer.config.MAX_BOUNCES)
-        else:
-            raytracer.cuda_module.num_bounces.copy_(
-                min(raytracer.config.MAX_BOUNCES, 1)
-            )
-
-        if "SKIP_INIT_FARFIELD" not in os.environ:
-            torch.cuda.synchronize()
-            gaussians.add_farfield_points(scene)
-        raytracer.rebuild_bvh()
-        torch.cuda.synchronize()
-
-    if iteration == 1 and (
-        model_params.no_bounces_until_iter in [-1, 0]
-        or model_params.no_bounces_until_iter > 900_000
-    ):
-        gaussians.add_farfield_points(scene)
-        raytracer.rebuild_bvh()
-        torch.cuda.synchronize()
-
-    if (
-        iteration == model_params.max_one_bounce_until_iter
-        and iteration > model_params.no_bounces_until_iter
-    ):
-        raytracer.cuda_module.num_bounces.copy_(raytracer.config.MAX_BOUNCES)
-
-    if iteration == model_params.rebalance_losses_at_iter:
-        os.environ["GLOSSY_LOSS_WEIGHT"] = str(
-            model_params.glossy_loss_weight_after_rebalance
+        mode = ViewerMode.LOCAL if cfg.viewer_mode == "local" else ViewerMode.SERVER
+        SPARSE_ADAM_AVAILABLE = False
+        viewer = GaussianViewer.from_gaussians(
+            raytracer, model_params, opt_params, gaussians, SPARSE_ADAM_AVAILABLE, mode
         )
-        os.environ["DIFFUSE_LOSS_WEIGHT"] = str(
-            model_params.diffuse_loss_weight_after_rebalance
-        )
+        viewer.accumulate_samples = False
+        if cfg.viewer_mode != "none":
+            viewer_thd = Thread(target=viewer.run, daemon=True)
+            viewer_thd.start()
+
+    start = time.time()
+
+    if model_params.no_bounces_until_iter > 0:
+        raytracer.cuda_module.num_bounces.copy_(0)
+    elif model_params.max_one_bounce_until_iter > 0:
+        raytracer.cuda_module.num_bounces.copy_(min(raytracer.config.MAX_BOUNCES, 1))
+
+    if model_params.warmup_until_iter > 0:
+        os.environ["DIFFUSE_LOSS_WEIGHT"] = str(model_params.warmup_diffuse_loss_weight)
         raytracer.cuda_module.set_losses(True)
 
-    if args.viewer:
-        viewer.gaussian_lock.release()
+    for iteration in tqdm(
+        range(first_iter, cfg.iterations + 1),
+        desc="Training progress",
+        total=cfg.iterations,
+        initial=first_iter,
+    ):
+        iter_start.record()
 
-# All done
-print("\nTraining complete.")
+        if cfg.viewer:
+            viewer.gaussian_lock.acquire()
+
+        _ = gaussians.update_learning_rate(iteration)
+        if not viewpoint_stack:
+            viewpoint_stack = scene.getTrainCameras().copy()
+        viewpoint_cam = viewpoint_stack.pop(randint(0, len(viewpoint_stack) - 1))
+
+        if "KEYVIEW" in os.environ and random.random() < 0.5:
+            viewpoint_cam = keyview
+
+        bg = (
+            torch.rand((3), device="cuda")
+            if opt_params.random_background
+            else background
+        )
+
+        torch.cuda.synchronize()  # todo may be needed or not, idk, occasional crash. double check after deadline
+        _ = render(viewpoint_cam, raytracer, pipe_params, bg)
+
+        if opt_params.opacity_reg > 0:
+            gaussians._opacity.grad += torch.autograd.grad(
+                cfg.opacity_reg * torch.abs(gaussians.get_opacity).mean(),
+                gaussians._opacity,
+            )[0]
+        if opt_params.scale_reg > 0:
+            gaussians._scaling.grad += torch.autograd.grad(
+                cfg.scale_reg * torch.abs(gaussians.get_scaling).mean(),
+                gaussians._scaling,
+            )[0]
+
+        with torch.no_grad():
+            if opt_params.opacity_decay < 1.0:
+                gaussians._opacity.copy_(
+                    inverse_sigmoid(gaussians.get_opacity * opt_params.opacity_decay)
+                )
+            if opt_params.scale_decay < 1.0:
+                gaussians._scaling.copy_(
+                    torch.log(gaussians.get_scaling * opt_params.scale_decay)
+                )
+            if opt_params.lod_mean_decay < 1.0:
+                gaussians._lod_mean.copy_(
+                    torch.log(gaussians.get_lod_mean * opt_params.lod_mean_decay)
+                )
+            if opt_params.lod_scale_decay < 1.0:
+                gaussians._lod_scale.copy_(
+                    torch.log(gaussians.get_lod_scale * opt_params.lod_scale_decay)
+                )
+
+        # todo clamp the min opacities so they don't go under ALPHA_THRESHOLD
+        iter_end.record()
+
+        with torch.no_grad():
+            # Log and save
+            NOW = time.time()
+
+            training_report(
+                cfg, scene, raytracer, pipe_params, bg, tb_writer, iteration
+            )
+            torch.cuda.synchronize()  # not sure if needed
+
+            if iteration % 1000 == 0 or iteration == 1:
+                os.makedirs(os.path.join(cfg.model_path, "plots"), exist_ok=True)
+
+                # Save the elapsed time
+                delta = time.time() - start
+                with open(os.path.join(cfg.model_path, "time.txt"), "a") as f:
+                    minutes, seconds = divmod(int(delta), 60)
+                    timestamp = f"{minutes:02}:{seconds:02}"
+                    print("Elapsed time: ", timestamp)
+                    f.write(
+                        "\n[ITER {}] elapsed {}".format(
+                            iteration,
+                            time.strftime("%H:%M:%S", time.gmtime(NOW - start)),
+                        )
+                    )
+
+                # Save the average and std opacity
+                with open(os.path.join(cfg.model_path, "opacity.txt"), "a") as f:
+                    f.write(
+                        f"{iteration:5}: {gaussians.get_opacity.mean().item():.3f} +- {gaussians.get_opacity.std().item():.3f}\n"
+                    )
+
+                # Save the average and std size
+                with open(os.path.join(cfg.model_path, "size.txt"), "a") as f:
+                    f.write(
+                        f"{iteration:5}: {gaussians.get_scaling.mean().item():.3f} +- {gaussians.get_scaling.std().item():.3f}\n"
+                    )
+
+                # Save the average and std size of the largest axis per gaussian
+                with open(os.path.join(cfg.model_path, "size_axis_max.txt"), "a") as f:
+                    f.write(
+                        f"{iteration:5}: {gaussians.get_scaling.amax(dim=1).mean().item():.5f} +- {gaussians.get_scaling.amax(dim=1).std().item():.5f}\n"
+                    )
+
+                # same but for the median axis
+                with open(
+                    os.path.join(cfg.model_path, "size_axis_median.txt"), "a"
+                ) as f:
+                    f.write(
+                        f"{iteration:5}: {gaussians.get_scaling.median(dim=1).values.mean().item():.5f} +- {gaussians.get_scaling.median(dim=1).values.std().item():.5f}\n"
+                    )
+
+                # Same but for the smallest axis
+                with open(os.path.join(cfg.model_path, "size_axis_min.txt"), "a") as f:
+                    f.write(
+                        f"{iteration:5}: {gaussians.get_scaling.amin(dim=1).mean().item():.5f} +- {gaussians.get_scaling.amin(dim=1).std().item():.5f}\n"
+                    )
+
+                # From raytracer.num_hits, print the mean, max, and std
+                num_hits = raytracer.cuda_module.num_hits_per_pixel.float()
+                with open(os.path.join(cfg.model_path, "num_hits.txt"), "a") as f:
+                    f.write(
+                        f"{iteration:5}: {num_hits.mean().item():.3f} +- {num_hits.std().item():.3f}\n"
+                    )
+
+                num_traversed = raytracer.cuda_module.num_traversed_per_pixel.float()
+                with open(os.path.join(cfg.model_path, "num_traversed.txt"), "a") as f:
+                    f.write(
+                        f"{iteration:5}: {num_traversed.mean().item():.3f} +- {num_traversed.std().item():.3f}\n"
+                    )
+
+                with open(os.path.join(cfg.model_path, "num_gaussians.txt"), "a") as f:
+                    f.write(
+                        "\n[ITER {}] # {}".format(
+                            iteration, scene.gaussians.get_xyz.shape[0]
+                        )
+                    )
+                    print("Number of gaussians: ", gaussians.get_xyz.shape[0])
+
+            if iteration in cfg.save_iterations:
+                print("\n[ITER {}] Saving Gaussians".format(iteration))
+                scene.save(iteration)
+
+            if iteration % opt_params.densification_interval == 0:
+                if (
+                    iteration > model_params.no_bounces_until_iter + 500
+                    and model_params.min_weight > 0
+                ):
+                    gaussians.prune_points(
+                        (
+                            raytracer.cuda_module.gaussian_total_weight
+                            / opt_params.densification_interval
+                            < model_params.min_weight
+                        ).squeeze(1)
+                    )
+                if model_params.znear_densif_pruning:
+                    gaussians.prune_znear_only(scene)
+                raytracer.cuda_module.gaussian_total_weight.zero_()
+                assert "DENSIFY" not in os.environ
+
+                torch.cuda.synchronize()
+                raytracer.rebuild_bvh()
+
+            gaussians.optimizer.step()
+            gaussians.optimizer.zero_grad(set_to_none=False)
+            raytracer.zero_grad()
+
+            with torch.no_grad():
+                gaussians._diffuse.data.clamp_(min=0.0)
+                gaussians._roughness.data.clamp_(min=0.0, max=1.0)
+                gaussians._f0.data.clamp_(min=0.0, max=1.0)
+
+            if iteration in cfg.checkpoint_iterations:
+                print("\n[ITER {}] Saving Checkpoint".format(iteration))
+                torch.save(
+                    (gaussians.capture(), iteration),
+                    scene.model_path + "/chkpnt" + str(iteration) + ".pth",
+                )
+
+        if iteration == model_params.no_bounces_until_iter:
+            if model_params.max_one_bounce_until_iter in [0, -1]:
+                raytracer.cuda_module.num_bounces.copy_(raytracer.config.MAX_BOUNCES)
+            else:
+                raytracer.cuda_module.num_bounces.copy_(
+                    min(raytracer.config.MAX_BOUNCES, 1)
+                )
+
+            if "SKIP_INIT_FARFIELD" not in os.environ:
+                torch.cuda.synchronize()
+                gaussians.add_farfield_points(scene)
+            raytracer.rebuild_bvh()
+            torch.cuda.synchronize()
+
+        if iteration == 1 and (
+            model_params.no_bounces_until_iter in [-1, 0]
+            or model_params.no_bounces_until_iter > 900_000
+        ):
+            gaussians.add_farfield_points(scene)
+            raytracer.rebuild_bvh()
+            torch.cuda.synchronize()
+
+        if (
+            iteration == model_params.max_one_bounce_until_iter
+            and iteration > model_params.no_bounces_until_iter
+        ):
+            raytracer.cuda_module.num_bounces.copy_(raytracer.config.MAX_BOUNCES)
+
+        if iteration == model_params.rebalance_losses_at_iter:
+            os.environ["GLOSSY_LOSS_WEIGHT"] = str(
+                model_params.glossy_loss_weight_after_rebalance
+            )
+            os.environ["DIFFUSE_LOSS_WEIGHT"] = str(
+                model_params.diffuse_loss_weight_after_rebalance
+            )
+            raytracer.cuda_module.set_losses(True)
+
+        if cfg.viewer:
+            viewer.gaussian_lock.release()
+
+    # All done
+    print("\nTraining complete.")
+
+
+if __name__ == "__main__":
+    cfg = tyro.cli(TyroConfig)
+
+    # TODO: Remove this custom config modification.
+    if cfg.viewer:
+        cfg.test_iterations = []
+    if cfg.opt_params.timestretch != 1:
+        cfg.model_params.no_bounces_until_iter = int(
+            cfg.model_params.no_bounces_until_iter * cfg.opt_params.timestretch
+        )
+        cfg.model_params.max_one_bounce_until_iter = int(
+            cfg.model_params.max_one_bounce_until_iter * cfg.opt_params.timestretch
+        )
+        cfg.model_params.rebalance_losses_at_iter = int(
+            cfg.model_params.rebalance_losses_at_iter * cfg.opt_params.timestretch
+        )
+        cfg.test_iterations = [
+            int(x * cfg.opt_params.timestretch) for x in cfg.test_iterations
+        ]
+        cfg.save_iterations = [
+            int(x * cfg.opt_params.timestretch) for x in cfg.save_iterations
+        ]
+        cfg.iterations = int(cfg.opt_params.timestretch * cfg.iterations)
+        cfg.opt_params.densification_interval = int(
+            cfg.opt_params.timestretch * cfg.opt_params.densification_interval
+        )
+        cfg.opt_params.densify_from_iter = int(
+            cfg.opt_params.timestretch * cfg.opt_params.densify_from_iter
+        )
+        cfg.opt_params.densify_until_iter = int(
+            cfg.opt_params.timestretch * cfg.opt_params.densify_until_iter
+        )
+
+    main(cfg)

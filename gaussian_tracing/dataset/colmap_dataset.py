@@ -5,7 +5,6 @@ import torch
 from einops import repeat
 from PIL import Image
 
-from gaussian_tracing.arguments import ModelParams
 from gaussian_tracing.dataset.colmap_parser import ColmapParser
 from gaussian_tracing.utils.depth_utils import (
     project_pointcloud_to_depth_map,
@@ -31,13 +30,17 @@ from .image_utils import from_pil_image
 class ColmapDataset:
     def __init__(
         self,
-        model_params: ModelParams,
         data_dir: str,
         split: str = "train",
+        resolution: int | None = None,
+        max_images: int | None = None,
+        do_eval: bool = True,
     ):
-        self.model_params = model_params
         self.data_dir = data_dir
         self.split = split
+        self.resolution = resolution
+        self.max_images = max_images
+        self.do_eval = do_eval
 
         self.colmap_parser = ColmapParser(data_dir)
         self.point_cloud = BasicPointCloud(
@@ -59,10 +62,8 @@ class ColmapDataset:
             self.cam_extrinsics = read_extrinsics_text(cameras_extrinsic_file)
             self.cam_intrinsics = read_intrinsics_text(cameras_intrinsic_file)
 
-        keys = list(sorted(list(self.cam_extrinsics.keys())))[
-            : self.model_params.max_images
-        ]
-        if model_params.eval:
+        keys = list(sorted(list(self.cam_extrinsics.keys())))[: self.max_images]
+        if self.do_eval:
             if split == "train":
                 self.keys = [
                     key for i, key in enumerate(keys) if i % self.llffhold != 0
@@ -207,7 +208,7 @@ class ColmapDataset:
         buffer_path = os.path.join(self.buffers_dir, buffer_name, file_name + ".png")
 
         buffer_image = Image.open(buffer_path)
-        buffer_height = self.model_params.resolution
+        buffer_height = self.resolution
         buffer_width = int(
             buffer_height * (buffer_image.size[0] / buffer_image.size[1])
         )

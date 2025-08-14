@@ -1,4 +1,3 @@
-import argparse
 import os
 from dataclasses import asdict
 
@@ -7,7 +6,7 @@ import torch
 from PIL import Image
 from tqdm import tqdm
 
-from gaussian_tracing.arguments import ModelParams
+from gaussian_tracing.arguments import TyroConfig
 from gaussian_tracing.dataset import BlenderDataset, BlenderPriorDataset
 
 
@@ -23,6 +22,7 @@ def vis_tensors(images, image_path):
 
 
 def test_blender_prior_dataset():
+    cfg = TyroConfig()
     scene_list = ["shiny_kitchen", "shiny_livingroom", "shiny_office", "shiny_bedroom"]
     output_dir = "./output/tests"
     os.makedirs(output_dir, exist_ok=True)
@@ -35,13 +35,20 @@ def test_blender_prior_dataset():
     }
 
     for scene_name in tqdm(scene_list):
-        model_params = ModelParams(parser=argparse.ArgumentParser())
-        model_params.resolution = 512
-
         data_dir = f"data/renders/{scene_name}"
-        dataset0 = BlenderDataset(model_params, data_dir)
-        data_dir = f"data/real_datasets_v3_filmic/renders_priors/{scene_name}"
-        dataset1 = BlenderPriorDataset(model_params, data_dir)
+        dataset0 = BlenderDataset(
+            data_dir,
+            split="train",
+            resolution=cfg.resolution,
+            max_images=cfg.max_images,
+        )
+        data_dir = f"data/renders_compressed/{scene_name}"
+        dataset1 = BlenderPriorDataset(
+            data_dir,
+            split="train",
+            resolution=cfg.resolution,
+            max_images=cfg.max_images,
+        )
         cam_info0 = dataset0[0]
         cam_info1 = dataset1[0]
 

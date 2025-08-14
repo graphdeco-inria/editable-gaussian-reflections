@@ -48,24 +48,24 @@ OUTPUT_DIR="output/benchmark_neural_catacaustics_priors"
 for SCENE in $SCENE_LIST;
 do
     python train.py \
-        -s $SCENE_DIR/$SCENE \
-        -m $OUTPUT_DIR/$SCENE \
-        -r $RESOLUTION \
+        --source_path $SCENE_DIR/$SCENE \
+        --model_path $OUTPUT_DIR/$SCENE \
+        --resolution $RESOLUTION \
         --init_scale_factor 0.1 \
         --no_znear_densif_pruning \
         --position_loss_weight 0.0 \
         --eval
 
     python render.py \
-        -s $SCENE_DIR/$SCENE \
-        -m $OUTPUT_DIR/$SCENE \
-        -r $RESOLUTION \
+        --source_path $SCENE_DIR/$SCENE \
+        --model_path $OUTPUT_DIR/$SCENE \
+        --resolution $RESOLUTION \
         --eval
 
     ZNEAR=0.5 python render_novel_views.py \
-        -s $SCENE_DIR/$SCENE \
-        -m $OUTPUT_DIR/$SCENE \
-        -r $RESOLUTION \
+        --source_path $SCENE_DIR/$SCENE \
+        --model_path $OUTPUT_DIR/$SCENE \
+        --resolution $RESOLUTION \
         --eval
 
     # Saving videos

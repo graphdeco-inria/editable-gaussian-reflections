@@ -11,19 +11,19 @@ OUTPUT_DIR="output/dryrun"
 
 for SCENE in $SCENE_LIST;
 do
-    python examples/train.py \
-        -s $SCENE_DIR/$SCENE \
-        -m $OUTPUT_DIR/$SCENE \
-        -r $RESOLUTION \
+    python train.py \
+        --source_path $SCENE_DIR/$SCENE \
+        --model_path $OUTPUT_DIR/$SCENE \
+        --resolution $RESOLUTION \
         --eval \
         --max_images 2 \
         --save_iterations 50 \
         --test_iterations 50 \
         --iterations 100
 
-    python examples/render.py \
-        -s $SCENE_DIR/$SCENE \
-        -m $OUTPUT_DIR/$SCENE \
-        -r $RESOLUTION \
+    python render.py \
+        --source_path $SCENE_DIR/$SCENE \
+        --model_path $OUTPUT_DIR/$SCENE \
+        --resolution $RESOLUTION \
         --max_images 2
 done

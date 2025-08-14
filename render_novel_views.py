@@ -10,20 +10,17 @@
 #
 
 import os
-from argparse import ArgumentParser
 from copy import deepcopy
 
 import numpy as np
 import torch
 import torchvision
+import tyro
 from einops import rearrange
 from tqdm import tqdm
 
 from gaussian_tracing.arguments import (
-    ModelParams,
-    OptimizationParams,
-    PipelineParams,
-    get_combined_args,
+    TyroConfig,
 )
 from gaussian_tracing.renderer import GaussianRaytracer, render
 from gaussian_tracing.scene import GaussianModel, Scene
@@ -34,33 +31,36 @@ from gaussian_tracing.utils.tonemapping import tonemap
 
 @torch.no_grad()
 def render_set(
+    cfg,
     cameras,
-    pipeline,
+    pipe_params,
     background,
     raytracer,
     save_dir,
 ):
     for idx, camera in enumerate(tqdm(cameras, desc="Rendering progress")):
-        raytracer.cuda_module.denoise.copy_(not args.skip_denoiser)
+        raytracer.cuda_module.denoise.copy_(not cfg.skip_denoiser)
 
-        if args.spp > 1:
+        if cfg.spp > 1:
             raytracer.cuda_module.accumulate.copy_(True)
             raytracer.cuda_module.accumulated_rgb.zero_()
             raytracer.cuda_module.accumulated_normal.zero_()
             raytracer.cuda_module.accumulated_sample_count.zero_()
-            for i in range(args.spp):
+            for i in range(cfg.spp):
                 package = render(
-                    camera, raytracer, pipeline, background, blur_sigma=None
+                    camera, raytracer, pipe_params, background, blur_sigma=None
                 )
         else:
-            package = render(camera, raytracer, pipeline, background, blur_sigma=None)
+            package = render(
+                camera, raytracer, pipe_params, background, blur_sigma=None
+            )
 
-        if args.supersampling > 1:
+        if cfg.supersampling > 1:
             for key, value in package.__dict__.items():
                 batched = value.ndim == 4
                 resized = torch.nn.functional.interpolate(
                     value[None] if not batched else value,
-                    scale_factor=1.0 / args.supersampling,
+                    scale_factor=1.0 / cfg.supersampling,
                     mode="area",
                 )
                 setattr(package, key, resized[0] if not batched else resized)
@@ -100,17 +100,23 @@ def render_set(
             torchvision.utils.save_image(v, save_path)
 
 
-@torch.no_grad()
-def render_sets(model_params: ModelParams, iteration: int, pipeline: PipelineParams):
+def main(cfg: TyroConfig):
+    model_params = cfg.model_params
+    pipe_params = cfg.pipe_params
+
+    # Initialize system state (RNG)
+    safe_state(cfg.quiet)
+    torch.autograd.set_detect_anomaly(cfg.detect_anomaly)
+
     gaussians = GaussianModel(model_params)
-    scene = Scene(model_params, gaussians, load_iteration=iteration, shuffle=False)
+    scene = Scene(model_params, gaussians, load_iteration=cfg.iteration, shuffle=False)
     views = scene.getTrainCameras()
     background = torch.tensor([0, 0, 0], dtype=torch.float32, device="cuda")
 
     raytracer = GaussianRaytracer(
         gaussians, views[0].image_width, views[0].image_height
     )
-    if args.spp > 1:
+    if cfg.spp > 1:
         raytracer.cuda_module.denoise.fill_(False)
 
     # Create spiral path from EnvGS
@@ -141,12 +147,11 @@ def render_sets(model_params: ModelParams, iteration: int, pipeline: PipelinePar
         camera.update()
         cameras.append(camera)
 
-    save_dir = os.path.join(
-        model_params.model_path, "novel_views", f"ours_{scene.loaded_iter}"
-    )
+    save_dir = os.path.join(cfg.model_path, "novel_views", f"ours_{scene.loaded_iter}")
     render_set(
+        cfg,
         cameras,
-        pipeline,
+        pipe_params,
         background,
         raytracer,
         save_dir,
@@ -154,24 +159,9 @@ def render_sets(model_params: ModelParams, iteration: int, pipeline: PipelinePar
 
 
 if __name__ == "__main__":
-    # Set up command line argument parser
-    parser = ArgumentParser(description="Testing script parameters")
-    model = ModelParams(parser, sentinel=False)
-    _ = OptimizationParams(parser)
-    pipeline = PipelineParams(parser)
+    cfg = tyro.cli(TyroConfig)
 
-    # Rendering args
-    parser.add_argument("--iteration", default=-1, type=int)
-    parser.add_argument("--spp", default=8, type=int)
-    parser.add_argument("--supersampling", default=1, type=int)
-    parser.add_argument("--skip_denoiser", action="store_true")
-    parser.add_argument("--quiet", action="store_true")
+    # TODO: Remove this custom config modification.
+    cfg.resolution *= cfg.supersampling
 
-    args = get_combined_args(parser)
-    print("Rendering " + args.model_path)
-
-    safe_state(args.quiet)
-
-    model_params = model.extract(args)
-    model_params.resolution *= args.supersampling
-    render_sets(model_params, args.iteration, pipeline.extract(args))
+    main(cfg)

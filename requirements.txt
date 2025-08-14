@@ -17,4 +17,5 @@ pytest
 ruff
 tensorboard
 tqdm
+tyro
 submodules/simple-knn

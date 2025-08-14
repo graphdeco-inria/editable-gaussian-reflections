@@ -17,7 +17,7 @@ import numpy as np
 import torch
 from tqdm import tqdm
 
-from gaussian_tracing.arguments import ModelParams
+from gaussian_tracing.arguments import TyroConfig
 from gaussian_tracing.dataset import BlenderDataset, BlenderPriorDataset, ColmapDataset
 from gaussian_tracing.dataset.points_utils import make_random_point_cloud
 from gaussian_tracing.utils.graphics_utils import BasicPointCloud, getWorld2View2
@@ -60,22 +60,30 @@ def getNerfppNorm(cameras: List[Camera]) -> dict:
     return {"translate": translate, "radius": radius}
 
 
-def get_dataset(model_params: ModelParams, data_dir: str, split: str):
+def get_dataset(cfg: TyroConfig, data_dir: str, split: str):
     if os.path.exists(os.path.join(data_dir, "transforms_train.json")):
         if os.path.isfile(os.path.join(data_dir, split, "render", "render_0000.exr")):
             dataset = BlenderDataset(
                 data_dir,
                 split=split,
-                resolution=model_params.resolution,
-                max_images=model_params.max_images,
-                exposure=model_params.exposure,
+                resolution=cfg.resolution,
+                max_images=cfg.max_images,
             )
         else:
             dataset = BlenderPriorDataset(
-                data_dir, split=split, resolution=model_params.resolution
+                data_dir,
+                split=split,
+                resolution=cfg.resolution,
+                max_images=cfg.max_images,
             )
     else:
-        dataset = ColmapDataset(model_params, data_dir, split=split)
+        dataset = ColmapDataset(
+            data_dir,
+            split=split,
+            resolution=cfg.resolution,
+            max_images=cfg.max_images,
+            do_eval=cfg.eval,
+        )
     return dataset
 
 
@@ -96,17 +104,17 @@ def read_dataset(dataset, num_workers=16):
     return cameras
 
 
-def readSceneInfo(model_params: ModelParams, data_dir: str) -> SceneInfo:
+def readSceneInfo(cfg: TyroConfig, data_dir: str) -> SceneInfo:
     print("Reading Training Transforms")
     train_dataset = get_dataset(
-        model_params,
+        cfg,
         data_dir,
         split="train",
     )
     train_cameras = read_dataset(train_dataset)
     print("Reading Test Transforms")
     test_dataset = get_dataset(
-        model_params,
+        cfg,
         data_dir,
         split="test",
     )
@@ -120,7 +128,7 @@ def readSceneInfo(model_params: ModelParams, data_dir: str) -> SceneInfo:
         colors=colors,
         normals=np.zeros_like(points),
     )
-    extra_point_cloud = make_random_point_cloud(model_params)
+    extra_point_cloud = make_random_point_cloud(cfg.model_params)
 
     scene_info = SceneInfo(
         point_cloud=point_cloud,

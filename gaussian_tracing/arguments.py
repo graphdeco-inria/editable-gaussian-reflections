@@ -10,8 +10,7 @@
 #
 
 import os
-import sys
-from argparse import ArgumentParser, Namespace
+from dataclasses import dataclass, field
 from typing import Literal
 
 # DIFFUSE_LOSS_WEIGHT
@@ -21,57 +20,9 @@ from typing import Literal
 # BRDF_PARAMS_LOSS_WEIGHT
 
 
-class GroupParams:
-    pass
-
-
-class ParamGroup:
-    def __init__(self, parser: ArgumentParser, name: str, fill_none=False):
-        group = parser.add_argument_group(name)
-        for key, value in vars(self).items():
-            shorthand = False
-            if key.startswith("_"):
-                shorthand = True
-                key = key[1:]
-            t = type(value)
-            value = value if not fill_none else None
-            if shorthand:
-                if t is bool:
-                    group.add_argument(
-                        "--" + ("no_" + key if value else key),
-                        ("-" + key[0:1]),
-                        action="store_false" if value else "store_true",
-                        dest=key,
-                    )
-                else:
-                    group.add_argument(
-                        "--" + key, ("-" + key[0:1]), default=value, type=t
-                    )
-            else:
-                if t is bool:
-                    group.add_argument(
-                        "--" + ("no_" + key if value else key),
-                        action="store_false" if value else "store_true",
-                        dest=key,
-                    )
-                else:
-                    group.add_argument("--" + key, default=value, type=t)
-
-    def extract(self, args):
-        group = GroupParams()
-        for arg in vars(args).items():
-            if arg[0] in vars(self) or ("_" + arg[0]) in vars(self):
-                setattr(group, arg[0], arg[1])
-        return group
-
-
-class ModelParams(ParamGroup):
-    def __init__(self, parser, sentinel=False):
-        self._source_path = ""
-        self._model_path = ""
-        self._images = "images"
-        self._resolution = 1536
-        self._white_background = False
+class ModelParams:
+    def __init__(self):
+        self.white_background = False
         self.data_device = "cuda"
         self.eval = False
         self.scene_extent_init_radius = 4.0
@@ -108,7 +59,6 @@ class ModelParams(ParamGroup):
         self.force_mcmc_custom_init = False
         self.downsampling_mode = "area"
 
-        self.exposure = 1.0
         self.raytrace_primal = False
 
         self.f0_decay = False
@@ -189,26 +139,17 @@ class ModelParams(ParamGroup):
 
         self.skip_n_images = 0
 
-        super().__init__(parser, "Loading Parameters", sentinel)
 
-    def extract(self, args):
-        g = super().extract(args)
-        g.source_path = os.path.abspath(g.source_path)
-        return g
-
-
-class PipelineParams(ParamGroup):
-    def __init__(self, parser):
+class PipelineParams:
+    def __init__(self):
         self.convert_SHs_python = False
         self.compute_cov3D_python = False
         self.debug = False
         self.depth_ratio = 0.0
-        super().__init__(parser, "Pipeline Parameters")
 
 
-class OptimizationParams(ParamGroup):
-    def __init__(self, parser):
-        self.iterations = 32_000
+class OptimizationParams:
+    def __init__(self):
         self.position_lr_max_steps = 32_000
 
         # flat schedule
@@ -282,27 +223,81 @@ class OptimizationParams(ParamGroup):
         self.beta_1 = 0.9
         self.beta_2 = 0.999  # important to be lower than 0.999
 
-        super().__init__(parser, "Optimization Parameters")
 
+@dataclass
+class TyroConfig:
+    # Model params
+    model_params: ModelParams = field(default_factory=lambda: ModelParams())
+    # Optimization params
+    opt_params: OptimizationParams = field(default_factory=lambda: OptimizationParams())
+    # Pipeline params
+    pipe_params: PipelineParams = field(default_factory=lambda: PipelineParams())
 
-def get_combined_args(parser: ArgumentParser):
-    cmdlne_string = sys.argv[1:]
-    cfgfile_string = "Namespace()"
-    args_cmdline = parser.parse_args(cmdlne_string)
+    # IP address
+    ip: str = "127.0.0.1"
+    # Port
+    port: int = 8000
+    # Enable viewer
+    viewer: bool = False
+    # Viewer mode
+    viewer_mode: str = "local"
+    # Detect anomaly
+    detect_anomaly: bool = False
+    # Flip camera
+    flip_camera: bool = False
+    # Validation views
+    val_views: list[int] = field(default_factory=lambda: [75, 175])
+    # Test iterations
+    test_iterations: list[int] = field(
+        default_factory=lambda: [4, 6_000, 12_000, 18_000, 24_000, 32_000]
+    )
+    # Save iterations
+    save_iterations: list[int] = field(
+        default_factory=lambda: [4, 6_000, 12_000, 18_000, 24_000, 32_000]
+    )
+    # Quiet
+    quiet: bool = False
+    # Checkpoint iterations
+    checkpoint_iterations: list[int] = field(default_factory=lambda: [])
+    # Start checkpoint
+    start_checkpoint: str | None = None
+    # Total iterations
+    iterations: int = 32_000
 
-    try:
-        cfgfilepath = os.path.join(args_cmdline.model_path, "model_params")
-        print("Looking for config file in", cfgfilepath)
-        with open(cfgfilepath) as cfg_file:
-            print("Config file found: {}".format(cfgfilepath))
-            cfgfile_string = cfg_file.read()
-    except TypeError:
-        print("Config file not found at")
-        pass
-    args_cfgfile = eval(cfgfile_string)
+    # Source path
+    source_path: str = ""
+    # Model path
+    model_path: str = ""
+    # Resolution
+    resolution: int = 512
+    # Initial scale factor
+    init_scale_factor: float = 0.1
+    # Evaluation
+    eval: bool = False
+    # Max images
+    max_images: int | None = None
 
-    merged_dict = vars(args_cfgfile).copy()
-    for k, v in vars(args_cmdline).items():
-        if v is not None:
-            merged_dict[k] = v
-    return Namespace(**merged_dict)
+    # Iteration
+    iteration: int = -1
+    # Maximum number of bounces
+    max_bounces: int = -1
+    # Samples per pixel
+    spp: int = 128
+    # Supersampling
+    supersampling: int = 1
+    # Use train views
+    train_views: bool = False
+    # Skip denoiser
+    skip_denoiser: bool = False
+    # Rendering modes
+    modes: list[str] = field(
+        default_factory=lambda: ["regular", "env_rot_1", "env_move_1", "env_move_2"]
+    )
+    # Blur sigmas [None, 4.0, 16.0]
+    blur_sigmas: list[float | None] = field(default_factory=lambda: [None])
+    # Skip video
+    skip_video: bool = False
+    # Red region
+    red_region: bool = False
+    # Skip save frames
+    skip_save_frames: bool = False

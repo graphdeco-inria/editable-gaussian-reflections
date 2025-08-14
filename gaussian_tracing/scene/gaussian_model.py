@@ -17,7 +17,7 @@ from plyfile import PlyData, PlyElement
 from simple_knn._C import distCUDA2
 from torch import nn
 
-from gaussian_tracing.arguments import ModelParams
+from gaussian_tracing.arguments import TyroConfig
 from gaussian_tracing.utils.general_utils import (
     build_rotation,
     build_scaling_rotation,
@@ -52,8 +52,9 @@ class GaussianModel:
 
         self.is_dirty = False  # for viewer
 
-    def __init__(self, model_params: ModelParams):
-        self.model_params = model_params
+    def __init__(self, cfg: TyroConfig):
+        self.cfg = cfg
+        self.model_params = cfg.model_params
         self._xyz = torch.empty(0)
         self._normal = torch.empty(0)
         self._position = torch.empty(0)
@@ -309,7 +310,7 @@ class GaussianModel:
         new_xyz = new_xyz[~mask]
 
         add_book_points = (
-            "shiny_office_with_book" in self.model_params.source_path
+            "shiny_office_with_book" in self.cfg.source_path
             and "SKIP_BOOK_EXTRA_POINTS" not in os.environ
         )
         if add_book_points:

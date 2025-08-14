@@ -15,7 +15,7 @@ import random
 
 import torch
 
-from gaussian_tracing.arguments import ModelParams
+from gaussian_tracing.arguments import TyroConfig
 from gaussian_tracing.scene.dataset_readers import (
     readSceneInfo,
 )
@@ -28,7 +28,7 @@ class Scene:
 
     def __init__(
         self,
-        model_params: ModelParams,
+        cfg: TyroConfig,
         gaussians: GaussianModel,
         load_iteration=None,
         shuffle=True,
@@ -39,8 +39,9 @@ class Scene:
         """b
         :param path: Path to colmap scene main folder.
         """
-        self.model_params = model_params
-        self.model_path = model_params.model_path
+        self.cfg = cfg
+        self.model_params = cfg.model_params
+        self.model_path = cfg.model_path
         self.loaded_iter = None
         self.gaussians = gaussians
         self.glossy = glossy
@@ -57,10 +58,10 @@ class Scene:
         self.train_cameras = {}
         self.test_cameras = {}
 
-        data_dir = model_params.source_path
-        scene_info = readSceneInfo(model_params, data_dir)
+        data_dir = self.cfg.source_path
+        scene_info = readSceneInfo(cfg, data_dir)
         scene_info.train_cameras = scene_info.train_cameras[
-            :: model_params.keep_every_kth_view
+            :: self.model_params.keep_every_kth_view
         ]
 
         if "HARD_SPARSE" in os.environ:
@@ -68,14 +69,14 @@ class Scene:
             cameras = [cameras[0], cameras[49], cameras[100], cameras[199]]
             scene_info.train_cameras = cameras
 
-        if model_params.sparseness != -1:
+        if self.model_params.sparseness != -1:
             cameras = sorted(scene_info.train_cameras, key=lambda x: x.image_path)
             cameras = cameras[:50] + cameras[-50:]
             # take every kth cameras where k = args.sparseness
-            scene_info.train_cameras = cameras[:: model_params.sparseness]
+            scene_info.train_cameras = cameras[:: self.model_params.sparseness]
 
         scene_info.train_cameras = scene_info.train_cameras[
-            model_params.skip_n_images :
+            self.model_params.skip_n_images :
         ]
 
         if shuffle:
