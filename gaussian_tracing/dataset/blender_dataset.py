@@ -19,13 +19,11 @@ class BlenderDataset:
         data_dir: str,
         split: str = "train",
         resolution: int | None = None,
-        exposure: float = 1.0,
         max_images: int | None = None,
     ):
         self.data_dir = data_dir
         self.split = split
         self.resolution = resolution
-        self.exposure = exposure
         self.max_images = max_images
 
         self.colmap_parser = ColmapParser(data_dir)
@@ -96,8 +94,6 @@ class BlenderDataset:
             # specular_image = torch.ones_like(image) * 0.5
             # brdf_image = torch.zeros_like(image)
             # base_color_image = albedo_image * (1.0 - metalness_image) + metalness_image
-        diffuse_image = diffuse_image * self.exposure
-        glossy_image = glossy_image * self.exposure
 
         # Camera intrinsics
         height, width = image.shape[0], image.shape[1]

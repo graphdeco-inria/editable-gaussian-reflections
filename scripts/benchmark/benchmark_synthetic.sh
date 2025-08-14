@@ -36,22 +36,22 @@ OUTPUT_DIR="output/benchmark_synthetic"
 for SCENE in $SCENE_LIST;
 do
     python train.py \
-        -s $SCENE_DIR/$SCENE \
-        -m $OUTPUT_DIR/$SCENE \
-        -r $RESOLUTION \
+        --source_path $SCENE_DIR/$SCENE \
+        --model_path $OUTPUT_DIR/$SCENE \
+        --resolution $RESOLUTION \
         --init_scale_factor 0.1 \
         --eval
 
     python render.py \
-        -s $SCENE_DIR/$SCENE \
-        -m $OUTPUT_DIR/$SCENE \
-        -r $RESOLUTION \
+        --source_path $SCENE_DIR/$SCENE \
+        --model_path $OUTPUT_DIR/$SCENE \
+        --resolution $RESOLUTION \
         --eval
 
     python render_novel_views.py \
-        -s $SCENE_DIR/$SCENE \
-        -m $OUTPUT_DIR/$SCENE \
-        -r $RESOLUTION \
+        --source_path $SCENE_DIR/$SCENE \
+        --model_path $OUTPUT_DIR/$SCENE \
+        --resolution $RESOLUTION \
         --eval
 
     # Saving videos

@@ -12,20 +12,17 @@
 import math
 import os
 import shutil
-from argparse import ArgumentParser
 from os import makedirs
 
 import numpy as np
 import torch
 import torch.nn.functional as F
 import torchvision
+import tyro
 from tqdm import tqdm
 
 from gaussian_tracing.arguments import (
-    ModelParams,
-    OptimizationParams,
-    PipelineParams,
-    get_combined_args,
+    TyroConfig,
 )
 from gaussian_tracing.renderer import GaussianRaytracer, render
 from gaussian_tracing.scene import GaussianModel, Scene
@@ -36,19 +33,20 @@ from gaussian_tracing.utils.tonemapping import tonemap
 
 @torch.no_grad()
 def render_set(
+    cfg,
     scene,
-    model_params,
-    model_path,
     split,
     iteration,
     views,
     gaussians,
-    pipeline,
     background,
     raytracer,
 ):
-    for mode in args.modes:
-        for blur_sigma in args.blur_sigmas:
+    model_path = cfg.model_path
+    pipe_params = cfg.pipe_params
+
+    for mode in cfg.modes:
+        for blur_sigma in cfg.blur_sigmas:
             render_path = os.path.join(
                 model_path, split, "ours_{}".format(iteration), "render"
             )
@@ -254,12 +252,12 @@ def render_set(
                 else:
                     blur_sigma = blur_sigma
 
-                raytracer.cuda_module.denoise.copy_(not args.skip_denoiser)
+                raytracer.cuda_module.denoise.copy_(not cfg.skip_denoiser)
 
-                if args.max_bounces > -1:
-                    raytracer.cuda_module.num_bounces.copy_(args.max_bounces)
+                if cfg.max_bounces > -1:
+                    raytracer.cuda_module.num_bounces.copy_(cfg.max_bounces)
 
-                if args.spp > 1:
+                if cfg.spp > 1:
                     raytracer.cuda_module.accumulate.copy_(True)
                     raytracer.cuda_module.accumulated_rgb.zero_()
                     raytracer.cuda_module.accumulated_normal.zero_()
@@ -267,21 +265,25 @@ def render_set(
                     raytracer.cuda_module.accumulated_f0.zero_()
                     raytracer.cuda_module.accumulated_roughness.zero_()
                     raytracer.cuda_module.accumulated_sample_count.zero_()
-                    for i in range(args.spp):
+                    for i in range(cfg.spp):
                         package = render(
-                            view, raytracer, pipeline, background, blur_sigma=blur_sigma
+                            view,
+                            raytracer,
+                            pipe_params,
+                            background,
+                            blur_sigma=blur_sigma,
                         )
                 else:
                     package = render(
-                        view, raytracer, pipeline, background, blur_sigma=blur_sigma
+                        view, raytracer, pipe_params, background, blur_sigma=blur_sigma
                     )
 
-                if args.supersampling > 1:
+                if cfg.supersampling > 1:
                     for key, value in package.__dict__.items():
                         batched = value.ndim == 4
                         resized = torch.nn.functional.interpolate(
                             value[None] if not batched else value,
-                            scale_factor=1.0 / args.supersampling,
+                            scale_factor=1.0 / cfg.supersampling,
                             mode="area",
                         )
                         setattr(package, key, resized[0] if not batched else resized)
@@ -295,45 +297,45 @@ def render_set(
                 depth_gt_image = view.depth_image.unsqueeze(0)
                 F0_gt_image = view.F0_image
 
-                if args.supersampling > 1:
+                if cfg.supersampling > 1:
                     diffuse_gt_image = torch.nn.functional.interpolate(
                         diffuse_gt_image[None],
-                        scale_factor=1.0 / args.supersampling,
+                        scale_factor=1.0 / cfg.supersampling,
                         mode="area",
                     )[0]
                     glossy_gt_image = torch.nn.functional.interpolate(
                         glossy_gt_image[None],
-                        scale_factor=1.0 / args.supersampling,
+                        scale_factor=1.0 / cfg.supersampling,
                         mode="area",
                     )[0]
                     gt_image = torch.nn.functional.interpolate(
                         gt_image[None],
-                        scale_factor=1.0 / args.supersampling,
+                        scale_factor=1.0 / cfg.supersampling,
                         mode="area",
                     )[0]
                     position_gt_image = torch.nn.functional.interpolate(
                         position_gt_image[None],
-                        scale_factor=1.0 / args.supersampling,
+                        scale_factor=1.0 / cfg.supersampling,
                         mode="area",
                     )[0]
                     depth_gt_image = torch.nn.functional.interpolate(
                         depth_gt_image[None],
-                        scale_factor=1.0 / args.supersampling,
+                        scale_factor=1.0 / cfg.supersampling,
                         mode="area",
                     )[0]
                     normal_gt_image = torch.nn.functional.interpolate(
                         normal_gt_image[None],
-                        scale_factor=1.0 / args.supersampling,
+                        scale_factor=1.0 / cfg.supersampling,
                         mode="area",
                     )[0]
                     roughness_gt_image = torch.nn.functional.interpolate(
                         roughness_gt_image[None],
-                        scale_factor=1.0 / args.supersampling,
+                        scale_factor=1.0 / cfg.supersampling,
                         mode="area",
                     )[0]
                     F0_gt_image = torch.nn.functional.interpolate(
                         F0_gt_image[None],
-                        scale_factor=1.0 / args.supersampling,
+                        scale_factor=1.0 / cfg.supersampling,
                         mode="area",
                     )[0]
 
@@ -356,7 +358,7 @@ def render_set(
                     views
                 )
 
-                if not args.skip_save_frames and mode == "regular":
+                if not cfg.skip_save_frames and mode == "regular":
                     torchvision.utils.save_image(
                         glossy_image,
                         os.path.join(
@@ -498,13 +500,11 @@ def render_set(
 
             blur_suffix = f"_blur_{blur_sigma}" if blur_sigma is not None else ""
             video_dir = f"videos_{mode}{blur_suffix}/".replace("_normal", "")
-            os.makedirs(os.path.join(model_params.model_path, video_dir), exist_ok=True)
+            os.makedirs(os.path.join(model_path, video_dir), exist_ok=True)
 
-            if not args.skip_video:
+            if not cfg.skip_video:
                 print("Writing videos...")
-                path = os.path.join(
-                    model_params.model_path, f"{{dir}}{split}_{{name}}.mp4"
-                )
+                path = os.path.join(model_path, f"{{dir}}{split}_{{name}}.mp4")
 
                 for label, quality in [("hq", "18"), ("lq", "30")]:
                     kwargs = dict(fps=30, options={"crf": quality})
@@ -696,18 +696,20 @@ def render_set(
                 f.write(f"{psnr_test}\n")
 
 
-@torch.no_grad()
-def render_sets(model_params: ModelParams, iteration: int, pipeline: PipelineParams):
-    gaussians = GaussianModel(model_params)
+def main(cfg: TyroConfig):
+    # Initialize system state (RNG)
+    safe_state(cfg.quiet)
+    torch.autograd.set_detect_anomaly(cfg.detect_anomaly)
 
-    scene = Scene(model_params, gaussians, load_iteration=iteration, shuffle=False)
+    gaussians = GaussianModel(cfg)
+    scene = Scene(cfg, gaussians, load_iteration=cfg.iteration, shuffle=False)
     if "DBG_FLOATERS" in os.environ:
         mask = scene.select_points_to_prune_near_cameras(
             gaussians.get_xyz, gaussians.get_scaling
         )
         gaussians._opacity.data[mask] = -100000000.0
 
-    if args.red_region:
+    if cfg.red_region:
         bbox_min = [0.22, -0.5, -0.22]
         bbox_max = [0.46, -0.13, -0.05]
 
@@ -730,114 +732,37 @@ def render_sets(model_params: ModelParams, iteration: int, pipeline: PipelinePar
     if "MAKE_MIRROR" in os.environ:
         gaussians._roughness.zero_()
 
-    if args.spp > 1:
+    if cfg.spp > 1:
         raytracer.cuda_module.denoise.fill_(False)
 
-    if args.train_views:
+    if cfg.train_views:
         render_set(
+            cfg,
             scene,
-            model_params,
-            model_params.model_path,
             "train",
             scene.loaded_iter,
             scene.getTrainCameras(),
             gaussians,
-            pipeline,
             background,
             raytracer,
         )
     else:
         render_set(
+            cfg,
             scene,
-            model_params,
-            model_params.model_path,
             "test",
             scene.loaded_iter,
             scene.getTestCameras(),
             gaussians,
-            pipeline,
             background,
             raytracer,
         )
 
 
 if __name__ == "__main__":
-    # Set up command line argument parser
-    parser = ArgumentParser(description="Testing script parameters")
-    model = ModelParams(parser, sentinel=False)
-    _ = OptimizationParams(parser)
-    pipeline = PipelineParams(parser)
+    cfg = tyro.cli(TyroConfig)
 
-    # Dummy repeat training args
-    parser.add_argument("--ip", type=str, default="127.0.0.1")
-    parser.add_argument("--port", type=int, default=6009)
-    parser.add_argument("--detect_anomaly", action="store_true", default=False)
-    parser.add_argument("--flip_camera", action="store_true", default=False)
-    parser.add_argument(
-        "--test_iterations",
-        nargs="+",
-        type=int,
-        default=[
-            1,
-            100,
-            500,
-            1_000,
-            2_500,
-            5_000,
-            10_000,
-            20_000,
-            30_000,
-            60_000,
-            90_000,
-        ],
-    )
-    parser.add_argument(
-        "--save_iterations",
-        nargs="+",
-        type=int,
-        default=[1, 1_000, 2_500, 7_000, 15_000, 30_000, 60_000, 90_000],
-    )
-    parser.add_argument("--viewer", action="store_true")
-    parser.add_argument("--checkpoint_iterations", nargs="+", type=int, default=[])
-    parser.add_argument("--start_checkpoint", type=str, default=None)
-    # Rendering args
-    parser.add_argument("--iteration", default=-1, type=int)
-    parser.add_argument("--max_bounces", default=-1, type=int)
-    parser.add_argument("--spp", default=128, type=int)
-    parser.add_argument("--supersampling", default=1, type=int)
-    parser.add_argument("--train_views", action="store_true")
-    parser.add_argument("--skip_denoiser", action="store_true")
-    parser.add_argument("--quiet", action="store_true")
-    parser.add_argument(
-        "--modes",
-        type=str,
-        choices=[
-            "regular",
-            "lod",
-            "env_rot_1",
-            "env_rot_2",
-            "env_move_1",
-            "env_move_2",
-        ],
-        default=["regular", "env_rot_1", "env_move_1", "env_move_2"],
-        nargs="+",
-    )  # env_rot_1 is at the scene's origin, env_rot_2 it somewhere in the far-field, env_move_1 dollys forward, env_move_2 trucks sideways # ["regular", "lod", "env_rot_1", "env_move_1", "env_move_2"]
-    parser.add_argument(
-        "--blur_sigmas", type=float, default=[None], nargs="+"
-    )  # [None, 4.0, 16.0]
-    parser.add_argument("--skip_video", action="store_true")
-    parser.add_argument("--red_region", action="store_true")
-    parser.add_argument("--skip_save_frames", action="store_true")
+    # TODO: Remove this custom config modification.
+    cfg.resolution *= cfg.supersampling
 
-    args = get_combined_args(parser)
-    print("Rendering " + args.model_path)
-
-    # if not args.train_views:
-    #     args.max_images = min(100, args.max_images)
-
-    # Initialize system state (RNG)
-    safe_state(args.quiet)
-
-    model_params = model.extract(args)
-    model_params.resolution *= args.supersampling
-    render_sets(model_params, args.iteration, pipeline.extract(args))
+    main(cfg)

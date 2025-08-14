@@ -27,10 +27,12 @@ class BlenderPriorDataset:
         data_dir: str,
         split: str = "train",
         resolution: int | None = None,
+        max_images: int | None = None,
     ):
         self.data_dir = data_dir
         self.split = split
         self.resolution = resolution
+        self.max_images = max_images
         self.buffer_names = [
             "render",
             "albedo",
@@ -57,6 +59,8 @@ class BlenderPriorDataset:
         with open(transform_path) as json_file:
             self.contents = json.load(json_file)
         self.frames = sorted(self.contents["frames"], key=lambda x: x["file_path"])
+        if self.max_images is not None:
+            self.frames = self.frames[: self.max_images]
         assert len(self.frames) != 0, "Dataset is empty"
 
     def __len__(self) -> int:
