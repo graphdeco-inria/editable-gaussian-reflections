@@ -86,33 +86,6 @@ int main() {
               << "False"
               << "\n";
 #endif
-#if ATTACH_SPECULAR == true
-    std::cout << "ATTACH_SPECULAR = "
-              << "True"
-              << "\n";
-#else
-    std::cout << "ATTACH_SPECULAR = "
-              << "False"
-              << "\n";
-#endif
-#if ATTACH_ALBEDO == true
-    std::cout << "ATTACH_ALBEDO = "
-              << "True"
-              << "\n";
-#else
-    std::cout << "ATTACH_ALBEDO = "
-              << "False"
-              << "\n";
-#endif
-#if ATTACH_METALNESS == true
-    std::cout << "ATTACH_METALNESS = "
-              << "True"
-              << "\n";
-#else
-    std::cout << "ATTACH_METALNESS = "
-              << "False"
-              << "\n";
-#endif
 #if POSITION_FROM_EXPECTED_TERMINATION_DEPTH == true
     std::cout << "POSITION_FROM_EXPECTED_TERMINATION_DEPTH = "
               << "True"
@@ -326,33 +299,6 @@ int main() {
               << "\n";
 #else
     std::cout << "ATTACH_ROUGHNESS = "
-              << "False"
-              << "\n";
-#endif
-#if ATTACH_SPECULAR == true
-    std::cout << "ATTACH_SPECULAR = "
-              << "True"
-              << "\n";
-#else
-    std::cout << "ATTACH_SPECULAR = "
-              << "False"
-              << "\n";
-#endif
-#if ATTACH_ALBEDO == true
-    std::cout << "ATTACH_ALBEDO = "
-              << "True"
-              << "\n";
-#else
-    std::cout << "ATTACH_ALBEDO = "
-              << "False"
-              << "\n";
-#endif
-#if ATTACH_METALNESS == true
-    std::cout << "ATTACH_METALNESS = "
-              << "True"
-              << "\n";
-#else
-    std::cout << "ATTACH_METALNESS = "
               << "False"
               << "\n";
 #endif

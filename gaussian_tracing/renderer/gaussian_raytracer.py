@@ -35,9 +35,6 @@ class GaussianRaytracer:
         os.environ["POSITION_LOSS_WEIGHT"] = str(pc.model_params.loss_weight_depth)
         os.environ["F0_LOSS_WEIGHT"] = str(pc.model_params.loss_weight_f0)
         os.environ["ROUGHNESS_LOSS_WEIGHT"] = str(pc.model_params.loss_weight_roughness)
-        os.environ["SPECULAR_LOSS_WEIGHT"] = str(pc.model_params.loss_weight_specular)
-        os.environ["ALBEDO_LOSS_WEIGHT"] = str(pc.model_params.loss_weight_albedo)
-        os.environ["METALNESS_LOSS_WEIGHT"] = str(pc.model_params.loss_weight_metalness)
 
         # self.cuda_module.configure(pc.model_params.t_thresh, pc.model_params.a_thresh, pc.model_params.exp_power)
         self.cuda_module.set_losses(True)
@@ -105,10 +102,6 @@ class GaussianRaytracer:
             self.cuda_module.gaussian_roughness.grad.zero_()
         if self.cuda_module.gaussian_f0 is not None:
             self.cuda_module.gaussian_f0.grad.zero_()
-        if self.cuda_module.gaussian_specular is not None:
-            self.cuda_module.gaussian_specular.grad.zero_()
-        if self.cuda_module.gaussian_metalness is not None:
-            self.cuda_module.gaussian_metalness.grad.zero_()
         self.cuda_module.densification_gradient_diffuse.zero_()
         self.cuda_module.densification_gradient_glossy.zero_()
 

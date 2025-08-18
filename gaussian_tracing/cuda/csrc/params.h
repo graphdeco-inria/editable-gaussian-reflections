@@ -88,18 +88,6 @@ struct Params {
     const float *__restrict__ gaussian_roughness;
     float *__restrict__ dL_dgaussian_roughness;
 #endif
-#if ATTACH_SPECULAR == true
-    const float *__restrict__ gaussian_specular;
-    float *__restrict__ dL_dgaussian_specular;
-#endif
-#if ATTACH_ALBEDO == true
-    const float3 *__restrict__ gaussian_albedo;
-    float3 *__restrict__ dL_dgaussian_albedo;
-#endif
-#if ATTACH_METALNESS == true
-    const float *__restrict__ gaussian_metalness;
-    float *__restrict__ dL_dgaussian_metalness;
-#endif
 
     const float *__restrict__ gaussian_opacity;
     float *__restrict__ dL_dopacity;
@@ -131,15 +119,6 @@ struct Params {
 #endif
 #if ATTACH_ROUGHNESS == true
     const float *__restrict__ target_roughness;
-#endif
-#if ATTACH_SPECULAR == true
-    const float *__restrict__ target_specular;
-#endif
-#if ATTACH_ALBEDO == true
-    const float3 *__restrict__ target_albedo;
-#endif
-#if ATTACH_METALNESS == true
-    const float *__restrict__ target_metalness;
 #endif
 
 #if USE_GT_DIFFUSE_IRRADIANCE == true
@@ -176,9 +155,6 @@ struct Params {
     float3 *__restrict__ output_normal;
     float3 *__restrict__ output_f0;
     float *__restrict__ output_roughness;
-    float *__restrict__ output_specular;
-    float3 *__restrict__ output_albedo;
-    float *__restrict__ output_metalness;
     float *__restrict__ output_distortion;
 #if SAVE_LOD_IMAGES == true
     float *__restrict__ output_lod_mean;
@@ -211,9 +187,6 @@ struct Params {
     float normal_loss_weight;
     float f0_loss_weight;
     float roughness_loss_weight;
-    float specular_loss_weight;
-    float albedo_loss_weight;
-    float metalness_loss_weight;
 
     float *global_scale_factor;
 

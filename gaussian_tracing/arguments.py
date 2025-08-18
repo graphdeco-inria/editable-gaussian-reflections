@@ -72,9 +72,6 @@ class ModelParams:
             self.loss_weight_depth = 0.0
         self.loss_weight_f0 = 1.0
         self.loss_weight_roughness = 1.0
-        self.loss_weight_specular = 1.0
-        self.loss_weight_albedo = 1.0
-        self.loss_weight_metalness = 1.0
 
         if "ONLY_DIFFUSE_LOSS" in os.environ:
             self.loss_weight_diffuse = 5.0
@@ -83,9 +80,6 @@ class ModelParams:
             self.loss_weight_depth = 0.0
             self.loss_weight_f0 = 0.0
             self.loss_weight_roughness = 0.0
-            self.loss_weight_specular = 0.0
-            self.loss_weight_albedo = 0.0
-            self.loss_weight_metalness = 0.0
 
         # level of detail args below
         self.lod_prob_blur_targets = 1.0

@@ -307,9 +307,6 @@
 #define ATTACH_NORMALS false
 #define ATTACH_F0 false
 #define ATTACH_ROUGHNESS false
-#define ATTACH_SPECULAR false
-#define ATTACH_ALBEDO false
-#define ATTACH_METALNESS false
 //
 
 #if MAX_BOUNCES > 0
