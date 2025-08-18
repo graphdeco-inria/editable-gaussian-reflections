@@ -345,11 +345,6 @@ __device__ void backward_pass(
                 // channels being averaged over
                 float3 dL_doutput_rgb =
                     2.0f / 3.0f * sign(error[k]) * loss_weight / num_pixels;
-                if (params.regular_loss_weight > 0.0f) {
-                    dL_doutput_rgb += params.regular_loss_weight * 2.0f / 3.0f *
-                                      sign(final_rgb[k] - target_rgb[k]) /
-                                      num_pixels;
-                }
 
                 // #if TONEMAP == true && STRAIGHT_THROUGH_TONEMAPPING_GRAD ==
                 // false

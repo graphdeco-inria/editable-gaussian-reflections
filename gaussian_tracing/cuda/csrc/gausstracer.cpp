@@ -1664,8 +1664,6 @@ struct Raytracer : torch::CustomClassHolder {
             GetEnvironmentVariableOrDefault("ALBEDO_LOSS_WEIGHT", 1.0f);
         m_h_params.metalness_loss_weight =
             GetEnvironmentVariableOrDefault("METALNESS_LOSS_WEIGHT", 1.0f);
-        m_h_params.regular_loss_weight =
-            GetEnvironmentVariableOrDefault("REGULAR_LOSS_WEIGHT", 0.0f);
 
         printf("diffuse_loss_weight: %f\n", m_h_params.diffuse_loss_weight);
         printf("glossy_loss_weight: %f\n", m_h_params.glossy_loss_weight);
@@ -1676,7 +1674,6 @@ struct Raytracer : torch::CustomClassHolder {
         printf("specular_loss_weight: %f\n", m_h_params.specular_loss_weight);
         printf("albedo_loss_weight: %f\n", m_h_params.albedo_loss_weight);
         printf("metalness_loss_weight: %f\n", m_h_params.metalness_loss_weight);
-        printf("regular_loss_weight: %f\n", m_h_params.regular_loss_weight);
 
         if (updateParams) {
             CUDA_CHECK(cudaMemcpy(

@@ -214,7 +214,6 @@ struct Params {
     float specular_loss_weight;
     float albedo_loss_weight;
     float metalness_loss_weight;
-    float regular_loss_weight;
 
     float *global_scale_factor;
 

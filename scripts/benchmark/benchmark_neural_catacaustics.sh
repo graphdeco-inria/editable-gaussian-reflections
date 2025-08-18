@@ -53,7 +53,7 @@ do
         --resolution $RESOLUTION \
         --init_scale_factor 0.1 \
         --no_znear_densif_pruning \
-        --position_loss_weight 0.0 \
+        --loss_weight_depth 0.0 \
         --eval
 
     python render.py \

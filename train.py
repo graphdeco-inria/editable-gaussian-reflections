@@ -649,10 +649,10 @@ def main(cfg: TyroConfig):
 
         if iteration == model_params.rebalance_losses_at_iter:
             os.environ["GLOSSY_LOSS_WEIGHT"] = str(
-                model_params.glossy_loss_weight_after_rebalance
+                model_params.loss_weight_glossy_after_rebalance
             )
             os.environ["DIFFUSE_LOSS_WEIGHT"] = str(
-                model_params.diffuse_loss_weight_after_rebalance
+                model_params.loss_weight_diffuse_after_rebalance
             )
             raytracer.cuda_module.set_losses(True)
 
