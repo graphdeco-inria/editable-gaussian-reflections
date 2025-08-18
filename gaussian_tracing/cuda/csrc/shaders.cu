@@ -1406,8 +1406,7 @@ forward_pass_end:
 #else
                 error[k] = output_rgb[0][k] -
                            target_diffuse[k]; // + (output_rgb[MAX_BOUNCES +
-                                              // 1][k] - target_rgb[k]) *
-                                              // params.regular_loss_weight;
+                                              // 1][k] - target_rgb[k]);
 #endif
             } else {
                 float3 output_glossy = make_float3(0.0f, 0.0f, 0.0f);
@@ -1416,12 +1415,12 @@ forward_pass_end:
                 }
                 error[k] =
                     output_glossy -
-                    target_glossy
-                        [k]; // + (output_rgb[MAX_BOUNCES + 1][k] -
-                             // target_rgb[k]) * params.regular_loss_weight; //
-                             // todo fix densification score weighting, not a
-                             // problem in our config but might cause issues
-                             // for other people if they densify longer
+                    target_glossy[k]; // + (output_rgb[MAX_BOUNCES + 1][k] -
+                                      // target_rgb[k]); //
+                                      // todo fix densification score weighting,
+                                      // not a problem in our config but might
+                                      // cause issues for other people if they
+                                      // densify longer
 
                 // error[k] = output_rgb[step][k] - target_glossy[k];
             }

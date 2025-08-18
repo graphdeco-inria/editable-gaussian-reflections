@@ -12,10 +12,10 @@
 import os
 from dataclasses import dataclass, field
 
-# DIFFUSE_LOSS_WEIGHT
+# loss_weight_diffuse
 # REFLECTION_LOSS_WEIGHT
-# NORMAL_LOSS_WEIGHT
-# POSITION_LOSS_WEIGHT
+# loss_weight_normal
+# loss_weight_depth
 # BRDF_PARAMS_LOSS_WEIGHT
 
 
@@ -63,30 +63,29 @@ class ModelParams:
         self.init_f0 = 0.04
         self.init_extra_point_diffuse = 0.2
 
-        self.warmup_diffuse_loss_weight = 10000.0
-        self.diffuse_loss_weight = 5.0
-        self.glossy_loss_weight = 3.0
-        self.normal_loss_weight = 2.5
-        self.position_loss_weight = 2.5
+        self.warmup_loss_weight_diffuse = 10000.0
+        self.loss_weight_diffuse = 5.0
+        self.loss_weight_glossy = 3.0
+        self.loss_weight_normal = 2.5
+        self.loss_weight_depth = 2.5
         if "REAL_SCENE" in os.environ:
-            self.position_loss_weight = 0.0
-        self.f0_loss_weight = 1.0
-        self.roughness_loss_weight = 1.0
-        self.specular_loss_weight = 1.0
-        self.albedo_loss_weight = 1.0
-        self.metalness_loss_weight = 1.0
-        self.regular_loss_weight = 0.0
+            self.loss_weight_depth = 0.0
+        self.loss_weight_f0 = 1.0
+        self.loss_weight_roughness = 1.0
+        self.loss_weight_specular = 1.0
+        self.loss_weight_albedo = 1.0
+        self.loss_weight_metalness = 1.0
 
         if "ONLY_DIFFUSE_LOSS" in os.environ:
-            self.diffuse_loss_weight = 5.0
-            self.glossy_loss_weight = 0.0
-            self.normal_loss_weight = 0.0
-            self.position_loss_weight = 0.0
-            self.f0_loss_weight = 0.0
-            self.roughness_loss_weight = 0.0
-            self.specular_loss_weight = 0.0
-            self.albedo_loss_weight = 0.0
-            self.metalness_loss_weight = 0.0
+            self.loss_weight_diffuse = 5.0
+            self.loss_weight_glossy = 0.0
+            self.loss_weight_normal = 0.0
+            self.loss_weight_depth = 0.0
+            self.loss_weight_f0 = 0.0
+            self.loss_weight_roughness = 0.0
+            self.loss_weight_specular = 0.0
+            self.loss_weight_albedo = 0.0
+            self.loss_weight_metalness = 0.0
 
         # level of detail args below
         self.lod_prob_blur_targets = 1.0
@@ -111,8 +110,8 @@ class ModelParams:
             self.no_bounces_until_iter = 3_000
             self.max_one_bounce_until_iter = -1
 
-        self.diffuse_loss_weight_after_rebalance = 5.0
-        self.glossy_loss_weight_after_rebalance = 5.0
+        self.loss_weight_diffuse_after_rebalance = 5.0
+        self.loss_weight_glossy_after_rebalance = 5.0
         self.rebalance_losses_at_iter = -1
         if "REAL_SCENE" in os.environ:
             self.rebalance_losses_at_iter = -1
