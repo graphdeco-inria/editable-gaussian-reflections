@@ -32,7 +32,7 @@ from gaussian_tracing.utils.general_utils import (
 )
 from gaussian_tracing.utils.image_utils import psnr
 from gaussian_tracing.utils.loss_utils import l1_loss
-from gaussian_tracing.utils.tonemapping import tonemap, untonemap
+from gaussian_tracing.utils.tonemapping import tonemap
 
 try:
     from torch.utils.tensorboard import SummaryWriter
@@ -113,20 +113,6 @@ def training_report(
                         glossy_image = package.rgb[1:-1].sum(dim=0)
                         pred_image = package.rgb[-1].clamp(0, 1)
                         pred_image_without_denoising = package.rgb[:-1].sum(dim=0)
-                        diffuse_gt_image = torch.clamp(
-                            viewpoint.diffuse_image, 0.0, 1.0
-                        )
-                        glossy_gt_image = torch.clamp(viewpoint.glossy_image, 0.0, 1.0)
-                        gt_image = torch.clamp(viewpoint.original_image, 0.0, 1.0)
-                    elif raytracer.config.TONEMAP:
-                        diffuse_image = package.rgb[0].clamp(0, 1)
-                        glossy_image = tonemap(
-                            untonemap(package.rgb[1:-1]).sum(dim=0)
-                        ).clamp(0, 1)
-                        pred_image = package.rgb[-1].clamp(0, 1)
-                        pred_image_without_denoising = tonemap(
-                            untonemap(package.rgb[:-1]).sum(dim=0)
-                        )
                         diffuse_gt_image = torch.clamp(
                             viewpoint.diffuse_image, 0.0, 1.0
                         )
@@ -455,10 +441,6 @@ def main(cfg: TyroConfig):
     elif model_params.max_one_bounce_until_iter > 0:
         raytracer.cuda_module.num_bounces.copy_(min(raytracer.config.MAX_BOUNCES, 1))
 
-    if model_params.warmup_until_iter > 0:
-        os.environ["DIFFUSE_LOSS_WEIGHT"] = str(model_params.warmup_diffuse_loss_weight)
-        raytracer.cuda_module.set_losses(True)
-
     for iteration in tqdm(
         range(first_iter, cfg.iterations + 1),
         desc="Training progress",
@@ -634,7 +616,7 @@ def main(cfg: TyroConfig):
                 print("\n[ITER {}] Saving Checkpoint".format(iteration))
                 torch.save(
                     (gaussians.capture(), iteration),
-                    scene.model_path + "/chkpnt" + str(iteration) + ".pth",
+                    cfg.model_path + "/chkpnt" + str(iteration) + ".pth",
                 )
 
         if iteration == model_params.no_bounces_until_iter:

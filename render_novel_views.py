@@ -86,7 +86,6 @@ def render_set(
             "render": pred_image,
             "glossy": glossy_image,
             "diffuse": diffuse_image,
-            "position": package.position[0],
             "depth": package.depth[0] / package.depth[0].amax(),
             "normal": normal_image * 0.5 + 0.5,
             "ray_origin": ray_origin / 5,

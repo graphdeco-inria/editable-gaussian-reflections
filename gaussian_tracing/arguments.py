@@ -11,7 +11,6 @@
 
 import os
 from dataclasses import dataclass, field
-from typing import Literal
 
 # DIFFUSE_LOSS_WEIGHT
 # REFLECTION_LOSS_WEIGHT
@@ -29,18 +28,6 @@ class ModelParams:
         self.scene_extent_multiplier = 5.0
         self.num_feat_per_gaussian_channel = 16
 
-        self.brdf_mode: Literal["disabled", "gt", "static_lut"] = (
-            "gt"  # "finetuned_lut" is legacy, no longer works
-        )
-        self.use_attached_brdf = False
-        self.detach_normals = False
-        self.detach_position = False
-        self.detach_roughness = False
-        self.detach_F0 = False
-
-        self.use_masks = False
-        self.precomp_ray = False
-
         self.raytracer_version = ""  # "build_v0.1_attached_brdf"
 
         self.disable_bounce_grads = False
@@ -56,7 +43,6 @@ class ModelParams:
         self.znear_scaledown = 0.8
         self.zfar_scaleup = 1.5
 
-        self.force_mcmc_custom_init = False
         self.downsampling_mode = "area"
 
         self.raytrace_primal = False
@@ -80,8 +66,6 @@ class ModelParams:
         self.warmup_diffuse_loss_weight = 10000.0
         self.diffuse_loss_weight = 5.0
         self.glossy_loss_weight = 3.0
-        if "LEGACY_WEIGHT" in os.environ:
-            self.glossy_loss_weight = 0.001
         self.normal_loss_weight = 2.5
         self.position_loss_weight = 2.5
         if "REAL_SCENE" in os.environ:
@@ -120,7 +104,6 @@ class ModelParams:
         self.sparseness = -1
         self.hard_sparse = -1
 
-        self.warmup_until_iter = 0
         if "LEGACY_SCHEDULE" in os.environ:
             self.no_bounces_until_iter = 6_000
             self.max_one_bounce_until_iter = 12_000
@@ -135,7 +118,6 @@ class ModelParams:
             self.rebalance_losses_at_iter = -1
         if "LEGACY_WEIGHT" in os.environ:
             self.rebalance_losses_at_iter = 18_000
-        self.enable_regular_loss_at_iter = -1
 
         self.skip_n_images = 0
 
@@ -171,7 +153,6 @@ class OptimizationParams:
         self.opacity_lr = 0.025  #! was 0.05 which does not match 3dgs
         self.scaling_lr = 0.005
         self.rotation_lr = 0.001
-        self._brdf_lut_lr = 0.001
         self.percent_dense = 0.01
         self.lambda_dssim = 0.2
         self.lambda_dist = 0.0
