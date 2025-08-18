@@ -124,8 +124,6 @@ class ColmapDataset:
             #     upsized_roughness = torch.nn.functional.interpolate(roughness_image.moveaxis(-1, 0)[None], scale_factor=4, mode='bicubic', antialias=True)
             #     upsized_roughness[upsized_roughness < 0.25] = 0.0
             #     roughness_image = torch.nn.functional.interpolate(upsized_roughness, scale_factor=1/4, mode="area")[0].moveaxis(0, -1)
-            # if "SKIP_SPECULAR_FROM_METALNESS" not in os.environ:
-            #     specular_image = original_roughness_image / 2 + 0.5
 
         # Camera intrinsics
         height = intr.height

@@ -678,22 +678,6 @@ extern "C" __global__ void __raygen__rg() {
         for (int c = 0; c < NUM_CLUSTERS; c++)
             fill_array(
                 output_roughness[i][c], TILE_SIZE * TILE_SIZE, INIT_ROUGHNESS);
-    float output_specular[MAX_BOUNCES + 1][NUM_CLUSTERS][TILE_SIZE * TILE_SIZE];
-    for (int i = 0; i < MAX_BOUNCES + 1; i++)
-        for (int c = 0; c < NUM_CLUSTERS; c++)
-            fill_array(output_specular[i][c], TILE_SIZE * TILE_SIZE, 0.0f);
-    float3 output_albedo[MAX_BOUNCES + 1][NUM_CLUSTERS][TILE_SIZE * TILE_SIZE];
-    for (int i = 0; i < MAX_BOUNCES + 1; i++)
-        for (int c = 0; c < NUM_CLUSTERS; c++)
-            fill_array(
-                output_albedo[i][c],
-                TILE_SIZE * TILE_SIZE,
-                make_float3(0.0f, 0.0f, 0.0f));
-    float output_metalness[MAX_BOUNCES + 1][NUM_CLUSTERS]
-                          [TILE_SIZE * TILE_SIZE];
-    for (int i = 0; i < MAX_BOUNCES + 1; i++)
-        for (int c = 0; c < NUM_CLUSTERS; c++)
-            fill_array(output_metalness[i][c], TILE_SIZE * TILE_SIZE, 0.0f);
     float output_distortion[MAX_BOUNCES + 1][NUM_CLUSTERS]
                            [TILE_SIZE * TILE_SIZE];
     for (int i = 0; i < MAX_BOUNCES + 1; i++)
@@ -758,24 +742,6 @@ extern "C" __global__ void __raygen__rg() {
                 remaining_roughness[i][c],
                 TILE_SIZE * TILE_SIZE,
                 INIT_ROUGHNESS);
-    float remaining_specular[MAX_BOUNCES + 1][NUM_CLUSTERS]
-                            [TILE_SIZE * TILE_SIZE];
-    for (int i = 0; i < MAX_BOUNCES + 1; i++)
-        for (int c = 0; c < NUM_CLUSTERS; c++)
-            fill_array(remaining_specular[i][c], TILE_SIZE * TILE_SIZE, 0.0f);
-    float3 remaining_albedo[MAX_BOUNCES + 1][NUM_CLUSTERS]
-                           [TILE_SIZE * TILE_SIZE];
-    for (int i = 0; i < MAX_BOUNCES + 1; i++)
-        for (int c = 0; c < NUM_CLUSTERS; c++)
-            fill_array(
-                remaining_albedo[i][c],
-                TILE_SIZE * TILE_SIZE,
-                make_float3(0.0f, 0.0f, 0.0f));
-    float remaining_metalness[MAX_BOUNCES + 1][NUM_CLUSTERS]
-                             [TILE_SIZE * TILE_SIZE];
-    for (int i = 0; i < MAX_BOUNCES + 1; i++)
-        for (int c = 0; c < NUM_CLUSTERS; c++)
-            fill_array(remaining_metalness[i][c], TILE_SIZE * TILE_SIZE, 0.0f);
     float remaining_distortion[MAX_BOUNCES + 1][NUM_CLUSTERS]
                               [TILE_SIZE * TILE_SIZE];
     for (int i = 0; i < MAX_BOUNCES + 1; i++)
@@ -859,9 +825,6 @@ extern "C" __global__ void __raygen__rg() {
             output_normal[step],
             output_f0[step],
             output_roughness[step],
-            output_specular[step],
-            output_albedo[step],
-            output_metalness[step],
             output_distortion[step],
             output_lod_mean[step],
             output_lod_scale[step],
@@ -872,9 +835,6 @@ extern "C" __global__ void __raygen__rg() {
             remaining_normal[step],
             remaining_f0[step],
             remaining_roughness[step],
-            remaining_specular[step],
-            remaining_albedo[step],
-            remaining_metalness[step],
             remaining_distortion[step],
             remaining_lod_mean[step],
             remaining_used_lod[step],
@@ -1217,18 +1177,6 @@ forward_pass_end:
                     params.output_roughness[pixel_id] =
                         output_roughness[s][max_c][tile_id];
 #endif
-#if ATTACH_SPECULAR == true
-                    params.output_specular[pixel_id] =
-                        output_specular[s][max_c][tile_id];
-#endif
-#if ATTACH_ALBEDO == true
-                    params.output_albedo[pixel_id] =
-                        output_albedo[s][max_c][tile_id];
-#endif
-#if ATTACH_METALNESS == true
-                    params.output_metalness[pixel_id] =
-                        output_metalness[s][max_c][tile_id];
-#endif
 #if MAX_BOUNCES > 0
                     params.output_brdf[pixel_id] =
                         output_throughput[s][max_c][tile_id];
@@ -1266,9 +1214,6 @@ forward_pass_end:
     float3 target_normal[TILE_SIZE * TILE_SIZE];
     float3 target_f0[TILE_SIZE * TILE_SIZE];
     float target_roughness[TILE_SIZE * TILE_SIZE];
-    float target_specular[TILE_SIZE * TILE_SIZE];
-    float3 target_albedo[TILE_SIZE * TILE_SIZE];
-    float target_metalness[TILE_SIZE * TILE_SIZE];
 
     for (int i = 0; i < TILE_SIZE; i++)
         for (int j = 0; j < TILE_SIZE; j++) {
@@ -1313,27 +1258,6 @@ forward_pass_end:
         for (int j = 0; j < TILE_SIZE; j++) {
             target_roughness[i * TILE_SIZE + j] =
                 params.target_roughness[ray_id + i * params.image_width + j];
-        }
-#endif
-#if ATTACH_SPECULAR == true
-    for (int i = 0; i < TILE_SIZE; i++)
-        for (int j = 0; j < TILE_SIZE; j++) {
-            target_specular[i * TILE_SIZE + j] =
-                params.target_specular[ray_id + i * params.image_width + j];
-        }
-#endif
-#if ATTACH_ALBEDO == true
-    for (int i = 0; i < TILE_SIZE; i++)
-        for (int j = 0; j < TILE_SIZE; j++) {
-            target_albedo[i * TILE_SIZE + j] =
-                params.target_albedo[ray_id + i * params.image_width + j];
-        }
-#endif
-#if ATTACH_METALNESS == true
-    for (int i = 0; i < TILE_SIZE; i++)
-        for (int j = 0; j < TILE_SIZE; j++) {
-            target_metalness[i * TILE_SIZE + j] =
-                params.target_metalness[ray_id + i * params.image_width + j];
         }
 #endif
 #if MAX_BOUNCES > 0
@@ -1499,9 +1423,6 @@ forward_pass_end:
                 output_normal[step][0],
                 output_f0[step][0],
                 output_roughness[step][0],
-                output_specular[step][0],
-                output_albedo[step][0],
-                output_metalness[step][0],
                 output_distortion[step][0],
                 //
                 remaining_rgb[step][0],
@@ -1510,9 +1431,6 @@ forward_pass_end:
                 remaining_normal[step][0],
                 remaining_f0[step][0],
                 remaining_roughness[step][0],
-                remaining_specular[step][0],
-                remaining_albedo[step][0],
-                remaining_metalness[step][0],
                 remaining_distortion[step][0],
                 num_hits[step],
                 output_throughput[max(step - 1, 0)][0],
@@ -1531,9 +1449,6 @@ forward_pass_end:
                 target_normal,
                 target_f0,
                 target_roughness,
-                target_specular,
-                target_albedo,
-                target_metalness,
                 error,
                 roughness_weight * extra_bounce_weight,
                 step == 0 ? params.diffuse_loss_weight

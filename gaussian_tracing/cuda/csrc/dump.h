@@ -12,9 +12,6 @@ struct __align__(64) Dump {
     float3 normal[MAX_BOUNCES + 1];
     float3 f0[MAX_BOUNCES + 1];
     float roughness[MAX_BOUNCES + 1];
-    float specular[MAX_BOUNCES + 1];
-    float3 albedo[MAX_BOUNCES + 1];
-    float metalness[MAX_BOUNCES + 1];
     float distortion[MAX_BOUNCES + 1];
     float lod_mean[MAX_BOUNCES + 1];
     float lod_scale[MAX_BOUNCES + 1];

@@ -200,12 +200,6 @@ struct Raytracer : torch::CustomClassHolder {
     Tensor m_dL_dgaussian_f0;
     Tensor m_gaussian_roughness;
     Tensor m_dL_dgaussian_roughness;
-    Tensor m_gaussian_specular;
-    Tensor m_dL_dgaussian_specular;
-    Tensor m_gaussian_albedo;
-    Tensor m_dL_dgaussian_albedo;
-    Tensor m_gaussian_metalness;
-    Tensor m_dL_dgaussian_metalness;
 
     // Camera buffers
     Tensor m_vertical_fov_radians =
@@ -235,9 +229,6 @@ struct Raytracer : torch::CustomClassHolder {
     Tensor m_output_normal;
     Tensor m_output_f0;
     Tensor m_output_roughness;
-    Tensor m_output_specular;
-    Tensor m_output_albedo;
-    Tensor m_output_metalness;
     Tensor m_output_distortion;
     Tensor m_output_lod_mean;
     Tensor m_output_lod_scale;
@@ -263,9 +254,6 @@ struct Raytracer : torch::CustomClassHolder {
     Tensor m_target_normal;
     Tensor m_target_f0;
     Tensor m_target_roughness;
-    Tensor m_target_specular;
-    Tensor m_target_albedo;
-    Tensor m_target_metalness;
     Tensor m_target_brdf;
     Tensor m_target_diffuse_irradiance;
     Tensor m_target_glossy_irradiance;
@@ -433,30 +421,6 @@ struct Raytracer : torch::CustomClassHolder {
             {num_gaussians, 1},
             torch::dtype(torch::kFloat32).device(torch::kCUDA));
 #endif
-#if ATTACH_SPECULAR == true
-        m_gaussian_specular = torch::zeros(
-            {num_gaussians, 1},
-            torch::dtype(torch::kFloat32).device(torch::kCUDA));
-        m_dL_dgaussian_specular = torch::zeros(
-            {num_gaussians, 1},
-            torch::dtype(torch::kFloat32).device(torch::kCUDA));
-#endif
-#if ATTACH_ALBEDO == true
-        m_gaussian_albedo = torch::zeros(
-            {num_gaussians, 3},
-            torch::dtype(torch::kFloat32).device(torch::kCUDA));
-        m_dL_dgaussian_albedo = torch::zeros(
-            {num_gaussians, 3},
-            torch::dtype(torch::kFloat32).device(torch::kCUDA));
-#endif
-#if ATTACH_METALNESS == true
-        m_gaussian_metalness = torch::zeros(
-            {num_gaussians, 1},
-            torch::dtype(torch::kFloat32).device(torch::kCUDA));
-        m_dL_dgaussian_metalness = torch::zeros(
-            {num_gaussians, 1},
-            torch::dtype(torch::kFloat32).device(torch::kCUDA));
-#endif
 
         // Create output and target buffers
         m_output_rgb = torch::zeros(
@@ -574,36 +538,6 @@ struct Raytracer : torch::CustomClassHolder {
             torch::dtype(torch::kFloat32).device(torch::kCUDA));
 #endif
         m_target_roughness = torch::zeros(
-            {image_height, image_width, 1},
-            torch::dtype(torch::kFloat32).device(torch::kCUDA));
-#endif
-#if ATTACH_SPECULAR == true
-#if SAVE_ALL_MAPS == true
-        m_output_specular = torch::zeros(
-            {MAX_BOUNCES + 1, image_height, image_width, 1},
-            torch::dtype(torch::kFloat32).device(torch::kCUDA));
-#endif
-        m_target_specular = torch::zeros(
-            {image_height, image_width, 1},
-            torch::dtype(torch::kFloat32).device(torch::kCUDA));
-#endif
-#if ATTACH_ALBEDO == true
-#if SAVE_ALL_MAPS == true
-        m_output_albedo = torch::zeros(
-            {MAX_BOUNCES + 1, image_height, image_width, 3},
-            torch::dtype(torch::kFloat32).device(torch::kCUDA));
-#endif
-        m_target_albedo = torch::zeros(
-            {image_height, image_width, 3},
-            torch::dtype(torch::kFloat32).device(torch::kCUDA));
-#endif
-#if ATTACH_METALNESS == true
-#if SAVE_ALL_MAPS == true
-        m_output_metalness = torch::zeros(
-            {MAX_BOUNCES + 1, image_height, image_width, 1},
-            torch::dtype(torch::kFloat32).device(torch::kCUDA));
-#endif
-        m_target_metalness = torch::zeros(
             {image_height, image_width, 1},
             torch::dtype(torch::kFloat32).device(torch::kCUDA));
 #endif
@@ -885,15 +819,6 @@ struct Raytracer : torch::CustomClassHolder {
 #if ATTACH_ROUGHNESS == true
             m_gaussian_roughness.mutable_grad() = m_dL_dgaussian_roughness;
 #endif
-#if ATTACH_SPECULAR == true
-            m_gaussian_specular.mutable_grad() = m_dL_dgaussian_specular;
-#endif
-#if ATTACH_ALBEDO == true
-            m_gaussian_albedo.mutable_grad() = m_dL_dgaussian_albedo;
-#endif
-#if ATTACH_METALNESS == true
-            m_gaussian_metalness.mutable_grad() = m_dL_dgaussian_metalness;
-#endif
 
             // Gaussian parameters
             m_h_params.gaussian_rgb =
@@ -956,24 +881,6 @@ struct Raytracer : torch::CustomClassHolder {
                 reinterpret_cast<float *>(m_gaussian_roughness.data_ptr());
             m_h_params.dL_dgaussian_roughness =
                 reinterpret_cast<float *>(m_dL_dgaussian_roughness.data_ptr());
-#endif
-#if ATTACH_SPECULAR == true
-            m_h_params.gaussian_specular =
-                reinterpret_cast<float *>(m_gaussian_specular.data_ptr());
-            m_h_params.dL_dgaussian_specular =
-                reinterpret_cast<float *>(m_dL_dgaussian_specular.data_ptr());
-#endif
-#if ATTACH_ALBEDO == true
-            m_h_params.gaussian_albedo =
-                reinterpret_cast<float3 *>(m_gaussian_albedo.data_ptr());
-            m_h_params.dL_dgaussian_albedo =
-                reinterpret_cast<float3 *>(m_dL_dgaussian_albedo.data_ptr());
-#endif
-#if ATTACH_METALNESS == true
-            m_h_params.gaussian_metalness =
-                reinterpret_cast<float *>(m_gaussian_metalness.data_ptr());
-            m_h_params.dL_dgaussian_metalness =
-                reinterpret_cast<float *>(m_dL_dgaussian_metalness.data_ptr());
 #endif
 
             m_h_params.gaussian_total_weight =
@@ -1080,30 +987,6 @@ struct Raytracer : torch::CustomClassHolder {
 #endif
             m_h_params.target_roughness =
                 reinterpret_cast<float *>(m_target_roughness.data_ptr());
-#endif
-#if ATTACH_SPECULAR == true
-#if SAVE_ALL_MAPS == true
-            m_h_params.output_specular =
-                reinterpret_cast<float *>(m_output_specular.data_ptr());
-#endif
-            m_h_params.target_specular =
-                reinterpret_cast<float *>(m_target_specular.data_ptr());
-#endif
-#if ATTACH_ALBEDO == true
-#if SAVE_ALL_MAPS == true
-            m_h_params.output_albedo =
-                reinterpret_cast<float3 *>(m_output_albedo.data_ptr());
-#endif
-            m_h_params.target_albedo =
-                reinterpret_cast<float3 *>(m_target_albedo.data_ptr());
-#endif
-#if ATTACH_METALNESS == true
-#if SAVE_ALL_MAPS == true
-            m_h_params.output_metalness =
-                reinterpret_cast<float *>(m_output_metalness.data_ptr());
-#endif
-            m_h_params.target_metalness =
-                reinterpret_cast<float *>(m_target_metalness.data_ptr());
 #endif
 #if RENDER_DISTORTION == true
             m_h_params.output_distortion =
@@ -1360,7 +1243,6 @@ struct Raytracer : torch::CustomClassHolder {
 #if DENOISER == true
         {
             OptixDenoiserOptions options = {};
-            options.guideAlbedo = 0; // data.albedo ? 1 : 0;
             options.guideNormal = 1; // data.normal ? 1 : 0;
             options.denoiseAlpha = (OptixDenoiserAlphaMode)0; // alphaMode;
 
@@ -1447,8 +1329,6 @@ struct Raytracer : torch::CustomClassHolder {
             m_layers.push_back(layer);
         }
 
-        // m_guideLayer.albedo = createOptixImage2D( data.width, data.height,
-        // data.albedo );
         m_guideLayer.normal = createOptixImage2D(
             m_width,
             m_height,
@@ -1658,12 +1538,6 @@ struct Raytracer : torch::CustomClassHolder {
             GetEnvironmentVariableOrDefault("F0_LOSS_WEIGHT", 1.0f);
         m_h_params.roughness_loss_weight =
             GetEnvironmentVariableOrDefault("ROUGHNESS_LOSS_WEIGHT", 1.0f);
-        m_h_params.specular_loss_weight =
-            GetEnvironmentVariableOrDefault("SPECULAR_LOSS_WEIGHT", 1.0f);
-        m_h_params.albedo_loss_weight =
-            GetEnvironmentVariableOrDefault("ALBEDO_LOSS_WEIGHT", 1.0f);
-        m_h_params.metalness_loss_weight =
-            GetEnvironmentVariableOrDefault("METALNESS_LOSS_WEIGHT", 1.0f);
 
         printf("diffuse_loss_weight: %f\n", m_h_params.diffuse_loss_weight);
         printf("glossy_loss_weight: %f\n", m_h_params.glossy_loss_weight);
@@ -1671,9 +1545,6 @@ struct Raytracer : torch::CustomClassHolder {
         printf("position_loss_weight: %f\n", m_h_params.position_loss_weight);
         printf("f0_loss_weight: %f\n", m_h_params.f0_loss_weight);
         printf("roughness_loss_weight: %f\n", m_h_params.roughness_loss_weight);
-        printf("specular_loss_weight: %f\n", m_h_params.specular_loss_weight);
-        printf("albedo_loss_weight: %f\n", m_h_params.albedo_loss_weight);
-        printf("metalness_loss_weight: %f\n", m_h_params.metalness_loss_weight);
 
         if (updateParams) {
             CUDA_CHECK(cudaMemcpy(
@@ -1786,30 +1657,6 @@ struct Raytracer : torch::CustomClassHolder {
             reinterpret_cast<float *>(m_gaussian_roughness.data_ptr());
         m_h_params.dL_dgaussian_roughness =
             reinterpret_cast<float *>(m_dL_dgaussian_roughness.data_ptr());
-#endif
-#if ATTACH_SPECULAR == true
-        m_gaussian_specular.resize_({num_new_gaussians, 1});
-        m_dL_dgaussian_specular.resize_({num_new_gaussians, 1});
-        m_h_params.gaussian_specular =
-            reinterpret_cast<float *>(m_gaussian_specular.data_ptr());
-        m_h_params.dL_dgaussian_specular =
-            reinterpret_cast<float *>(m_dL_dgaussian_specular.data_ptr());
-#endif
-#if ATTACH_ALBEDO == true
-        m_gaussian_albedo.resize_({num_new_gaussians, 3});
-        m_dL_dgaussian_albedo.resize_({num_new_gaussians, 3});
-        m_h_params.gaussian_albedo =
-            reinterpret_cast<float3 *>(m_gaussian_albedo.data_ptr());
-        m_h_params.dL_dgaussian_albedo =
-            reinterpret_cast<float3 *>(m_dL_dgaussian_albedo.data_ptr());
-#endif
-#if ATTACH_METALNESS == true
-        m_gaussian_metalness.resize_({num_new_gaussians, 1});
-        m_dL_dgaussian_metalness.resize_({num_new_gaussians, 1});
-        m_h_params.gaussian_metalness =
-            reinterpret_cast<float *>(m_gaussian_metalness.data_ptr());
-        m_h_params.dL_dgaussian_metalness =
-            reinterpret_cast<float *>(m_dL_dgaussian_metalness.data_ptr());
 #endif
         //
         m_gaussian_mask.resize_({num_new_gaussians, 1});
@@ -2292,9 +2139,6 @@ struct Raytracer : torch::CustomClassHolder {
              torch::from_blob(dump.normal, {MAX_BOUNCES + 1, 3}),
              torch::from_blob(dump.f0, {MAX_BOUNCES + 1, 3}),
              torch::from_blob(dump.roughness, {MAX_BOUNCES + 1}),
-             torch::from_blob(dump.specular, {MAX_BOUNCES + 1}),
-             torch::from_blob(dump.albedo, {MAX_BOUNCES + 1, 3}),
-             torch::from_blob(dump.metalness, {MAX_BOUNCES + 1}),
              torch::from_blob(dump.lod_mean, {MAX_DUMPED_HITS}),
              torch::from_blob(dump.lod_scale, {MAX_DUMPED_HITS}),
              torch::from_blob(dump.ray_lod, {MAX_DUMPED_HITS}),
@@ -2445,14 +2289,6 @@ TORCH_LIBRARY(gausstracer, m) {
         .def_readonly("gaussian_roughness", &Raytracer::m_gaussian_roughness)
         .def_readonly(
             "dL_dgaussian_roughness", &Raytracer::m_dL_dgaussian_roughness)
-        .def_readonly("gaussian_specular", &Raytracer::m_gaussian_specular)
-        .def_readonly(
-            "dL_dgaussian_specular", &Raytracer::m_dL_dgaussian_specular)
-        .def_readonly("gaussian_albedo", &Raytracer::m_gaussian_albedo)
-        .def_readonly("dL_dgaussian_albedo", &Raytracer::m_dL_dgaussian_albedo)
-        .def_readonly("gaussian_metalness", &Raytracer::m_gaussian_metalness)
-        .def_readonly(
-            "dL_dgaussian_metalness", &Raytracer::m_dL_dgaussian_metalness)
         .def_readonly(
             "gaussian_total_weight", &Raytracer::m_gaussian_total_weight)
         .def_readonly(
@@ -2479,9 +2315,6 @@ TORCH_LIBRARY(gausstracer, m) {
         .def_readonly("output_normal", &Raytracer::m_output_normal)
         .def_readonly("output_f0", &Raytracer::m_output_f0)
         .def_readonly("output_roughness", &Raytracer::m_output_roughness)
-        .def_readonly("output_specular", &Raytracer::m_output_specular)
-        .def_readonly("output_albedo", &Raytracer::m_output_albedo)
-        .def_readonly("output_metalness", &Raytracer::m_output_metalness)
         .def_readonly("output_distortion", &Raytracer::m_output_distortion)
         .def_readonly("output_brdf", &Raytracer::m_output_brdf)
         .def_readonly(
@@ -2519,9 +2352,6 @@ TORCH_LIBRARY(gausstracer, m) {
         .def_readonly("target_normal", &Raytracer::m_target_normal)
         .def_readonly("target_f0", &Raytracer::m_target_f0)
         .def_readonly("target_roughness", &Raytracer::m_target_roughness)
-        .def_readonly("target_specular", &Raytracer::m_target_specular)
-        .def_readonly("target_albedo", &Raytracer::m_target_albedo)
-        .def_readonly("target_metalness", &Raytracer::m_target_metalness)
         .def_readonly("target_brdf", &Raytracer::m_target_brdf)
         .def_readonly(
             "target_diffuse_irradiance",

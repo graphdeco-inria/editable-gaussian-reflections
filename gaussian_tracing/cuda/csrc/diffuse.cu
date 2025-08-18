@@ -9,18 +9,12 @@ for (int i = 0; i < 6; i++) {
     float3 remaining_normal = make_float3(0.0f, 0.0f, 0.0f);
     float3 remaining_f0 = make_float3(0.0f, 0.0f, 0.0f);
     float remaining_roughness = 0.0f;
-    float remaining_specular = 0.0f;
-    float3 remaining_albedo = make_float3(0.0f, 0.0f, 0.0f);
-    float remaining_metalness = 0.0f;
 
     float2 output_t = make_float2(1.0f, 1.0f);
     float3 output_position = make_float3(0.0f, 0.0f, 0.0f);
     float3 output_normal = make_float3(0.0f, 0.0f, 0.0f);
     float3 output_f0 = make_float3(0.0f, 0.0f, 0.0f);
     float output_roughness = 0.0f;
-    float output_specular = 0.0f;
-    float3 output_albedo = make_float3(0.0f, 0.0f, 0.0f);
-    float output_metalness = 0.0f;
     float3 output_surface_brdf = make_float3(1.0f, 1.0f, 1.0f);
 
     // float3 tile_origin = // todo set to origin from the first raytrace
@@ -40,17 +34,11 @@ for (int i = 0; i < 6; i++) {
         output_normal,
         output_f0,
         output_roughness,
-        output_specular,
-        output_albedo,
-        output_metalness,
         remaining_rgb,
         remaining_position,
         remaining_normal,
         remaining_f0,
         remaining_roughness,
-        remaining_specular,
-        remaining_albedo,
-        remaining_metalness,
         num_hits);
 
     // todo multiply by the same brdf here
@@ -63,9 +51,9 @@ for (int i = 0; i < 6; i++) {
 //         ray_id, tile_origin, tile_direction,
 //         origin, direction,
 //         output_rgb, output_t,  output_position, output_normal, output_f0,
-//         output_roughness, output_specular, output_albedo, output_metalness,
+//         output_roughness,
 //         remaining_rgb, remaining_position, remaining_normal, remaining_f0,
-//         remaining_roughness, remaining_specular, remaining_albedo,
-//         remaining_metalness, num_hits, output_surface_brdf
+//         remaining_roughness,
+//         num_hits, output_surface_brdf
 //     );
 // }

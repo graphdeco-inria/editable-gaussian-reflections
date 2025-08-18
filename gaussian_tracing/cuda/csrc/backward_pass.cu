@@ -28,9 +28,6 @@ __device__ void backward_pass(
     const float3 (&output_normal)[TILE_SIZE * TILE_SIZE],
     const float3 (&output_f0)[TILE_SIZE * TILE_SIZE],
     const float (&output_roughness)[TILE_SIZE * TILE_SIZE],
-    const float (&output_specular)[TILE_SIZE * TILE_SIZE],
-    const float3 (&output_albedo)[TILE_SIZE * TILE_SIZE],
-    const float (&output_metalness)[TILE_SIZE * TILE_SIZE],
     const float (&output_distortion)[TILE_SIZE * TILE_SIZE],
     //
     const float3 (&remaining_rgb)[TILE_SIZE * TILE_SIZE],
@@ -39,9 +36,6 @@ __device__ void backward_pass(
     const float3 (&remaining_normal)[TILE_SIZE * TILE_SIZE],
     const float3 (&remaining_f0)[TILE_SIZE * TILE_SIZE],
     const float (&remaining_roughness)[TILE_SIZE * TILE_SIZE],
-    const float (&remaining_specular)[TILE_SIZE * TILE_SIZE],
-    const float3 (&remaining_albedo)[TILE_SIZE * TILE_SIZE],
-    const float (&remaining_metalness)[TILE_SIZE * TILE_SIZE],
     const float (&remaining_distortion)[TILE_SIZE * TILE_SIZE],
     //
     const int num_hits,
@@ -60,9 +54,6 @@ __device__ void backward_pass(
     const float3 target_normal[TILE_SIZE * TILE_SIZE],
     const float3 target_f0[TILE_SIZE * TILE_SIZE],
     const float target_roughness[TILE_SIZE * TILE_SIZE],
-    const float target_specular[TILE_SIZE * TILE_SIZE],
-    const float3 target_albedo[TILE_SIZE * TILE_SIZE],
-    const float target_metalness[TILE_SIZE * TILE_SIZE],
     //
     const float3 error[TILE_SIZE * TILE_SIZE],
     const float loss_modulation,
@@ -124,27 +115,6 @@ __device__ void backward_pass(
     fill_array(backward_prev_gaussian_roughness, TILE_SIZE * TILE_SIZE, 0.0f);
     float backward_weighted_roughness_deltas[TILE_SIZE * TILE_SIZE];
     fill_array(backward_weighted_roughness_deltas, TILE_SIZE * TILE_SIZE, 0.0f);
-    //
-    float backward_prev_gaussian_specular[TILE_SIZE * TILE_SIZE];
-    fill_array(backward_prev_gaussian_specular, TILE_SIZE * TILE_SIZE, 0.0f);
-    float backward_weighted_specular_deltas[TILE_SIZE * TILE_SIZE];
-    fill_array(backward_weighted_specular_deltas, TILE_SIZE * TILE_SIZE, 0.0f);
-    //
-    float3 backward_prev_gaussian_albedo[TILE_SIZE * TILE_SIZE];
-    fill_array(
-        backward_prev_gaussian_albedo,
-        TILE_SIZE * TILE_SIZE,
-        make_float3(0.0f, 0.0f, 0.0f));
-    float3 backward_weighted_albedo_deltas[TILE_SIZE * TILE_SIZE];
-    fill_array(
-        backward_weighted_albedo_deltas,
-        TILE_SIZE * TILE_SIZE,
-        make_float3(0.0f, 0.0f, 0.0f));
-    //
-    float backward_prev_gaussian_metalness[TILE_SIZE * TILE_SIZE];
-    fill_array(backward_prev_gaussian_metalness, TILE_SIZE * TILE_SIZE, 0.0f);
-    float backward_weighted_metalness_deltas[TILE_SIZE * TILE_SIZE];
-    fill_array(backward_weighted_metalness_deltas, TILE_SIZE * TILE_SIZE, 0.0f);
 
     if (*params.grads_enabled) {
         int i = num_hits - 1;
@@ -221,15 +191,6 @@ __device__ void backward_pass(
 #if ATTACH_ROUGHNESS == true
             float gaussian_roughness;
 #endif
-#if ATTACH_SPECULAR == true
-            float gaussian_specular;
-#endif
-#if ATTACH_ALBEDO == true
-            float3 gaussian_albedo;
-#endif
-#if ATTACH_METALNESS == true
-            float gaussian_metalness;
-#endif
 
             if (step == 0) {
 #if ATTACH_POSITION == true
@@ -248,15 +209,6 @@ __device__ void backward_pass(
 #endif
 #if ATTACH_ROUGHNESS == true
                 gaussian_roughness = READ_ROUGHNESS(gaussian_id);
-#endif
-#if ATTACH_SPECULAR == true
-                gaussian_specular = params.gaussian_specular[gaussian_id];
-#endif
-#if ATTACH_ALBEDO == true
-                gaussian_albedo = params.gaussian_albedo[gaussian_id];
-#endif
-#if ATTACH_METALNESS == true
-                gaussian_metalness = params.gaussian_metalness[gaussian_id];
 #endif
             }
 
@@ -288,15 +240,6 @@ __device__ void backward_pass(
 #endif
 #if ATTACH_ROUGHNESS == true
             float dL_dgaussian_roughness_total = 0.0f;
-#endif
-#if ATTACH_SPECULAR == true
-            float dL_dgaussian_specular_total = 0.0f;
-#endif
-#if ATTACH_ALBEDO == true
-            float3 dL_dgaussian_albedo_total = make_float3(0.0f, 0.0f, 0.0f);
-#endif
-#if ATTACH_METALNESS == true
-            float dL_dgaussian_metalness_total = 0.0f;
 #endif
             float dL_dopacity_total = 0.0f;
             float4 dL_drot_total = make_float4(0.0f, 0.0f, 0.0f, 0.0f);
@@ -356,9 +299,6 @@ __device__ void backward_pass(
                 float3 dL_doutput_normal = make_float3(0.0f, 0.0f, 0.0f);
                 float3 dL_doutput_f0 = make_float3(0.0f, 0.0f, 0.0f);
                 float dL_doutput_roughness = 0.0f;
-                float dL_doutput_specular = 0.0f;
-                float3 dL_doutput_albedo = make_float3(0.0f, 0.0f, 0.0f);
-                float dL_doutput_metalness = 0.0f;
 
                 if (step == 0) {
 #if POSITION_FROM_EXPECTED_TERMINATION_DEPTH == true
@@ -385,20 +325,6 @@ __device__ void backward_pass(
                         sign(output_roughness[k] - target_roughness[k]) /
                         num_pixels *
                         (step == 0 ? params.roughness_loss_weight : 0.0f);
-                    dL_doutput_specular =
-                        2.0f / 1.0f *
-                        sign(output_specular[k] - target_specular[k]) /
-                        num_pixels *
-                        (step == 0 ? params.specular_loss_weight : 0.0f);
-                    dL_doutput_albedo =
-                        2.0f / 3.0f *
-                        sign(output_albedo[k] - target_albedo[k]) / num_pixels *
-                        (step == 0 ? params.albedo_loss_weight : 0.0f);
-                    dL_doutput_metalness =
-                        2.0f / 1.0f *
-                        sign(output_metalness[k] - target_metalness[k]) /
-                        num_pixels *
-                        (step == 0 ? params.metalness_loss_weight : 0.0f);
                 } else {
                     dL_doutput_rgb = dL_doutput_rgb * throughput[k];
                     dL_dthroughput_out[k] =
@@ -430,9 +356,6 @@ __device__ void backward_pass(
                 float3 dL_dgaussian_normal = dL_doutput_normal * weight;
                 float3 dL_dgaussian_f0 = dL_doutput_f0 * weight;
                 float dL_dgaussian_roughness = dL_doutput_roughness * weight;
-                float dL_dgaussian_specular = dL_doutput_specular * weight;
-                float3 dL_dgaussian_albedo = dL_doutput_albedo * weight;
-                float dL_dgaussian_metalness = dL_doutput_metalness * weight;
 
                 dL_drgb_total += dL_drgb;
                 if (step == 0) {
@@ -451,25 +374,18 @@ __device__ void backward_pass(
                     dL_dgaussian_roughness_total += backward_clipped_relu_act(
                         dL_dgaussian_roughness, gaussian_roughness);
 #endif
-// #else
-//     #if ATTACH_F0 == true
-//         dL_dgaussian_f0_total += backward_sigmoid_act(dL_dgaussian_f0,
-//         gaussian_f0);
-//     #endif
-//     #if ATTACH_ROUGHNESS == true
-//         dL_dgaussian_roughness_total +=
-//         backward_sigmoid_act(dL_dgaussian_roughness, gaussian_roughness);
-//     #endif
-// #endif
-#if ATTACH_SPECULAR == true
-                    dL_dgaussian_specular_total += dL_dgaussian_specular;
-#endif
-#if ATTACH_ALBEDO == true
-                    dL_dgaussian_albedo_total += dL_dgaussian_albedo;
-#endif
-#if ATTACH_METALNESS == true
-                    dL_dgaussian_metalness_total += dL_dgaussian_metalness;
-#endif
+                    // #else
+                    //     #if ATTACH_F0 == true
+                    //         dL_dgaussian_f0_total +=
+                    //         backward_sigmoid_act(dL_dgaussian_f0,
+                    //         gaussian_f0);
+                    //     #endif
+                    //     #if ATTACH_ROUGHNESS == true
+                    //         dL_dgaussian_roughness_total +=
+                    //         backward_sigmoid_act(dL_dgaussian_roughness,
+                    //         gaussian_roughness);
+                    //     #endif
+                    // #endif
                 }
 
                 // * Alpha gradient
@@ -520,32 +436,6 @@ __device__ void backward_pass(
                         gaussian_roughness; // todo re-read from memory instead
                                             // of storing in registers
 #endif
-#if ATTACH_SPECULAR == true
-                    backward_weighted_specular_deltas[k] +=
-                        (gaussian_specular -
-                         backward_prev_gaussian_specular[k]) *
-                        curr_T;
-                    backward_prev_gaussian_specular[k] =
-                        gaussian_specular; // todo re-read from memory instead
-                                           // of storing in registers
-#endif
-#if ATTACH_ALBEDO == true
-                    backward_weighted_albedo_deltas[k] +=
-                        (gaussian_albedo - backward_prev_gaussian_albedo[k]) *
-                        curr_T;
-                    backward_prev_gaussian_albedo[k] =
-                        gaussian_albedo; // todo re-read from memory instead of
-                                         // storing in registers
-#endif
-#if ATTACH_METALNESS == true
-                    backward_weighted_metalness_deltas[k] +=
-                        (gaussian_metalness -
-                         backward_prev_gaussian_metalness[k]) *
-                        curr_T;
-                    backward_prev_gaussian_metalness[k] =
-                        gaussian_metalness; // todo re-read from memory instead
-                                            // of storing in registers
-#endif
                 }
 
                 float dL_dalpha =
@@ -580,21 +470,6 @@ __device__ void backward_pass(
                     -((output_t[k].x - output_t[k].y) / (1.0 - alpha)) *
                     remaining_roughness[k] * dL_doutput_roughness;
 #endif
-#if ATTACH_SPECULAR == true
-                dL_dalpha +=
-                    -((output_t[k].x - output_t[k].y) / (1.0 - alpha)) *
-                    dot(remaining_specular[k], dL_doutput_specular);
-#endif
-#if ATTACH_ALBEDO == true
-                dL_dalpha +=
-                    -((output_t[k].x - output_t[k].y) / (1.0 - alpha)) *
-                    dot(remaining_albedo[k], dL_doutput_albedo);
-#endif
-#if ATTACH_METALNESS == true
-                dL_dalpha +=
-                    -((output_t[k].x - output_t[k].y) / (1.0 - alpha)) *
-                    dot(remaining_metalness[k], dL_doutput_metalness);
-#endif
 #endif
 
                 if (step == 0) {
@@ -619,19 +494,6 @@ __device__ void backward_pass(
 #if ATTACH_ROUGHNESS == true
                     dL_dalpha += backward_weighted_roughness_deltas[k] /
                                  (1.0f - alpha) * dL_doutput_roughness;
-#endif
-#if ATTACH_SPECULAR == true
-                    dL_dalpha += backward_weighted_specular_deltas[k] /
-                                 (1.0f - alpha) * dL_doutput_specular;
-#endif
-#if ATTACH_ALBEDO == true
-                    dL_dalpha +=
-                        dot(backward_weighted_albedo_deltas[k] / (1.0f - alpha),
-                            dL_doutput_albedo);
-#endif
-#if ATTACH_METALNESS == true
-                    dL_dalpha += backward_weighted_metalness_deltas[k] /
-                                 (1.0f - alpha) * dL_doutput_metalness;
 #endif
                 }
 
@@ -984,24 +846,6 @@ __device__ void backward_pass(
                     atomicAdd(
                         &params.dL_dgaussian_roughness[gaussian_id],
                         dL_dgaussian_roughness_total * grad_dist_weight *
-                            GLOBAL_GRADIENT_SCALE);
-#endif
-#if ATTACH_SPECULAR == true
-                    atomicAdd(
-                        &params.dL_dgaussian_specular[gaussian_id],
-                        dL_dgaussian_specular_total * grad_dist_weight *
-                            GLOBAL_GRADIENT_SCALE);
-#endif
-#if ATTACH_ALBEDO == true
-                    atomicAdd3(
-                        &params.dL_dgaussian_albedo[gaussian_id],
-                        dL_dgaussian_albedo_total * grad_dist_weight *
-                            GLOBAL_GRADIENT_SCALE);
-#endif
-#if ATTACH_METALNESS == true
-                    atomicAdd(
-                        &params.dL_dgaussian_metalness[gaussian_id],
-                        dL_dgaussian_metalness_total * grad_dist_weight *
                             GLOBAL_GRADIENT_SCALE);
 #endif
                 }

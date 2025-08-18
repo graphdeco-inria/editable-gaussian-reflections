@@ -24,9 +24,6 @@ __device__ void froward_pass(
     float3 (&output_normal)[NUM_CLUSTERS][TILE_SIZE * TILE_SIZE],
     float3 (&output_f0)[NUM_CLUSTERS][TILE_SIZE * TILE_SIZE],
     float (&output_roughness)[NUM_CLUSTERS][TILE_SIZE * TILE_SIZE],
-    float (&output_specular)[NUM_CLUSTERS][TILE_SIZE * TILE_SIZE],
-    float3 (&output_albedo)[NUM_CLUSTERS][TILE_SIZE * TILE_SIZE],
-    float (&output_metalness)[NUM_CLUSTERS][TILE_SIZE * TILE_SIZE],
     float (&output_distortion)[NUM_CLUSTERS][TILE_SIZE * TILE_SIZE],
     float (&output_lod_mean)[NUM_CLUSTERS][TILE_SIZE * TILE_SIZE],
     float (&output_lod_scale)[NUM_CLUSTERS][TILE_SIZE * TILE_SIZE],
@@ -38,9 +35,6 @@ __device__ void froward_pass(
     float3 (&remaining_normal)[NUM_CLUSTERS][TILE_SIZE * TILE_SIZE],
     float3 (&remaining_f0)[NUM_CLUSTERS][TILE_SIZE * TILE_SIZE],
     float (&remaining_roughness)[NUM_CLUSTERS][TILE_SIZE * TILE_SIZE],
-    float (&remaining_specular)[NUM_CLUSTERS][TILE_SIZE * TILE_SIZE],
-    float3 (&remaining_albedo)[NUM_CLUSTERS][TILE_SIZE * TILE_SIZE],
-    float (&remaining_metalness)[NUM_CLUSTERS][TILE_SIZE * TILE_SIZE],
     float (&remaining_distortion)[NUM_CLUSTERS][TILE_SIZE * TILE_SIZE],
     float (&remaining_lod_mean)[NUM_CLUSTERS][TILE_SIZE * TILE_SIZE],
     float (&remaining_ray_lod)[NUM_CLUSTERS][TILE_SIZE * TILE_SIZE],
@@ -384,16 +378,6 @@ __device__ void froward_pass(
 #if ATTACH_ROUGHNESS == true
                 float gaussian_roughness = READ_ROUGHNESS(gaussian_id);
 #endif
-#if ATTACH_SPECULAR == true
-                float gaussian_specular = params.gaussian_specular[gaussian_id];
-#endif
-#if ATTACH_ALBEDO == true
-                float3 gaussian_albedo = params.gaussian_albedo[gaussian_id];
-#endif
-#if ATTACH_METALNESS == true
-                float gaussian_metalness =
-                    params.gaussian_metalness[gaussian_id];
-#endif
 
 #if RECOMPUTE_ALPHA_IN_FORWARD_PASS == true
                 float opacity = READ_OPACITY(gaussian_id);
@@ -570,15 +554,6 @@ __device__ void froward_pass(
 #if ATTACH_ROUGHNESS == true
                     output_roughness[k][c] += gaussian_roughness * weight;
 #endif
-#if ATTACH_SPECULAR == true
-                    output_specular[k][c] += gaussian_specular * weight;
-#endif
-#if ATTACH_ALBEDO == true
-                    output_albedo[k][c] += gaussian_albedo * weight;
-#endif
-#if ATTACH_METALNESS == true
-                    output_metalness[k][c] += gaussian_metalness * weight;
-#endif
 #if RENDER_DISTORTION == true
                     float rescaled_distance =
                         distance -
@@ -703,15 +678,6 @@ finished_integration:
     //             #if ATTACH_ROUGHNESS == true
     //                 output_roughness[k][c] *= cw;
     //             #endif
-    //             #if ATTACH_SPECULAR == true
-    //                 output_specular[k][c] *= cw;
-    //             #endif
-    //             #if ATTACH_ALBEDO == true
-    //                 output_albedo[k][c] *= cw;
-    //             #endif
-    //             #if ATTACH_METALNESS == true
-    //                 output_metalness[k][c] *= cw;
-    //             #endif
     //             #if RENDER_DISTORTION == true
     //                 output_distortion[k] *= cw;
     //             #endif
@@ -758,15 +724,6 @@ finished_integration:
 #if ATTACH_ROUGHNESS == true
         remaining_roughness[k][0] = output_roughness[k][0] / normalization;
 #endif
-#if ATTACH_SPECULAR == true
-        remaining_specular[k][0] = output_specular[k][0] / normalization;
-#endif
-#if ATTACH_ALBEDO == true
-        remaining_albedo[k][0] = output_albedo[k][0] / normalization;
-#endif
-#if ATTACH_METALNESS == true
-        remaining_metalness[k][0] = output_metalness[k][0] / normalization;
-#endif
 #if RENDER_DISTORTION == true
         remaining_distortion[k][0] = output_distortion[k][0] / normalization;
 #endif
@@ -790,15 +747,6 @@ finished_integration:
 #endif
 #if ATTACH_ROUGHNESS == true
     float average_roughness = 0.0f;
-#endif
-#if ATTACH_SPECULAR == true
-    float average_specular = 0.0f;
-#endif
-#if ATTACH_ALBEDO == true
-    float3 average_albedo = make_float3(0.0f, 0.0f, 0.0f);
-#endif
-#if ATTACH_METALNESS == true
-    float average_metalness = 0.0f;
 #endif
 #if RENDER_DISTORTION == true
     float average_distortion = 0.0f;
@@ -832,18 +780,6 @@ finished_integration:
             float roughness = READ_ROUGHNESS(gaussian_id);
             average_roughness += roughness * alpha;
 #endif
-#if ATTACH_SPECULAR == true
-            float specular = params.gaussian_specular[gaussian_id];
-            average_specular += specular * alpha;
-#endif
-#if ATTACH_ALBEDO == true
-            float3 albedo = params.gaussian_albedo[gaussian_id];
-            average_albedo += albedo * alpha;
-#endif
-#if ATTACH_METALNESS == true
-            float metalness = params.gaussian_metalness[gaussian_id];
-            average_metalness += metalness * alpha;
-#endif
 #if RENDER_DISTORTION == true
             float distortion = params.gaussian_distortion[gaussian_id];
             average_distortion += distortion * alpha;
@@ -864,15 +800,6 @@ finished_integration:
 #endif
 #if ATTACH_ROUGHNESS == true
     average_roughness /= max(alpha_sum, 1e-8);
-#endif
-#if ATTACH_SPECULAR == true
-    average_specular /= max(alpha_sum, 1e-8);
-#endif
-#if ATTACH_ALBEDO == true
-    average_albedo /= max(alpha_sum, 1e-8);
-#endif
-#if ATTACH_METALNESS == true
-    average_metalness /= max(alpha_sum, 1e-8);
 #endif
 #if RENDER_DISTORTION == true
     average_distortion /= max(alpha_sum, 1e-8);
@@ -928,18 +855,6 @@ finished_integration:
         float sample_roughness =
             READ_ROUGHNESS(gaussian_id) / NUM_STOCH_SAMPLES;
 #endif
-#if ATTACH_SPECULAR == true
-        float sample_specular =
-            params.gaussian_specular[gaussian_id] / NUM_STOCH_SAMPLES;
-#endif
-#if ATTACH_ALBEDO == true
-        float3 sample_albedo =
-            params.gaussian_albedo[gaussian_id] / NUM_STOCH_SAMPLES;
-#endif
-#if ATTACH_METALNESS == true
-        float sample_metalness =
-            params.gaussian_metalness[gaussian_id] / NUM_STOCH_SAMPLES;
-#endif
 #if RENDER_DISTORTION == true
         float sample_distortion =
             params.gaussian_distortion[gaussian_id] / NUM_STOCH_SAMPLES;
@@ -958,15 +873,6 @@ finished_integration:
 #endif
 #if ATTACH_ROUGHNESS == true
             remaining_roughness[k][0] += sample_roughness;
-#endif
-#if ATTACH_SPECULAR == true
-            remaining_specular[k][0] += sample_specular;
-#endif
-#if ATTACH_ALBEDO == true
-            remaining_albedo[k][0] += sample_albedo;
-#endif
-#if ATTACH_METALNESS == true
-            remaining_metalness[k][0] += sample_metalness;
 #endif
 #if RENDER_DISTORTION == true
             remaining_distortion[k][0] += sample_distortion;
@@ -1003,18 +909,6 @@ finished_integration:
         output_roughness[k][0] =
             output_roughness[k][0] + remaining_T * remaining_roughness[k][0];
 #endif
-#if ATTACH_SPECULAR == true
-        output_specular[k][0] =
-            output_specular[k][0] + remaining_T * remaining_specular[k][0];
-#endif
-#if ATTACH_ALBEDO == true
-        output_albedo[k][0] =
-            output_albedo[k][0] + remaining_T * remaining_albedo[k][0];
-#endif
-#if ATTACH_METALNESS == true
-        output_metalness[k][0] =
-            output_metalness[k][0] + remaining_T * remaining_metalness[k][0];
-#endif
 #if RENDER_DISTORTION == true
         output_distortion[k][0] =
             output_distortion[k][0] + remaining_T * remaining_distortion[k][0];
@@ -1044,15 +938,6 @@ finished_integration:
 #endif
 #if ATTACH_ROUGHNESS == true
         params.dump->roughness[step] = output_roughness[0];
-#endif
-#if ATTACH_SPECULAR == true
-        params.dump->specular[step] = output_specular[0];
-#endif
-#if ATTACH_ALBEDO == true
-        params.dump->albedo[step] = output_albedo[0];
-#endif
-#if ATTACH_METALNESS == true
-        params.dump->metalness[step] = output_metalness[0];
 #endif
 #if RENDER_DISTORTION == true
         params.dump->distortion[step] = output_distortion[0];
