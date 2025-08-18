@@ -65,12 +65,6 @@ def render_set(
             glossy_gts_path = os.path.join(
                 model_path, split, "ours_{}".format(iteration), "glossy_gt"
             )
-            position_path = os.path.join(
-                model_path, split, "ours_{}".format(iteration), "position"
-            )
-            position_gts_path = os.path.join(
-                model_path, split, "ours_{}".format(iteration), "position_gt"
-            )
             depth_path = os.path.join(
                 model_path, split, "ours_{}".format(iteration), "depth"
             )
@@ -100,8 +94,6 @@ def render_set(
             makedirs(diffuse_gts_path, exist_ok=True)
             makedirs(glossy_render_path, exist_ok=True)
             makedirs(glossy_gts_path, exist_ok=True)
-            makedirs(position_path, exist_ok=True)
-            makedirs(position_gts_path, exist_ok=True)
             makedirs(depth_path, exist_ok=True)
             makedirs(depth_gts_path, exist_ok=True)
             makedirs(normal_path, exist_ok=True)
@@ -119,9 +111,6 @@ def render_set(
 
             all_glossy_renders = []
             all_glossy_gts = []
-
-            all_position_renders = []
-            all_position_gts = []
 
             all_depth_renders = []
             all_depth_gts = []
@@ -291,7 +280,6 @@ def render_set(
                 diffuse_gt_image = tonemap(view.diffuse_image).clamp(0.0, 1.0)
                 glossy_gt_image = tonemap(view.glossy_image).clamp(0.0, 1.0)
                 gt_image = tonemap(view.original_image).clamp(0.0, 1.0)
-                position_gt_image = view.position_image
                 normal_gt_image = view.normal_image
                 roughness_gt_image = view.roughness_image
                 depth_gt_image = view.depth_image.unsqueeze(0)
@@ -310,11 +298,6 @@ def render_set(
                     )[0]
                     gt_image = torch.nn.functional.interpolate(
                         gt_image[None],
-                        scale_factor=1.0 / cfg.supersampling,
-                        mode="area",
-                    )[0]
-                    position_gt_image = torch.nn.functional.interpolate(
-                        position_gt_image[None],
                         scale_factor=1.0 / cfg.supersampling,
                         mode="area",
                     )[0]
@@ -382,19 +365,6 @@ def render_set(
                         diffuse_gt_image,
                         os.path.join(
                             diffuse_gts_path, "{0:05d}".format(idx) + "_diffuse.png"
-                        ),
-                    )
-
-                    torchvision.utils.save_image(
-                        package.position[0],
-                        os.path.join(
-                            position_path, "{0:05d}".format(idx) + "_position.png"
-                        ),
-                    )
-                    torchvision.utils.save_image(
-                        position_gt_image,
-                        os.path.join(
-                            position_gts_path, "{0:05d}".format(idx) + "_position.png"
                         ),
                     )
 
@@ -474,9 +444,6 @@ def render_set(
                 all_glossy_renders.append(format_image(glossy_image))
                 all_glossy_gts.append(format_image(tonemap(package.target_glossy)))
 
-                all_position_renders.append(format_image(package.position[0]))
-                all_position_gts.append(format_image(package.target_position))
-
                 max_depth = package.target_depth.amax()
                 all_depth_renders.append(
                     format_image(package.depth[0] / max_depth).repeat(1, 1, 3)
@@ -500,11 +467,11 @@ def render_set(
 
             blur_suffix = f"_blur_{blur_sigma}" if blur_sigma is not None else ""
             video_dir = f"videos_{mode}{blur_suffix}/".replace("_normal", "")
-            os.makedirs(os.path.join(model_path, video_dir), exist_ok=True)
+            os.makedirs(os.path.join(cfg.model_path, video_dir), exist_ok=True)
 
             if not cfg.skip_video:
                 print("Writing videos...")
-                path = os.path.join(model_path, f"{{dir}}{split}_{{name}}.mp4")
+                path = os.path.join(cfg.model_path, f"{{dir}}{split}_{{name}}.mp4")
 
                 for label, quality in [("hq", "18"), ("lq", "30")]:
                     kwargs = dict(fps=30, options={"crf": quality})
@@ -565,28 +532,6 @@ def render_set(
                             [
                                 torch.stack(all_glossy_renders),
                                 torch.stack(all_glossy_gts),
-                            ],
-                            dim=2,
-                        ),
-                        **kwargs,
-                    )
-
-                    torchvision.io.write_video(
-                        path.format(name=f"position_renders_{label}", dir=video_dir),
-                        torch.stack(all_position_renders),
-                        **kwargs,
-                    )
-                    torchvision.io.write_video(
-                        path.format(name=f"position_gts_{label}", dir=video_dir),
-                        torch.stack(all_position_gts),
-                        **kwargs,
-                    )
-                    torchvision.io.write_video(
-                        path.format(name=f"position_comparison_{label}", dir=video_dir),
-                        torch.cat(
-                            [
-                                torch.stack(all_position_renders),
-                                torch.stack(all_position_gts),
                             ],
                             dim=2,
                         ),
