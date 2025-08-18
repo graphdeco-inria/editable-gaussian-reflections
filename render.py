@@ -262,9 +262,7 @@ def render_set(
                             background,
                         )
                 else:
-                    package = render(
-                        view, raytracer, pipe_params, background
-                    )
+                    package = render(view, raytracer, pipe_params, background)
 
                 if cfg.supersampling > 1:
                     for key, value in package.__dict__.items():

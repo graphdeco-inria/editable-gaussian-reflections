@@ -48,13 +48,9 @@ def render_set(
             raytracer.cuda_module.accumulated_normal.zero_()
             raytracer.cuda_module.accumulated_sample_count.zero_()
             for i in range(cfg.spp):
-                package = render(
-                    camera, raytracer, pipe_params, background
-                )
+                package = render(camera, raytracer, pipe_params, background)
         else:
-            package = render(
-                camera, raytracer, pipe_params, background
-            )
+            package = render(camera, raytracer, pipe_params, background)
 
         if cfg.supersampling > 1:
             for key, value in package.__dict__.items():
