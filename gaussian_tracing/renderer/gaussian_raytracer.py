@@ -110,17 +110,13 @@ class GaussianRaytracer:
         viewpoint_camera,
         pipe_params: PipelineParams,
         bg_color: torch.Tensor,
-        blur_sigma,
         target=None,
         target_diffuse=None,
         target_glossy=None,
-        target_position=None,
         target_depth=None,
         target_normal=None,
         target_roughness=None,
         target_f0=None,
-        target_brdf=None,
-        edits=None,
         force_update_bvh=False,
     ):
         """
@@ -170,18 +166,7 @@ class GaussianRaytracer:
                 else:
                     self.cuda_module.target_glossy.zero_()
 
-            if self.cuda_module.target_position is not None:
-                if target_position is not None:
-                    self.cuda_module.target_position.copy_(
-                        target_position.moveaxis(0, -1)
-                    )
-                else:
-                    self.cuda_module.target_position.zero_()
-
-            if (
-                hasattr(self.cuda_module, "target_depth")
-                and self.cuda_module.target_depth is not None
-            ):
+            if self.cuda_module.target_depth is not None:
                 if target_depth is not None:
                     self.cuda_module.target_depth.copy_(target_depth.unsqueeze(-1))
                 else:
@@ -206,12 +191,6 @@ class GaussianRaytracer:
                     self.cuda_module.target_f0.copy_(target_f0.moveaxis(0, -1))
                 else:
                     self.cuda_module.target_f0.zero_()
-
-            if self.cuda_module.target_brdf is not None:
-                if target_brdf is not None:
-                    self.cuda_module.target_brdf.copy_(target_brdf.moveaxis(0, -1))
-                else:
-                    self.cuda_module.target_brdf.zero_()
 
         if torch.is_grad_enabled() or force_update_bvh:
             self.cuda_module.update_bvh()
