@@ -254,7 +254,7 @@ class TyroConfig:
     # Iteration
     iteration: int = -1
     # Maximum number of bounces
-    max_bounces: int = -1
+    max_bounces: int = 2
     # Samples per pixel
     spp: int = 128
     # Supersampling

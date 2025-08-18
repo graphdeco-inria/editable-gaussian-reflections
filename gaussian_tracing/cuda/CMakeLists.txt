@@ -99,22 +99,6 @@ target_link_libraries(optix_program PRIVATE
     ${TORCH_LIBRARIES}  # TEMPORARY HACK
 )
 
-# === Custom: Generate Python Config File ===
-add_custom_command(
-    OUTPUT ${CMAKE_BINARY_DIR}/raytracer_config.py
-    COMMAND ${CMAKE_COMMAND} -E rm -f ${CMAKE_BINARY_DIR}/raytracer_config.py
-    COMMAND ${CMAKE_CXX_COMPILER} -DCONFIG=${CONFIG} ${CMAKE_SOURCE_DIR}/csrc/format_config_to_python.cpp -o format_config_to_python
-    COMMAND ${CMAKE_BINARY_DIR}/format_config_to_python > ${CMAKE_BINARY_DIR}/raytracer_config.py
-    DEPENDS ${CMAKE_SOURCE_DIR}/csrc/format_config_to_python.cpp
-)
-
-add_custom_target(generate-config
-    COMMAND ${CMAKE_COMMAND} -E echo "Forcing rebuild of raytracer_config.py"
-    DEPENDS ${CMAKE_BINARY_DIR}/raytracer_config.py
-)
-
-add_dependencies(gausstracer generate-config)
-
 # === Custom: Preprocessor Flags Dump ===
 add_custom_command(
     OUTPUT ${CMAKE_BINARY_DIR}/flags_output.txt

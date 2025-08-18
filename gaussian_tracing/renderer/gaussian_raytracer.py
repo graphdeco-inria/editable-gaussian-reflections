@@ -14,7 +14,7 @@ import os
 import numpy as np
 import torch
 
-from gaussian_tracing import make_raytracer, raytracer_config
+from gaussian_tracing import make_raytracer
 from gaussian_tracing.arguments import PipelineParams
 from gaussian_tracing.scene.gaussian_model import GaussianModel
 
@@ -45,9 +45,6 @@ class GaussianRaytracer:
         torch.cuda.synchronize()  #!!! remove
         self.cuda_module.rebuild_bvh()
         torch.cuda.synchronize()  #!!! remove
-
-        self.config = raytracer_config
-        torch.cuda.synchronize()
 
     @torch.no_grad()
     def rebuild_bvh(self):

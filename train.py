@@ -436,10 +436,12 @@ def main(cfg: TyroConfig):
 
     start = time.time()
 
+    MAX_BOUNCES = cfg.max_bounces
+
     if model_params.no_bounces_until_iter > 0:
         raytracer.cuda_module.num_bounces.copy_(0)
     elif model_params.max_one_bounce_until_iter > 0:
-        raytracer.cuda_module.num_bounces.copy_(min(raytracer.config.MAX_BOUNCES, 1))
+        raytracer.cuda_module.num_bounces.copy_(min(MAX_BOUNCES, 1))
 
     for iteration in tqdm(
         range(first_iter, cfg.iterations + 1),
@@ -621,11 +623,9 @@ def main(cfg: TyroConfig):
 
         if iteration == model_params.no_bounces_until_iter:
             if model_params.max_one_bounce_until_iter in [0, -1]:
-                raytracer.cuda_module.num_bounces.copy_(raytracer.config.MAX_BOUNCES)
+                raytracer.cuda_module.num_bounces.copy_(MAX_BOUNCES)
             else:
-                raytracer.cuda_module.num_bounces.copy_(
-                    min(raytracer.config.MAX_BOUNCES, 1)
-                )
+                raytracer.cuda_module.num_bounces.copy_(min(MAX_BOUNCES, 1))
 
             if "SKIP_INIT_FARFIELD" not in os.environ:
                 torch.cuda.synchronize()
@@ -645,7 +645,7 @@ def main(cfg: TyroConfig):
             iteration == model_params.max_one_bounce_until_iter
             and iteration > model_params.no_bounces_until_iter
         ):
-            raytracer.cuda_module.num_bounces.copy_(raytracer.config.MAX_BOUNCES)
+            raytracer.cuda_module.num_bounces.copy_(MAX_BOUNCES)
 
         if iteration == model_params.rebalance_losses_at_iter:
             os.environ["GLOSSY_LOSS_WEIGHT"] = str(
