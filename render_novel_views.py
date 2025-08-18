@@ -49,11 +49,11 @@ def render_set(
             raytracer.cuda_module.accumulated_sample_count.zero_()
             for i in range(cfg.spp):
                 package = render(
-                    camera, raytracer, pipe_params, background, blur_sigma=None
+                    camera, raytracer, pipe_params, background
                 )
         else:
             package = render(
-                camera, raytracer, pipe_params, background, blur_sigma=None
+                camera, raytracer, pipe_params, background
             )
 
         if cfg.supersampling > 1:

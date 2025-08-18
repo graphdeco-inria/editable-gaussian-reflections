@@ -260,11 +260,10 @@ def render_set(
                             raytracer,
                             pipe_params,
                             background,
-                            blur_sigma=blur_sigma,
                         )
                 else:
                     package = render(
-                        view, raytracer, pipe_params, background, blur_sigma=blur_sigma
+                        view, raytracer, pipe_params, background
                     )
 
                 if cfg.supersampling > 1:
