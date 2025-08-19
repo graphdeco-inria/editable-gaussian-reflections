@@ -61,10 +61,6 @@
 
 // --------------------------------- finalized values below
 
-#define TONEMAP false
-#define STRAIGHT_THROUGH_TONEMAPPING_GRAD false
-#define INVERT_TONEMAP_TARGET false
-
 #define NORMALIZE_NORMAL_MAP true
 #define PROJECT_POSITION_TO_RAY true
 
@@ -168,9 +164,6 @@
 // ----- Debug options
 // -----------------------
 
-#define ENABLE_DEBUG_DUMP false
-#define DEBUG_DUMP_PIXEL_ID 777
-
 #define DYN_CLAMPING true
 #define DETACH_AFTER 9999
 
@@ -234,8 +227,6 @@
 // ----- Final or automatic options, don't edit
 // -----------------------
 
-#define MAX_DUMPED_HITS (MAX_ITERATIONS * BUFFER_SIZE * (MAX_BOUNCES + 1))
-
 #define LUT_SIZE 512
 
 #define ACTIVATION_IN_CUDA true
@@ -259,10 +250,6 @@
 #define LOG_ALL_HITS true
 #else
 #define LOG_ALL_HITS false
-#endif
-
-#if ENABLE_DEBUG_DUMP == true
-#define BACKWARDS_PASS true
 #endif
 
 #if TILE_SIZE > 1

@@ -278,7 +278,7 @@ __device__ void backward_pass(
                 float3 local_hit = local_hits[k];
 
 // * Loss gradient
-#if ENABLE_DEBUG_DUMP == true || SKIP_LOSS_AVG_NUM_PIXELS == true
+#if SKIP_LOSS_AVG_NUM_PIXELS == true
                 int num_pixels = 1;
 #else
                 int num_pixels = params.image_height * params.image_width;
@@ -288,11 +288,6 @@ __device__ void backward_pass(
                 // channels being averaged over
                 float3 dL_doutput_rgb =
                     2.0f / 3.0f * sign(error[k]) * loss_weight / num_pixels;
-
-                // #if TONEMAP == true && STRAIGHT_THROUGH_TONEMAPPING_GRAD ==
-                // false
-                //     dL_doutput_rgb *= tonemap_grad(output_rgb_raw[k]);
-                // #endif
 
                 float dL_doutput_depth = 0.0f;
                 float3 dL_doutput_position = make_float3(0.0f, 0.0f, 0.0f);
@@ -756,47 +751,6 @@ __device__ void backward_pass(
                     dL_drot, rotation_unnormalized, rotation);
 #endif
                 dL_drot_total += dL_drot;
-
-#if ENABLE_DEBUG_DUMP == true
-                if (*params.iteration == 0 && ray_id == DEBUG_DUMP_PIXEL_ID &&
-                    k == 0) {
-                    int dump_i = --params.dump->idx;
-
-                    params.dump->dL_drgb[dump_i] = dL_drgb;
-                    params.dump->dL_dopacity[dump_i] = dL_dopacity;
-#if USE_LEVEL_OF_DETAIL == true
-                    params.dump->dL_dgaussian_lod_mean[dump_i] =
-                        dL_dgaussian_lod_mean_total;
-                    params.dump->dL_dgaussian_lod_scale[dump_i] =
-                        dL_dgaussian_lod_scale_total;
-#endif
-                    params.dump->dL_dalpha[dump_i] = dL_dalpha;
-                    params.dump->dL_dgaussval[dump_i] = dL_dgaussval;
-                    params.dump->dL_dgaussval[dump_i] = dL_dgaussval;
-                    params.dump->dL_dx_local[dump_i] = dL_dx_local;
-                    params.dump->dL_dx_world[dump_i] = dL_dx_world;
-                    params.dump->backward_T[dump_i] = curr_T;
-                    params.dump->backward_weighted_rgb_deltas[dump_i] =
-                        backward_weighted_rgb_deltas[0];
-                    params.dump->backward_prev_gaussian_rgb[dump_i] =
-                        backward_prev_gaussian_rgb[0];
-                    params.dump->dL_dxform_0[dump_i] =
-                        make_float4(dL_dl2w_0, dL_dmean_total.x);
-                    params.dump->dL_dxform_1[dump_i] =
-                        make_float4(dL_dl2w_1, dL_dmean_total.y);
-                    params.dump->dL_dxform_2[dump_i] =
-                        make_float4(dL_dl2w_2, dL_dmean_total.z);
-                    params.dump->dL_drot_0[dump_i] = dL_drot_0;
-                    params.dump->dL_drot_1[dump_i] = dL_drot_1;
-                    params.dump->dL_drot_2[dump_i] = dL_drot_2;
-                    params.dump->dL_dmeans[dump_i] = dL_dmean_total;
-                    params.dump->dL_dscales[dump_i] = dL_dscale_total;
-                    params.dump->dL_drotations[dump_i] = dL_drot_total;
-#if OPTIMIZE_EXP_POWER == true
-                    params.dump->dL_dexp_powers[dump_i] = dL_dexp_powers_total;
-#endif
-                }
-#endif
             }
 
 #if USE_GRADIENT_SCALING == true
