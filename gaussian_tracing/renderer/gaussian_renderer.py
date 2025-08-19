@@ -18,6 +18,7 @@ from gaussian_tracing.renderer.gaussian_raytracer import GaussianRaytracer
 from gaussian_tracing.scene.cameras import Camera
 
 
+# todo use dicts here instead of manually repeated code
 def render(
     camera: Camera,
     raytracer: GaussianRaytracer,
@@ -27,6 +28,7 @@ def render(
     edits=None,
     targets_available=True,
     force_update_bvh=False,
+    denoise=False,
 ):
     do_backprop = torch.is_grad_enabled()
 
@@ -73,6 +75,7 @@ def render(
             target_roughness=_target_roughness,
             target_f0=_target_f0,
             force_update_bvh=force_update_bvh,
+            denoise=denoise,
         )
 
     # All of these results are reshaped to (C, H, W)

@@ -65,12 +65,9 @@ class GaussianRaytracer:
         self.cuda_module.gaussian_means.copy_(self.pc.get_xyz)
         self.cuda_module.gaussian_opacity.copy_(self.pc._opacity)
         self.cuda_module.gaussian_rgb.copy_(self.pc.get_diffuse)
-        if self.cuda_module.gaussian_normal is not None:
-            self.cuda_module.gaussian_normal.copy_(self.pc.get_normal)
-        if self.cuda_module.gaussian_roughness is not None:
-            self.cuda_module.gaussian_roughness.copy_(self.pc.get_roughness)
-        if self.cuda_module.gaussian_f0 is not None:
-            self.cuda_module.gaussian_f0.copy_(self.pc.get_f0)
+        self.cuda_module.gaussian_normal.copy_(self.pc.get_normal)
+        self.cuda_module.gaussian_roughness.copy_(self.pc.get_roughness)
+        self.cuda_module.gaussian_f0.copy_(self.pc.get_f0)
 
     @torch.no_grad()
     def _import_param_gradients(self):
@@ -79,12 +76,9 @@ class GaussianRaytracer:
         self.pc._scaling.grad.add_(self.cuda_module.gaussian_scales.grad)
         self.pc._rotation.grad.add_(self.cuda_module.gaussian_rotations.grad)
         self.pc._diffuse.grad.add_(self.cuda_module.gaussian_rgb.grad)
-        if self.cuda_module.gaussian_normal is not None:
-            self.pc._normal.grad.add_(self.cuda_module.gaussian_normal.grad)
-        if self.cuda_module.gaussian_roughness is not None:
-            self.pc._roughness.grad.add_(self.cuda_module.gaussian_roughness.grad)
-        if self.cuda_module.gaussian_f0 is not None:
-            self.pc._f0.grad.add_(self.cuda_module.gaussian_f0.grad)
+        self.pc._normal.grad.add_(self.cuda_module.gaussian_normal.grad)
+        self.pc._roughness.grad.add_(self.cuda_module.gaussian_roughness.grad)
+        self.pc._f0.grad.add_(self.cuda_module.gaussian_f0.grad)
 
     def zero_grad(self):
         self.cuda_module.gaussian_rgb.grad.zero_()
@@ -92,13 +86,10 @@ class GaussianRaytracer:
         self.cuda_module.gaussian_scales.grad.zero_()
         self.cuda_module.gaussian_rotations.grad.zero_()
         self.cuda_module.gaussian_means.grad.zero_()
-        #
-        if self.cuda_module.gaussian_normal is not None:
-            self.cuda_module.gaussian_normal.grad.zero_()
-        if self.cuda_module.gaussian_roughness is not None:
-            self.cuda_module.gaussian_roughness.grad.zero_()
-        if self.cuda_module.gaussian_f0 is not None:
-            self.cuda_module.gaussian_f0.grad.zero_()
+        self.cuda_module.gaussian_normal.grad.zero_()
+        self.cuda_module.gaussian_roughness.grad.zero_()
+        self.cuda_module.gaussian_f0.grad.zero_()
+
         self.cuda_module.densification_gradient_diffuse.zero_()
         self.cuda_module.densification_gradient_glossy.zero_()
 
@@ -115,11 +106,10 @@ class GaussianRaytracer:
         target_roughness=None,
         target_f0=None,
         force_update_bvh=False,
+        denoise=False,
     ):
         """
         Render the scene.
-
-        Background tensor (bg_color) must be on GPU!
         """
 
         # *** time lost due to copies: 30s for 30000k iterations (~260k gaussians)
@@ -149,49 +139,44 @@ class GaussianRaytracer:
             else:
                 self.cuda_module.target_rgb.zero_()
 
-            if self.cuda_module.target_diffuse is not None:
-                if target_diffuse is not None:
-                    self.cuda_module.target_diffuse.copy_(
-                        target_diffuse.moveaxis(0, -1)
-                    )
-                else:
-                    self.cuda_module.target_diffuse.zero_()
+            if target_diffuse is not None:
+                self.cuda_module.target_diffuse.copy_(target_diffuse.moveaxis(0, -1))
+            else:
+                self.cuda_module.target_diffuse.zero_()
 
-            if self.cuda_module.target_glossy is not None:
-                if target_glossy is not None:
-                    self.cuda_module.target_glossy.copy_(target_glossy.moveaxis(0, -1))
-                else:
-                    self.cuda_module.target_glossy.zero_()
+            if target_glossy is not None:
+                self.cuda_module.target_glossy.copy_(target_glossy.moveaxis(0, -1))
+            else:
+                self.cuda_module.target_glossy.zero_()
 
-            if self.cuda_module.target_depth is not None:
-                if target_depth is not None:
-                    self.cuda_module.target_depth.copy_(target_depth.unsqueeze(-1))
-                else:
-                    self.cuda_module.target_depth.zero_()
+            if target_depth is not None:
+                self.cuda_module.target_depth.copy_(target_depth.unsqueeze(-1))
+            else:
+                self.cuda_module.target_depth.zero_()
 
-            if self.cuda_module.target_normal is not None:
-                if target_normal is not None:
-                    self.cuda_module.target_normal.copy_(target_normal.moveaxis(0, -1))
-                else:
-                    self.cuda_module.target_normal.zero_()
+            if target_normal is not None:
+                self.cuda_module.target_normal.copy_(target_normal.moveaxis(0, -1))
+            else:
+                self.cuda_module.target_normal.zero_()
 
-            if self.cuda_module.target_roughness is not None:
-                if target_roughness is not None:
-                    self.cuda_module.target_roughness.copy_(
-                        target_roughness.moveaxis(0, -1)
-                    )
-                else:
-                    self.cuda_module.target_roughness.zero_()
+            if target_roughness is not None:
+                self.cuda_module.target_roughness.copy_(
+                    target_roughness.moveaxis(0, -1)
+                )
+            else:
+                self.cuda_module.target_roughness.zero_()
 
-            if self.cuda_module.target_f0 is not None:
-                if target_f0 is not None:
-                    self.cuda_module.target_f0.copy_(target_f0.moveaxis(0, -1))
-                else:
-                    self.cuda_module.target_f0.zero_()
+            if target_f0 is not None:
+                self.cuda_module.target_f0.copy_(target_f0.moveaxis(0, -1))
+            else:
+                self.cuda_module.target_f0.zero_()
 
         if torch.is_grad_enabled() or force_update_bvh:
             self.cuda_module.update_bvh()
         self.cuda_module.raytrace()
+
+        if denoise:
+            raise NotImplementedError
 
         if torch.is_grad_enabled():
             self._import_param_gradients()
