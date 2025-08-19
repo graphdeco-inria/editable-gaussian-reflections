@@ -68,22 +68,14 @@ struct Params {
     const int *__restrict__ num_samples;
     const int *__restrict__ num_bounces;
 
-#if ATTACH_POSITION == true
     const float3 *__restrict__ gaussian_position;
     float3 *__restrict__ dL_dgaussian_position;
-#endif
-#if ATTACH_NORMALS == true
     const float3 *__restrict__ gaussian_normal;
     float3 *__restrict__ dL_dgaussian_normal;
-#endif
-#if ATTACH_F0 == true
     const float3 *__restrict__ gaussian_f0;
     float3 *__restrict__ dL_dgaussian_f0;
-#endif
-#if ATTACH_ROUGHNESS == true
     const float *__restrict__ gaussian_roughness;
     float *__restrict__ dL_dgaussian_roughness;
-#endif
 
     const float *__restrict__ gaussian_opacity;
     float *__restrict__ dL_dopacity;
@@ -101,21 +93,11 @@ struct Params {
 
     float transmittance_weight;
     const float3 *__restrict__ target_rgb;
-#if ATTACH_POSITION == true
     const float3 *__restrict__ target_position;
-#endif
-#if POSITION_FROM_EXPECTED_TERMINATION_DEPTH == true
     const float *__restrict__ target_depth;
-#endif
-#if ATTACH_NORMALS == true
     const float3 *__restrict__ target_normal;
-#endif
-#if ATTACH_F0 == true
     const float3 *__restrict__ target_f0;
-#endif
-#if ATTACH_ROUGHNESS == true
     const float *__restrict__ target_roughness;
-#endif
 
     float3 *__restrict__ output_rgb;
     float3 *__restrict__ accumulated_rgb;
@@ -143,11 +125,6 @@ struct Params {
     float3 *__restrict__ output_f0;
     float *__restrict__ output_roughness;
     float *__restrict__ output_distortion;
-#if SAVE_LOD_IMAGES == true
-    float *__restrict__ output_lod_mean;
-    float *__restrict__ output_lod_scale;
-    float *__restrict__ output_ray_lod;
-#endif
 
     float *__restrict__ t_maxes;
     float *__restrict__ t_mins;
@@ -184,16 +161,10 @@ struct Params {
     int *__restrict__ num_hits_per_pixel;
     int *__restrict__ num_traversed_per_pixel;
 
-#if SAVE_RAY_IMAGES == true
     float3 *__restrict__ output_ray_origin;
     float3 *__restrict__ output_ray_direction;
-#endif
 
-#if USE_GT_BRDF == true
-    const float3 *__restrict__ target_brdf;
-#else
     float2 *lut;
-#endif
 
 #if LOG_ALL_HITS == true
     uint32_t *total_hits; // total # of hits
@@ -215,7 +186,6 @@ struct Params {
     uint32_t *__restrict__ prev_hit_per_pixel;
 #endif
 
-#if BACKWARDS_PASS == true
     uint32_t *total_hits_for_backprop; // total # of hits
 
     // hit data, total_hits entries
@@ -237,7 +207,6 @@ struct Params {
 
     // per-pixel record of the last hit
     uint32_t *__restrict__ prev_hit_per_pixel_for_backprop;
-#endif
 
     OptixTraversableHandle handle;
 };

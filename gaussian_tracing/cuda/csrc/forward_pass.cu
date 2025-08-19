@@ -266,19 +266,11 @@ __device__ void froward_pass(
 #endif
 
                 float3 gaussian_rgb = READ_RGB(gaussian_id);
-#if ATTACH_POSITION == true
                 float3 gaussian_position =
                     params.gaussian_position[gaussian_id];
-#endif
-#if ATTACH_NORMALS == true
                 float3 gaussian_normal = params.gaussian_normal[gaussian_id];
-#endif
-#if ATTACH_F0 == true
                 float3 gaussian_f0 = READ_F0(gaussian_id);
-#endif
-#if ATTACH_ROUGHNESS == true
                 float gaussian_roughness = READ_ROUGHNESS(gaussian_id);
-#endif
 
 #if RECOMPUTE_ALPHA_IN_FORWARD_PASS == true
                 float opacity = READ_OPACITY(gaussian_id);
@@ -383,31 +375,18 @@ __device__ void froward_pass(
                     float weight = output_t[k].x - next_T;
                     output_rgb[k] += gaussian_rgb * weight;
 
-#if POSITION_FROM_EXPECTED_TERMINATION_DEPTH == true
                     // float3 world_hit = tile_origin + tile_direction *
                     // distance; float3 world_hit = READ_MEAN(gaussian_id);
                     // output_position[k][c] += world_hit * weight;
                     // float3 world_hit = READ_MEAN(gaussian_id);
                     output_depth[k][c] += distance * weight;
-#else
-#if ATTACH_POSITION == true
-                    output_position[k][c] += gaussian_position * weight;
-#endif
-#endif
-#if ATTACH_NORMALS == true
                     output_normal[k][c] += gaussian_normal * weight;
-#endif
-#if ATTACH_F0 == true
                     output_f0[k][c] += gaussian_f0 * weight;
-#endif
-#if ATTACH_ROUGHNESS == true
                     output_roughness[k][c] += gaussian_roughness * weight;
-#endif
 
                     output_t[k].x = next_T;
                     cluster_weights[c][k] += weight;
 
-#if BACKWARDS_PASS == true
                     // * Store data required for the backward pass
                     if (*params.grads_enabled) {
                         if (k == 0) {
@@ -432,7 +411,6 @@ __device__ void froward_pass(
                         params.all_gaussvals_for_backprop
                             [TILE_SIZE * TILE_SIZE * new_idx + k] = gaussval;
                     }
-#endif
 
                     if (output_t[0].x < T_THRESHOLD) {
                         goto finished_integration; // todo review a few options
@@ -462,30 +440,6 @@ __device__ void froward_pass(
     }
 finished_integration:
 
-    // #if USE_CLUSTERING == true
-    //     for (int k = 0; k < TILE_SIZE*TILE_SIZE; k++) {
-    //         for (int c = 0; c < NUM_CLUSTERS; c++) {
-    //             float cw = (1.0 - output_t[k].x) / (cluster_weights[c][k] +
-    //             1e-12); #if ATTACH_POSITION == true
-    //                 output_position[k][c] *= cw;
-    //             #endif
-    //             #if ATTACH_NORMALS == true
-    //                 output_normal[k][c] *= cw; // todo review
-    //             #endif
-    //             #if ATTACH_F0 == true
-    //                 output_f0[k][c] *= cw;
-    //             #endif
-    //             #if ATTACH_ROUGHNESS == true
-    //                 output_roughness[k][c] *= cw;
-    //             #endif
-    //             #if SAVE_LOD_IMAGES == true
-    //                 output_lod_mean[k][c] *= cw;
-    //                 output_ray_lod[k][c] *= cw;
-    //             #endif
-    //         }
-    //     }
-    // #endif
-
 #if LOG_ALL_HITS == true
     params.prev_hit_per_pixel[ray_id] = 999999999u;
 #endif
@@ -496,46 +450,20 @@ finished_integration:
         float normalization = max((1.0f - output_t[k].x), 1e-12);
 
         remaining_rgb[k][0] = output_rgb[k] / normalization;
-#if ATTACH_POSITION == true
         remaining_position[k][0] = output_position[k][0] / normalization;
-#endif
-#if POSITION_FROM_EXPECTED_TERMINATION_DEPTH == true
         remaining_depth[k][0] = output_depth[k][0] / normalization;
-#endif
-#if ATTACH_NORMALS == true
         remaining_normal[k][0] = output_normal[k][0] / normalization;
-#endif
-#if ATTACH_F0 == true
         remaining_f0[k][0] = output_f0[k][0] / normalization;
-#endif
-#if ATTACH_ROUGHNESS == true
         remaining_roughness[k][0] = output_roughness[k][0] / normalization;
-#endif
-#if SAVE_LOD_IMAGES == true
-        remaining_lod_mean[k][0] = output_lod_mean[k][0] / normalization;
-        remaining_ray_lod[k][0] = output_ray_lod[k][0] / normalization;
-#endif
     }
 #elif REMAINING_COLOR_ESTIMATION == IGNORE_OCCLUSION
     float alpha_sum = 0.0f;
 
     float3 average_rgb = make_float3(0.0f, 0.0f, 0.0f);
-#if ATTACH_POSITION == true || POSITION_FROM_EXPECTED_TERMINATION_DEPTH == true
     float3 average_position = make_float3(0.0f, 0.0f, 0.0f);
-#endif
-#if ATTACH_NORMALS == true
     float3 average_normal = make_float3(0.0f, 0.0f, 0.0f);
-#endif
-#if ATTACH_F0 == true
     float3 average_f0 = make_float3(0.0f, 0.0f, 0.0f);
-#endif
-#if ATTACH_ROUGHNESS == true
     float average_roughness = 0.0f;
-#endif
-#if SAVE_LOD_IMAGES == true
-    float average_lod_mean = 0.0f;
-    float average_ray_lod = 0.0f;
-#endif
     uint32_t hit_idx = params.prev_hit_per_pixel[ray_id];
     while (hit_idx != 999999999) {
         uint32_t prev_hit = params.all_prev_hits[hit_idx];
@@ -545,39 +473,23 @@ finished_integration:
             unsigned int gaussian_id = params.all_gaussian_ids[hit_idx];
             float3 color = READ_RGB(gaussian_id);
             average_rgb += color * alpha;
-#if ATTACH_POSITION == true
             float3 position = params.gaussian_position[gaussian_id];
             average_position += position * alpha;
-#endif
-#if ATTACH_NORMALS == true
             float3 normal = params.gaussian_normal[gaussian_id];
             average_normal += normal * alpha;
-#endif
-#if ATTACH_F0 == true
             float3 f0 = READ_F0(gaussian_id);
             average_f0 += f0 * alpha;
-#endif
-#if ATTACH_ROUGHNESS == true
             float roughness = READ_ROUGHNESS(gaussian_id);
             average_roughness += roughness * alpha;
-#endif
             alpha_sum += alpha;
         }
         hit_idx = prev_hit;
     }
     average_rgb /= max(alpha_sum, 1e-8);
-#if ATTACH_POSITION == true || POSITION_FROM_EXPECTED_TERMINATION_DEPTH == true
     average_position /= max(alpha_sum, 1e-8);
-#endif
-#if ATTACH_NORMALS == true
     average_normal /= max(alpha_sum, 1e-8);
-#endif
-#if ATTACH_F0 == true
     average_f0 /= max(alpha_sum, 1e-8);
-#endif
-#if ATTACH_ROUGHNESS == true
     average_roughness /= max(alpha_sum, 1e-8);
-#endif
     for (int k = 0; k < TILE_SIZE * TILE_SIZE; k++) {
         remaining_rgb[k][0][0] = average_rgb;
     }
@@ -614,39 +526,20 @@ finished_integration:
             continue;
         }
         float3 sample_color = READ_RGB(gaussian_id) / NUM_STOCH_SAMPLES;
-#if ATTACH_POSITION == true || POSITION_FROM_EXPECTED_TERMINATION_DEPTH == true
         float3 sample_position =
             params.gaussian_position[gaussian_id] / NUM_STOCH_SAMPLES;
-#endif
-#if ATTACH_NORMALS == true
         float3 sample_normal =
             params.gaussian_normal[gaussian_id] / NUM_STOCH_SAMPLES;
-#endif
-#if ATTACH_F0 == true
         float3 sample_f0 = READ_F0(gaussian_id) / NUM_STOCH_SAMPLES;
-#endif
-#if ATTACH_ROUGHNESS == true
         float sample_roughness =
             READ_ROUGHNESS(gaussian_id) / NUM_STOCH_SAMPLES;
-#endif
 
         for (int k = 0; k < TILE_SIZE * TILE_SIZE; k++) {
             remaining_rgb[k][0] += sample_color;
-#if ATTACH_POSITION == true || POSITION_FROM_EXPECTED_TERMINATION_DEPTH == true
             remaining_position[k][0] += sample_position;
-#endif
-#if ATTACH_NORMALS == true
             remaining_normal[k][0] += sample_normal;
-#endif
-#if ATTACH_F0 == true
             remaining_f0[k][0] += sample_f0;
-#endif
-#if ATTACH_ROUGHNESS == true
             remaining_roughness[k][0] += sample_roughness;
-#endif
-#if SAVE_LOD_IMAGES == true
-            printf("unimplemented!\n");
-#endif
         }
     }
 
@@ -657,31 +550,15 @@ finished_integration:
     for (int k = 0; k < TILE_SIZE * TILE_SIZE; k++) {
         float remaining_T = output_t[k].x - output_t[k].y;
         output_rgb[k] = output_rgb[k] + remaining_T * remaining_rgb[k][0];
-#if ATTACH_POSITION == true
         output_position[k][0] =
             output_position[k][0] + remaining_T * remaining_position[k][0];
-#endif
-#if POSITION_FROM_EXPECTED_TERMINATION_DEPTH == true
         output_depth[k][0] =
             output_depth[k][0] + remaining_T * remaining_depth[k][0];
-#endif
-#if ATTACH_NORMALS == true
         output_normal[k][0] =
             output_normal[k][0] + remaining_T * remaining_normal[k][0];
-#endif
-#if ATTACH_F0 == true
         output_f0[k][0] = output_f0[k][0] + remaining_T * remaining_f0[k][0];
-#endif
-#if ATTACH_ROUGHNESS == true
         output_roughness[k][0] =
             output_roughness[k][0] + remaining_T * remaining_roughness[k][0];
-#endif
-#if SAVE_LOD_IMAGES == true
-        output_lod_mean[k][0] =
-            output_lod_mean[k][0] + remaining_T * remaining_lod_mean[k][0];
-        output_ray_lod[k][0] =
-            output_ray_lod[k][0] + remaining_T * remaining_ray_lod[k][0];
-#endif
     }
 #endif
 }

@@ -9,7 +9,6 @@
 #include "utils/misc.cu"
 #include "utils/random.h"
 
-#if USE_GT_BRDF == false
 __device__ float2 bilinear_sample_LUT(float2 uv) {
     uv = clamp(uv, make_float2(0.0f, 0.0f), make_float2(1.0f, 1.0f));
     float2 uv_scaled = uv * (LUT_SIZE - 1);
@@ -26,7 +25,6 @@ __device__ float2 bilinear_sample_LUT(float2 uv) {
     float2 value1 = value10 + uv_fract.y * (value11 - value10);
     return value0 + uv_fract.x * (value1 - value0);
 }
-#endif
 
 #if USE_POLYCAGE == true
 extern "C" __global__ void __anyhit__ah() {
@@ -69,20 +67,8 @@ extern "C" __global__ void __intersection__gaussian() {
     local_direction /= norm;
     float local_hit_distance_along_ray = dot(-local_origin, local_direction);
 
-// * Compute the hit point along the ray
-#if GLOBAL_SORT == true
-    float m[12];
-    optixGetObjectToWorldTransformMatrix(m);
-    float3 gaussian_mean = make_float3(m[3], m[7], m[11]);
-    float3 reflected_origin = make_float3(
-        __uint_as_float(optixGetPayload_4()),
-        __uint_as_float(optixGetPayload_5()),
-        __uint_as_float(optixGetPayload_6()));
-    float sorting_distance =
-        dot(gaussian_mean - reflected_origin, optixGetWorldRayDirection());
-#else
+    // * Compute the hit point along the ray
     float sorting_distance = local_hit_distance_along_ray / norm;
-#endif
     float3 local_hit_unscaled =
         (local_origin + local_hit_distance_along_ray * local_direction);
 
@@ -122,7 +108,7 @@ extern "C" __global__ void __intersection__gaussian() {
     }
 #endif
 
-#if SKIP_BACKFACING_NORMALS == true && ATTACH_NORMALS == true
+#if SKIP_BACKFACING_NORMALS == true
     int step = optixGetPayload_2();
     if (step != 0 && sorting_distance < SKIP_BACKFACING_MAX_DIST) {
         float3 gaussian_normal = params.gaussian_normal[gaussian_id];
@@ -206,7 +192,6 @@ extern "C" __global__ void __intersection__gaussian() {
 
         // * Log the subpixels
         params.all_alphas[TILE_SIZE * TILE_SIZE * hit_idx + k] = alpha;
-#if BACKWARDS_PASS == true
         if (*params
                  .grads_enabled) { // todo check impact of this on forward pass
             params.all_gaussvals[TILE_SIZE * TILE_SIZE * hit_idx + k] =
@@ -214,7 +199,6 @@ extern "C" __global__ void __intersection__gaussian() {
             params.all_local_hits[TILE_SIZE * TILE_SIZE * hit_idx + k] =
                 local_hit;
         }
-#endif
 
 #if TILE_SIZE == 2
         switch (k) {
@@ -336,12 +320,10 @@ extern "C" __global__ void __intersection__gaussian() {
 #endif
 #if RECOMPUTE_ALPHA_IN_FORWARD_PASS == false
     params.all_alphas[hit_idx] = alpha;
-#if BACKWARDS_PASS == true
     if (*params.grads_enabled) { // todo check impact of this on forward pass
         params.all_gaussvals[hit_idx] = gaussval;
         params.all_local_hits[hit_idx] = local_hit;
     }
-#endif
 #endif
     params.all_prev_hits[hit_idx] = params.prev_hit_per_pixel[ray_id];
     params.prev_hit_per_pixel[ray_id] = hit_idx;
@@ -772,36 +754,18 @@ extern "C" __global__ void __raygen__rg() {
                     // #endif
                 }
 
-#if SURFACE_BRDF_FROM_GT_ROUGHNESS == true
-                float effective_roughness = params.target_roughness[pixel_id];
-#else
                 float effective_roughness = output_roughness[step][c][k];
-#endif
                 effective_roughness = max(effective_roughness, MIN_ROUGHNESS);
-
-#if REFLECTION_RAY_FROM_GT_NORMAL == true
-                float3 unnormalized_normal = params.target_normal[pixel_id];
-#else
                 float3 unnormalized_normal = output_normal[step][c][k];
-#endif
 #if NORMALIZE_NORMAL_MAP == true
                 float3 effective_normal = normalize(unnormalized_normal);
 #else
                 float3 effective_normal = unnormalized_normal;
 #endif
-
-#if SURFACE_BRDF_FROM_GT_F0 == true
-                float3 effective_F0 = params.target_f0[pixel_id];
-#else
                 float3 effective_F0 = output_f0[step][c][k];
-#endif
 
                 // * Compute the BRDF for this step
                 {
-#if USE_GT_BRDF == true
-                    output_throughput[step][c][k] =
-                        params.target_brdf[pixel_id];
-#else
 #if SAMPLE_FROM_BRDF == false
                     // USE LUT
                     float n_dot_v = dot(-direction[k], effective_normal);
@@ -815,30 +779,12 @@ extern "C" __global__ void __raygen__rg() {
                         output_throughput[step][c][k] *=
                             output_throughput[step - 1][c][k];
                     }
-
-#endif
                 }
 
                 // * Compute reflection ray for the following step
                 {
-#if REFLECTION_RAY_FROM_GT_POSITION == true
-                    float3 effective_position =
-                        params.target_position[pixel_id]; // todo tiling
-#else
-#if POSITION_FROM_EXPECTED_TERMINATION_DEPTH == true
                     float3 effective_position =
                         origin[k] + output_depth[step][c][k] * direction[k];
-#else
-                    float3 effective_position = output_position[step][c][k];
-#if PROJECT_POSITION_TO_RAY == true
-                    effective_position =
-                        origin[k] +
-                        dot(direction[k], effective_position - origin[k]) *
-                            direction[k];
-#endif
-#endif
-#endif
-
                     if (REFLECTION_VALID_NORMAL_MIN_NORM > 0.0f) {
                         if (length(unnormalized_normal) <
                             REFLECTION_VALID_NORMAL_MIN_NORM) {
@@ -853,29 +799,18 @@ extern "C" __global__ void __raygen__rg() {
                         effective_roughness,
                         make_float2(rnd(seed), rnd(seed)));
 
-#if USE_GT_BRDF == false
 #if INCLUDE_BRDF_WEIGHT == true
-#if USE_LUT == true
-                    float n_dot_v = dot(-direction[k], effective_normal);
-                    float2 uv = make_float2(n_dot_v, effective_roughness);
-                    float2 lut_values = bilinear_sample_LUT(uv);
-                    output_lut_values[step][c][k] = lut_values;
-                    output_throughput[step][c][k] *=
-                        lut_values.x * effective_F0 + lut_values.y;
-#else
                     output_throughput[step][c][k] *= cook_torrance_weight(
                         effective_normal,
                         -direction[k],
                         next_direction,
                         effective_roughness,
                         effective_F0);
-#endif
 #else
                     if (effective_F0.x == 0.0f && effective_F0.y == 0.0f &&
                         effective_F0.z == 0.0f) {
                         output_throughput[step][c][k] *= 0.0f;
                     }
-#endif
 #endif
 #else
                     float3 next_direction =
@@ -893,12 +828,10 @@ extern "C" __global__ void __raygen__rg() {
                     tile_origin = next_origin;       // tmp
                     tile_direction = next_direction; // tmp
 
-#if SAVE_RAY_IMAGES == true
                     params.output_ray_origin[pixel_id + num_pixels * step] =
                         origin[k];
                     params.output_ray_direction[pixel_id + num_pixels * step] =
                         direction[k];
-#endif
                 }
             }
 #endif
@@ -984,40 +917,20 @@ forward_pass_end:
                 params.output_rgb[pixel_id] = output_rgb[s][tile_id];
                 params.output_t[pixel_id] = output_t[s][tile_id];
                 if (!*params.grads_enabled) {
-#if SAVE_ALL_MAPS == true
                     params.output_incident_radiance[pixel_id] =
                         incident_radiance[s][tile_id];
-#if ATTACH_NORMALS == true
                     params.output_normal[pixel_id] =
                         output_normal[s][max_c][tile_id];
-#endif
-#if ATTACH_POSITION == true || POSITION_FROM_EXPECTED_TERMINATION_DEPTH == true
                     params.output_position[pixel_id] =
                         output_position[s][max_c][tile_id];
-#endif
-#if POSITION_FROM_EXPECTED_TERMINATION_DEPTH == true
                     params.output_depth[pixel_id] =
                         output_depth[s][max_c][tile_id];
-#endif
-#if ATTACH_F0 == true
                     params.output_f0[pixel_id] = output_f0[s][max_c][tile_id];
-#endif
-#if ATTACH_ROUGHNESS == true
                     params.output_roughness[pixel_id] =
                         output_roughness[s][max_c][tile_id];
-#endif
 #if MAX_BOUNCES > 0
                     params.output_brdf[pixel_id] =
                         output_throughput[s][max_c][tile_id];
-#endif
-#endif
-#if SAVE_LOD_IMAGES == true
-                    params.output_lod_mean[pixel_id] =
-                        output_lod_mean[s][max_c][tile_id];
-                    params.output_lod_scale[pixel_id] =
-                        output_lod_scale[s][max_c][tile_id];
-                    params.output_ray_lod[pixel_id] =
-                        output_ray_lod[s][max_c][tile_id];
 #endif
                 }
             }
@@ -1027,8 +940,6 @@ forward_pass_end:
                            num_pixels * (MAX_BOUNCES + 1);
             params.output_rgb[pixel_id] = output_rgb[MAX_BOUNCES + 1][tile_id];
         }
-
-#if BACKWARDS_PASS == true
 
     // * Load target images
     float3 target_rgb[TILE_SIZE * TILE_SIZE];
@@ -1045,41 +956,31 @@ forward_pass_end:
             target_rgb[i * TILE_SIZE + j] =
                 params.target_rgb[ray_id + i * params.image_width + j];
         }
-#if ATTACH_POSITION == true
     for (int i = 0; i < TILE_SIZE; i++)
         for (int j = 0; j < TILE_SIZE; j++) {
             target_position[i * TILE_SIZE + j] =
                 params.target_position[ray_id + i * params.image_width + j];
         }
-#endif
-#if POSITION_FROM_EXPECTED_TERMINATION_DEPTH == true
     for (int i = 0; i < TILE_SIZE; i++)
         for (int j = 0; j < TILE_SIZE; j++) {
             target_depth[i * TILE_SIZE + j] =
                 params.target_depth[ray_id + i * params.image_width + j];
         }
-#endif
-#if ATTACH_NORMALS == true
     for (int i = 0; i < TILE_SIZE; i++)
         for (int j = 0; j < TILE_SIZE; j++) {
             target_normal[i * TILE_SIZE + j] =
                 params.target_normal[ray_id + i * params.image_width + j];
         }
-#endif
-#if ATTACH_F0 == true
     for (int i = 0; i < TILE_SIZE; i++)
         for (int j = 0; j < TILE_SIZE; j++) {
             target_f0[i * TILE_SIZE + j] =
                 params.target_f0[ray_id + i * params.image_width + j];
         }
-#endif
-#if ATTACH_ROUGHNESS == true
     for (int i = 0; i < TILE_SIZE; i++)
         for (int j = 0; j < TILE_SIZE; j++) {
             target_roughness[i * TILE_SIZE + j] =
                 params.target_roughness[ray_id + i * params.image_width + j];
         }
-#endif
 #if MAX_BOUNCES > 0
     for (int i = 0; i < TILE_SIZE; i++)
         for (int j = 0; j < TILE_SIZE; j++) {
@@ -1246,8 +1147,5 @@ forward_pass_end:
     // Compute grads for brdf
     for (int step = 0; step < MAX_BOUNCES + 1; step++) {
     }
-
-#endif
-
     params.random_seeds[ray_id] = seed;
 }

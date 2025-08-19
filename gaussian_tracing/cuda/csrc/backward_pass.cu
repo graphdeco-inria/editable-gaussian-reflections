@@ -7,7 +7,6 @@ __device__ float3 sign(float3 v) {
 
 __device__ float sign(float v) { return copysignf(1.0f, v); }
 
-#if BACKWARDS_PASS == true
 #pragma inline
 __device__ void backward_pass(
     const int step,
@@ -165,48 +164,18 @@ __device__ void backward_pass(
             // float3 gaussian_rgb = READ_RGB(gaussian_id);
             float3 gaussian_rgb_unactivated = params.gaussian_rgb[gaussian_id];
 
-#if ACTIVATION_IN_CUDA == true
-#if RELU_INSTEAD_OF_SOFTPLUS == true
             float3 gaussian_rgb = relu_act(gaussian_rgb_unactivated);
-#else
-            float3 gaussian_rgb = softplus_act(gaussian_rgb_unactivated);
-#endif
-#else
-            float3 gaussian_rgb = gaussian_rgb_unactivated;
-#endif
-
-#if ATTACH_POSITION == true
             float3 gaussian_position;
-#endif
-
-#if ATTACH_NORMALS == true
             float3 gaussian_normal;
-#endif
-#if ATTACH_F0 == true
             float3 gaussian_f0;
-#endif
-#if ATTACH_ROUGHNESS == true
             float gaussian_roughness;
-#endif
 
             if (step == 0) {
-#if ATTACH_POSITION == true
-#if POSITION_FROM_EXPECTED_TERMINATION_DEPTH == true
                 gaussian_position =
                     ray_origin_world + distances[0] * ray_direction_world;
-#else
-                gaussian_position = params.gaussian_position[gaussian_id];
-#endif
-#endif
-#if ATTACH_NORMALS == true
                 gaussian_normal = params.gaussian_normal[gaussian_id];
-#endif
-#if ATTACH_F0 == true
                 gaussian_f0 = READ_F0(gaussian_id);
-#endif
-#if ATTACH_ROUGHNESS == true
                 gaussian_roughness = READ_ROUGHNESS(gaussian_id);
-#endif
             }
 
             float opacity = READ_OPACITY(gaussian_id);
@@ -219,25 +188,12 @@ __device__ void backward_pass(
             float3 scaling = READ_SCALE(gaussian_id);
             float4 rotation_unnormalized =
                 params.gaussian_rotations[gaussian_id];
-#if ACTIVATION_IN_CUDA == true
             float4 rotation = normalize_act(rotation_unnormalized);
-#else
-            float4 rotation = rotation_unnormalized;
-#endif
 
             float3 dL_drgb_total = make_float3(0.0f, 0.0f, 0.0f);
-#if ATTACH_POSITION == true && POSITION_FROM_EXPECTED_TERMINATION_DEPTH == false
-            float3 dL_dgaussian_position_total = make_float3(0.0f, 0.0f, 0.0f);
-#endif
-#if ATTACH_NORMALS == true
             float3 dL_dgaussian_normal_total = make_float3(0.0f, 0.0f, 0.0f);
-#endif
-#if ATTACH_F0 == true
             float3 dL_dgaussian_f0_total = make_float3(0.0f, 0.0f, 0.0f);
-#endif
-#if ATTACH_ROUGHNESS == true
             float dL_dgaussian_roughness_total = 0.0f;
-#endif
             float dL_dopacity_total = 0.0f;
             float4 dL_drot_total = make_float4(0.0f, 0.0f, 0.0f, 0.0f);
             float3 dL_dscale_total = make_float3(0.0f, 0.0f, 0.0f);
@@ -286,18 +242,10 @@ __device__ void backward_pass(
                 float dL_doutput_roughness = 0.0f;
 
                 if (step == 0) {
-#if POSITION_FROM_EXPECTED_TERMINATION_DEPTH == true
                     dL_doutput_depth =
                         2.0f * sign(output_depth[k] - target_depth[k]) /
                         num_pixels *
                         (step == 0 ? params.position_loss_weight : 0.0f);
-#else
-                    dL_doutput_position =
-                        2.0f / 3.0f *
-                        sign(output_position[k] - target_position[k]) /
-                        num_pixels *
-                        (step == 0 ? params.position_loss_weight : 0.0f);
-#endif
                     dL_doutput_normal =
                         2.0f / 3.0f *
                         sign(output_normal[k] - target_normal[k]) / num_pixels *
@@ -323,14 +271,7 @@ __device__ void backward_pass(
                 // * Color gradient
                 weight = curr_T / (1.0 - alpha) * alpha;
                 float3 dL_drgb = dL_doutput_rgb * weight;
-#if ACTIVATION_IN_CUDA == true
-                // #if RELU_INSTEAD_OF_SOFTPLUS == true
                 dL_drgb = backward_relu_act(dL_drgb, gaussian_rgb);
-                // #else
-                //     dL_drgb = backward_softplus_act(dL_drgb,
-                //     gaussian_rgb_unactivated, gaussian_rgb);
-                // #endif
-#endif
 
                 float3 dL_dgaussian_position = dL_doutput_position * weight;
                 float3 dL_dgaussian_normal = dL_doutput_normal * weight;
@@ -339,33 +280,11 @@ __device__ void backward_pass(
 
                 dL_drgb_total += dL_drgb;
                 if (step == 0) {
-#if ATTACH_POSITION == true && POSITION_FROM_EXPECTED_TERMINATION_DEPTH == false
-                    dL_dgaussian_position_total += dL_dgaussian_position;
-#endif
-#if ATTACH_NORMALS == true
                     dL_dgaussian_normal_total += dL_dgaussian_normal;
-#endif
-// #if CLIPPED_RELU_INSTEAD_OF_SIGMOID == true
-#if ATTACH_F0 == true
                     dL_dgaussian_f0_total +=
                         backward_clipped_relu_act(dL_dgaussian_f0, gaussian_f0);
-#endif
-#if ATTACH_ROUGHNESS == true
                     dL_dgaussian_roughness_total += backward_clipped_relu_act(
                         dL_dgaussian_roughness, gaussian_roughness);
-#endif
-                    // #else
-                    //     #if ATTACH_F0 == true
-                    //         dL_dgaussian_f0_total +=
-                    //         backward_sigmoid_act(dL_dgaussian_f0,
-                    //         gaussian_f0);
-                    //     #endif
-                    //     #if ATTACH_ROUGHNESS == true
-                    //         dL_dgaussian_roughness_total +=
-                    //         backward_sigmoid_act(dL_dgaussian_roughness,
-                    //         gaussian_roughness);
-                    //     #endif
-                    // #endif
                 }
 
                 // * Alpha gradient
@@ -375,7 +294,6 @@ __device__ void backward_pass(
                     gaussian_rgb; // todo re-read from memory instead of storing
                                   // in registers
                 if (step == 0) {
-#if ATTACH_POSITION == true
                     backward_weighted_position_deltas[k] +=
                         (gaussian_position -
                          backward_prev_gaussian_position[k]) *
@@ -383,31 +301,23 @@ __device__ void backward_pass(
                     backward_prev_gaussian_position[k] =
                         gaussian_position; // todo re-read from memory instead
                                            // of storing in registers
-#endif
-#if POSITION_FROM_EXPECTED_TERMINATION_DEPTH == true
                     backward_weighted_depth_deltas[k] +=
                         (distances[0] - backward_prev_gaussian_depth[k]) *
                         curr_T;
                     backward_prev_gaussian_depth[k] =
                         distances[0]; // todo re-read from memory instead of
                                       // storing in registers
-#endif
-#if ATTACH_NORMALS == true
                     backward_weighted_normal_deltas[k] +=
                         (gaussian_normal - backward_prev_gaussian_normal[k]) *
                         curr_T;
                     backward_prev_gaussian_normal[k] =
                         gaussian_normal; // todo re-read from memory instead of
                                          // storing in registers
-#endif
-#if ATTACH_F0 == true
                     backward_weighted_f0_deltas[k] +=
                         (gaussian_f0 - backward_prev_gaussian_f0[k]) * curr_T;
                     backward_prev_gaussian_f0[k] =
                         gaussian_f0; // todo re-read from memory instead of
                                      // storing in registers
-#endif
-#if ATTACH_ROUGHNESS == true
                     backward_weighted_roughness_deltas[k] +=
                         (gaussian_roughness -
                          backward_prev_gaussian_roughness[k]) *
@@ -415,7 +325,6 @@ __device__ void backward_pass(
                     backward_prev_gaussian_roughness[k] =
                         gaussian_roughness; // todo re-read from memory instead
                                             // of storing in registers
-#endif
                 }
 
                 float dL_dalpha =
@@ -426,64 +335,38 @@ __device__ void backward_pass(
                 dL_dalpha +=
                     -((output_t[k].x - output_t[k].y) / (1.0 - alpha)) *
                     dot(remaining_rgb[k], dL_doutput_rgb);
-// #if ATTACH_POSITION == true
-//     dL_dalpha += -((output_t[k].x - output_t[k].y) / (1.0 - alpha)) *
-//     dot(remaining_position[k], dL_doutput_position);
-// #endif
-#if POSITION_FROM_EXPECTED_TERMINATION_DEPTH == true
                 dL_dalpha +=
                     -((output_t[k].x - output_t[k].y) / (1.0 - alpha)) *
                     remaining_depth[k] * dL_doutput_depth;
-#endif
-#if ATTACH_NORMALS == true
                 dL_dalpha +=
                     -((output_t[k].x - output_t[k].y) / (1.0 - alpha)) *
                     dot(remaining_normal[k], dL_doutput_normal);
-#endif
-#if ATTACH_F0 == true
                 dL_dalpha +=
                     -((output_t[k].x - output_t[k].y) / (1.0 - alpha)) *
                     dot(remaining_f0[k], dL_doutput_f0);
-#endif
-#if ATTACH_ROUGHNESS == true
                 dL_dalpha +=
                     -((output_t[k].x - output_t[k].y) / (1.0 - alpha)) *
                     remaining_roughness[k] * dL_doutput_roughness;
 #endif
-#endif
 
                 if (step == 0) {
-// #if ATTACH_POSITION == true
-//     dL_dalpha += dot(backward_weighted_position_deltas[k] / (1.0f - alpha),
-//     dL_doutput_position);
-// #endif
-#if POSITION_FROM_EXPECTED_TERMINATION_DEPTH == true
                     dL_dalpha += backward_weighted_depth_deltas[k] /
                                  (1.0f - alpha) * dL_doutput_depth;
-#endif
-#if ATTACH_NORMALS == true
                     dL_dalpha +=
                         dot(backward_weighted_normal_deltas[k] / (1.0f - alpha),
                             dL_doutput_normal);
-#endif
-#if ATTACH_F0 == true
                     dL_dalpha +=
                         dot(backward_weighted_f0_deltas[k] / (1.0f - alpha),
                             dL_doutput_f0);
-#endif
-#if ATTACH_ROUGHNESS == true
                     dL_dalpha += backward_weighted_roughness_deltas[k] /
                                  (1.0f - alpha) * dL_doutput_roughness;
-#endif
                 }
 
                 float windowing = 1.0f;
                 float dL_dopacity =
                     MAX_ALPHA * dL_dalpha * gaussval * windowing;
 
-#if ACTIVATION_IN_CUDA == true
                 dL_dopacity = backward_sigmoid_act(dL_dopacity, opacity);
-#endif
                 dL_dopacity_total += dL_dopacity;
 
                 // * Transform gradient
@@ -592,9 +475,7 @@ __device__ void backward_pass(
                 float3 dL_dscale =
                     dL_dl2w_0 * rot_0 + dL_dl2w_1 * rot_1 + dL_dl2w_2 * rot_2;
 
-#if ACTIVATION_IN_CUDA == true
                 dL_dscale = backward_exp_act(dL_dscale, scaling);
-#endif
                 dL_dscale_total += dL_dscale;
 
                 // * Rotation matrix gradient
@@ -627,10 +508,8 @@ __device__ void backward_pass(
                      4.f * z * (dL_drot_0.x + dL_drot_1.y) +
                      2.f * r * (dL_drot_1.x - dL_drot_0.y));
                 float4 dL_drot = make_float4(dL_dr, dL_dx, dL_dy, dL_dz);
-#if ACTIVATION_IN_CUDA == true
                 dL_drot = backward_normalize_act(
                     dL_drot, rotation_unnormalized, rotation);
-#endif
                 dL_drot_total += dL_drot;
             }
 
@@ -646,29 +525,18 @@ __device__ void backward_pass(
                     dL_dopacity_total * grad_dist_weight *
                         GLOBAL_GRADIENT_SCALE);
                 if (step == 0) {
-#if ATTACH_NORMALS == true
                     atomicAdd3(
                         &params.dL_dgaussian_normal[gaussian_id],
                         dL_dgaussian_normal_total * grad_dist_weight *
                             GLOBAL_GRADIENT_SCALE);
-#endif
-// #if ATTACH_POSITION == true && POSITION_FROM_EXPECTED_TERMINATION_DEPTH ==
-// false
-//     atomicAdd3(&params.dL_dgaussian_position[gaussian_id],
-//     dL_dgaussian_position_total * grad_dist_weight * GLOBAL_GRADIENT_SCALE);
-// #endif
-#if ATTACH_F0 == true
                     atomicAdd3(
                         &params.dL_dgaussian_f0[gaussian_id],
                         dL_dgaussian_f0_total * grad_dist_weight *
                             GLOBAL_GRADIENT_SCALE);
-#endif
-#if ATTACH_ROUGHNESS == true
                     atomicAdd(
                         &params.dL_dgaussian_roughness[gaussian_id],
                         dL_dgaussian_roughness_total * grad_dist_weight *
                             GLOBAL_GRADIENT_SCALE);
-#endif
                 }
                 atomicAdd4(
                     &params.dL_drotations[gaussian_id],
@@ -708,4 +576,3 @@ __device__ void backward_pass(
             hit_idx; // * Update the starting point for the next step
     }
 }
-#endif

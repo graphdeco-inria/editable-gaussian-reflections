@@ -17,14 +17,12 @@ __device__ void create_transform_matrix(
     float y = rotation.z;
     float z = rotation.w;
 
-#if ACTIVATION_IN_CUDA == true
     // normalize quaternion
     float norm = sqrtf(r * r + x * x + y * y + z * z);
     r /= norm;
     x /= norm;
     y /= norm;
     z /= norm;
-#endif
 
     matrix[0] = make_float4(
         s.x * (1.f - 2.f * (y * y + z * z)),
@@ -67,22 +65,16 @@ __global__ void _populateBVH(
         instances[i].flags = OPTIX_INSTANCE_FLAG_NONE;
 
         float opacity = opacities[i];
-#if ACTIVATION_IN_CUDA == true
         opacity = sigmoid_act(opacity);
-#endif
 
 #if COMPATIBILITY_MODE == true
         float3 sizes = scales[i];
-#if ACTIVATION_IN_CUDA == true
         sizes = exp_act(sizes);
-#endif
         sizes = sizes * 3.0;
         instances[i].visibilityMask = 255;
 #else
         float3 sizes = scales[i];
-#if ACTIVATION_IN_CUDA == true
         sizes = exp_act(sizes);
-#endif
         float p = exp_power;
         float scaling_factor =
             compute_scaling_factor(opacity, alpha_threshold, p);
@@ -174,14 +166,9 @@ __global__ void _populateTensor(
     float4 transform[3];
     if (i < num_gaussians) {
         float opacity = opacities[i];
-#if ACTIVATION_IN_CUDA == true
         opacity = sigmoid_act(opacity);
-#endif
-
         float3 sizes = scales[i];
-#if ACTIVATION_IN_CUDA == true
         sizes = exp_act(sizes);
-#endif
         float p = exp_power;
         float scaling_factor =
             compute_scaling_factor(opacity, alpha_threshold, p);
