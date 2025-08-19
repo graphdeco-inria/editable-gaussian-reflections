@@ -133,7 +133,6 @@ struct Raytracer : torch::CustomClassHolder {
         {PPLL_STORAGE_SIZE}, torch::dtype(torch::kInt32).device(torch::kCUDA));
     Tensor m_prev_hit_per_pixel;
 
-#if BACKWARDS_PASS == true
     // PPLL storage for backward pass
     Tensor m_total_hits_for_backprop =
         torch::zeros({1}, torch::dtype(torch::kInt32).device(torch::kCUDA));
@@ -161,7 +160,6 @@ struct Raytracer : torch::CustomClassHolder {
         {PPLL_STORAGE_SIZE_BACKWARD * TILE_SIZE * TILE_SIZE},
         torch::dtype(torch::kFloat32).device(torch::kCUDA));
     Tensor m_prev_hit_per_pixel_for_backprop;
-#endif
 #endif
 
     // Gaussian attributes
@@ -273,9 +271,7 @@ struct Raytracer : torch::CustomClassHolder {
     Tensor m_densification_gradient_diffuse;
     Tensor m_densification_gradient_glossy;
 
-#if USE_GT_BRDF == false
     Tensor m_lut;
-#endif
     Tensor m_cheap_approx =
         torch::zeros({1}, torch::dtype(torch::kBool).device(torch::kCUDA));
 
@@ -372,39 +368,31 @@ struct Raytracer : torch::CustomClassHolder {
         m_gaussian_mask = torch::zeros(
             {num_gaussians, 1},
             torch::dtype(torch::kInt32).device(torch::kCUDA));
-//
-#if ATTACH_POSITION == true
+        //
         m_gaussian_position = torch::zeros(
             {num_gaussians, 3},
             torch::dtype(torch::kFloat32).device(torch::kCUDA));
         m_dL_dgaussian_position = torch::zeros(
             {num_gaussians, 3},
             torch::dtype(torch::kFloat32).device(torch::kCUDA));
-#endif
-#if ATTACH_NORMALS == true
         m_gaussian_normal = torch::zeros(
             {num_gaussians, 3},
             torch::dtype(torch::kFloat32).device(torch::kCUDA));
         m_dL_dgaussian_normal = torch::zeros(
             {num_gaussians, 3},
             torch::dtype(torch::kFloat32).device(torch::kCUDA));
-#endif
-#if ATTACH_F0 == true
         m_gaussian_f0 = torch::zeros(
             {num_gaussians, 3},
             torch::dtype(torch::kFloat32).device(torch::kCUDA));
         m_dL_dgaussian_f0 = torch::zeros(
             {num_gaussians, 3},
             torch::dtype(torch::kFloat32).device(torch::kCUDA));
-#endif
-#if ATTACH_ROUGHNESS == true
         m_gaussian_roughness = torch::zeros(
             {num_gaussians, 1},
             torch::dtype(torch::kFloat32).device(torch::kCUDA));
         m_dL_dgaussian_roughness = torch::zeros(
             {num_gaussians, 1},
             torch::dtype(torch::kFloat32).device(torch::kCUDA));
-#endif
 
         // Create output and target buffers
         m_output_rgb = torch::zeros(
@@ -450,83 +438,44 @@ struct Raytracer : torch::CustomClassHolder {
             {MAX_BOUNCES + 1, image_height, image_width, 3},
             torch::dtype(torch::kFloat32).device(torch::kCUDA));
 #endif
-
-#if ATTACH_POSITION == true || POSITION_FROM_EXPECTED_TERMINATION_DEPTH == true
-#if SAVE_ALL_MAPS == true
         m_output_position = torch::zeros(
             {MAX_BOUNCES + 1, image_height, image_width, 3},
             torch::dtype(torch::kFloat32).device(torch::kCUDA));
-#endif
         m_target_position = torch::zeros(
             {image_height, image_width, 3},
             torch::dtype(torch::kFloat32).device(torch::kCUDA));
-#endif
-#if POSITION_FROM_EXPECTED_TERMINATION_DEPTH == true
-#if SAVE_ALL_MAPS == true
         m_output_depth = torch::zeros(
             {MAX_BOUNCES + 1, image_height, image_width, 1},
             torch::dtype(torch::kFloat32).device(torch::kCUDA));
-#endif
         m_target_depth = torch::zeros(
             {image_height, image_width, 1},
             torch::dtype(torch::kFloat32).device(torch::kCUDA));
-#endif
-#if ATTACH_NORMALS == true
-#if SAVE_ALL_MAPS == true
         m_output_normal = torch::zeros(
             {MAX_BOUNCES + 1, image_height, image_width, 3},
             torch::dtype(torch::kFloat32).device(torch::kCUDA));
-#endif
         m_target_normal = torch::zeros(
             {image_height, image_width, 3},
             torch::dtype(torch::kFloat32).device(torch::kCUDA));
-#endif
-#if ATTACH_F0 == true
-#if SAVE_ALL_MAPS == true
         m_output_f0 = torch::zeros(
             {MAX_BOUNCES + 1, image_height, image_width, 3},
             torch::dtype(torch::kFloat32).device(torch::kCUDA));
-#endif
         m_target_f0 = torch::zeros(
             {image_height, image_width, 3},
             torch::dtype(torch::kFloat32).device(torch::kCUDA));
-#endif
-#if ATTACH_ROUGHNESS == true
-#if SAVE_ALL_MAPS == true
         m_output_roughness = torch::zeros(
             {MAX_BOUNCES + 1, image_height, image_width, 1},
             torch::dtype(torch::kFloat32).device(torch::kCUDA));
-#endif
         m_target_roughness = torch::zeros(
             {image_height, image_width, 1},
             torch::dtype(torch::kFloat32).device(torch::kCUDA));
-#endif
-#if SAVE_LOD_IMAGES == true
-        m_output_lod_mean = torch::zeros(
-            {MAX_BOUNCES + 1, image_height, image_width, 1},
-            torch::dtype(torch::kFloat32).device(torch::kCUDA));
-        m_output_lod_scale = torch::zeros(
-            {MAX_BOUNCES + 1, image_height, image_width, 1},
-            torch::dtype(torch::kFloat32).device(torch::kCUDA));
-        m_output_ray_lod = torch::zeros(
-            {MAX_BOUNCES + 1, image_height, image_width, 1},
-            torch::dtype(torch::kFloat32).device(torch::kCUDA));
-#endif
-#if MAX_BOUNCES > 0 && SAVE_ALL_MAPS == true
+#if MAX_BOUNCES > 0
         m_output_brdf = torch::zeros(
             {MAX_BOUNCES + 1, image_height, image_width, 3},
             torch::dtype(torch::kFloat32).device(torch::kCUDA));
 #endif
-#if USE_GT_BRDF == true
-        m_target_brdf = torch::zeros(
-            {image_height, image_width, 3},
-            torch::dtype(torch::kFloat32).device(torch::kCUDA));
-#endif
-#if SAVE_ALL_MAPS == true
         m_output_incident_radiance = torch::zeros(
             {MAX_BOUNCES + 1, image_height, image_width, 3},
             torch::dtype(torch::kFloat32).device(torch::kCUDA));
-#endif
 
         m_iteration =
             torch::zeros({1}, torch::dtype(torch::kInt32).device(torch::kCUDA));
@@ -558,27 +507,11 @@ struct Raytracer : torch::CustomClassHolder {
             {m_height, m_width},
             torch::dtype(torch::kInt32).device(torch::kCUDA));
         m_prev_hit_per_pixel.fill_(999999999);
-#if BACKWARDS_PASS == true
         m_prev_hit_per_pixel_for_backprop = torch::zeros(
             {m_height, m_width},
             torch::dtype(torch::kInt32).device(torch::kCUDA));
         m_prev_hit_per_pixel_for_backprop.fill_(999999999);
 #endif
-#endif
-
-#if USE_GT_BRDF == false && USE_LUT == true
-        std::ifstream fin(
-            std::string(CMAKE_CURRENT_LIST_DIR) + "/assets/LUT_512x512x2.pt",
-            std::ios::in | std::ios::binary);
-        std::string pickled_str(
-            (std::istreambuf_iterator<char>(fin)),
-            std::istreambuf_iterator<char>());
-        fin.close();
-        std::vector<char> pickled_vec(pickled_str.begin(), pickled_str.end());
-        const auto tensor_loaded = torch::pickle_load(pickled_vec);
-        m_lut = tensor_loaded.toTensor().to(torch::kFloat32).to(torch::kCUDA);
-#endif
-
         {
             std::cout << "initializing CUDA and creating OptiX context"
                       << std::endl;
@@ -695,7 +628,6 @@ struct Raytracer : torch::CustomClassHolder {
             m_h_params.total_hits =
                 reinterpret_cast<uint32_t *>(m_total_hits.data_ptr());
 
-#if BACKWARDS_PASS == true
             m_h_params.all_gaussian_ids_for_backprop =
                 reinterpret_cast<uint32_t *>(
                     m_all_gaussian_ids_for_backprop.data_ptr());
@@ -718,7 +650,6 @@ struct Raytracer : torch::CustomClassHolder {
             m_h_params.total_hits_for_backprop = reinterpret_cast<uint32_t *>(
                 m_total_hits_for_backprop.data_ptr());
 #endif
-#endif
 
             m_gaussian_rgb.mutable_grad() = m_dL_drgb;
             m_gaussian_opacity.mutable_grad() = m_dL_dopacity;
@@ -730,18 +661,10 @@ struct Raytracer : torch::CustomClassHolder {
             m_gaussian_lod_mean.mutable_grad() = m_dL_dgaussian_lod_mean;
             m_gaussian_lod_scale.mutable_grad() = m_dL_dgaussian_lod_scale;
 #endif
-#if ATTACH_POSITION == true
             m_gaussian_position.mutable_grad() = m_dL_dgaussian_position;
-#endif
-#if ATTACH_NORMALS == true
             m_gaussian_normal.mutable_grad() = m_dL_dgaussian_normal;
-#endif
-#if ATTACH_F0 == true
             m_gaussian_f0.mutable_grad() = m_dL_dgaussian_f0;
-#endif
-#if ATTACH_ROUGHNESS == true
             m_gaussian_roughness.mutable_grad() = m_dL_dgaussian_roughness;
-#endif
 
             // Gaussian parameters
             m_h_params.gaussian_rgb =
@@ -775,30 +698,22 @@ struct Raytracer : torch::CustomClassHolder {
             m_h_params.dL_dgaussian_lod_scale =
                 reinterpret_cast<float *>(m_dL_dgaussian_lod_scale.data_ptr());
 #endif
-#if ATTACH_POSITION == true
             m_h_params.gaussian_position =
                 reinterpret_cast<float3 *>(m_gaussian_position.data_ptr());
             m_h_params.dL_dgaussian_position =
                 reinterpret_cast<float3 *>(m_dL_dgaussian_position.data_ptr());
-#endif
-#if ATTACH_NORMALS == true
             m_h_params.gaussian_normal =
                 reinterpret_cast<float3 *>(m_gaussian_normal.data_ptr());
             m_h_params.dL_dgaussian_normal =
                 reinterpret_cast<float3 *>(m_dL_dgaussian_normal.data_ptr());
-#endif
-#if ATTACH_F0 == true
             m_h_params.gaussian_f0 =
                 reinterpret_cast<float3 *>(m_gaussian_f0.data_ptr());
             m_h_params.dL_dgaussian_f0 =
                 reinterpret_cast<float3 *>(m_dL_dgaussian_f0.data_ptr());
-#endif
-#if ATTACH_ROUGHNESS == true
             m_h_params.gaussian_roughness =
                 reinterpret_cast<float *>(m_gaussian_roughness.data_ptr());
             m_h_params.dL_dgaussian_roughness =
                 reinterpret_cast<float *>(m_dL_dgaussian_roughness.data_ptr());
-#endif
 
             m_h_params.gaussian_total_weight =
                 reinterpret_cast<float *>(m_gaussian_total_weight.data_ptr());
@@ -835,73 +750,35 @@ struct Raytracer : torch::CustomClassHolder {
             m_h_params.target_glossy =
                 reinterpret_cast<float3 *>(m_target_glossy.data_ptr());
 #endif
-#if SAVE_RAY_IMAGES == true
             m_h_params.output_ray_origin =
                 reinterpret_cast<float3 *>(m_output_ray_origin.data_ptr());
             m_h_params.output_ray_direction =
                 reinterpret_cast<float3 *>(m_output_ray_direction.data_ptr());
-#endif
-#if SAVE_ALL_MAPS == true
             m_h_params.output_incident_radiance = reinterpret_cast<float3 *>(
                 m_output_incident_radiance.data_ptr());
-#endif
-#if ATTACH_POSITION == true || POSITION_FROM_EXPECTED_TERMINATION_DEPTH == true
-#if SAVE_ALL_MAPS == true
             m_h_params.output_position =
                 reinterpret_cast<float3 *>(m_output_position.data_ptr());
-#endif
             m_h_params.target_position =
                 reinterpret_cast<float3 *>(m_target_position.data_ptr());
-#endif
-#if ATTACH_DEPTH == true || POSITION_FROM_EXPECTED_TERMINATION_DEPTH == true
-#if SAVE_ALL_MAPS == true
             m_h_params.output_depth =
                 reinterpret_cast<float *>(m_output_depth.data_ptr());
-#endif
             m_h_params.target_depth =
                 reinterpret_cast<float *>(m_target_depth.data_ptr());
-#endif
-#if ATTACH_NORMALS == true
-#if SAVE_ALL_MAPS == true
             m_h_params.output_normal =
                 reinterpret_cast<float3 *>(m_output_normal.data_ptr());
-#endif
             m_h_params.target_normal =
                 reinterpret_cast<float3 *>(m_target_normal.data_ptr());
-#endif
-#if ATTACH_F0 == true
-#if SAVE_ALL_MAPS == true
             m_h_params.output_f0 =
                 reinterpret_cast<float3 *>(m_output_f0.data_ptr());
-#endif
             m_h_params.target_f0 =
                 reinterpret_cast<float3 *>(m_target_f0.data_ptr());
-#endif
-#if ATTACH_ROUGHNESS == true
-#if SAVE_ALL_MAPS == true
             m_h_params.output_roughness =
                 reinterpret_cast<float *>(m_output_roughness.data_ptr());
-#endif
             m_h_params.target_roughness =
                 reinterpret_cast<float *>(m_target_roughness.data_ptr());
-#endif
 #if MAX_BOUNCES > 0
-#if SAVE_ALL_MAPS == true
             m_h_params.output_brdf =
                 reinterpret_cast<float3 *>(m_output_brdf.data_ptr());
-#endif
-#if USE_GT_BRDF == true
-            m_h_params.target_brdf =
-                reinterpret_cast<float3 *>(m_target_brdf.data_ptr());
-#endif
-#endif
-#if SAVE_LOD_IMAGES == true
-            m_h_params.output_lod_mean =
-                reinterpret_cast<float *>(m_output_lod_mean.data_ptr());
-            m_h_params.output_lod_scale =
-                reinterpret_cast<float *>(m_output_lod_scale.data_ptr());
-            m_h_params.output_ray_lod =
-                reinterpret_cast<float *>(m_output_ray_lod.data_ptr());
 #endif
 
             // Other buffers
@@ -922,12 +799,6 @@ struct Raytracer : torch::CustomClassHolder {
                 reinterpret_cast<int *>(m_num_hits_per_pixel.data_ptr());
             m_h_params.num_traversed_per_pixel =
                 reinterpret_cast<int *>(m_num_traversed_per_pixel.data_ptr());
-// m_h_params.mask = reinterpret_cast<int*>(mask.data_ptr());
-
-// BRDF LUT
-#if USE_GT_BRDF == false && USE_LUT == true
-            m_h_params.lut = reinterpret_cast<float2 *>(m_lut.data_ptr());
-#endif
 
             // Set TLAS and copy
             m_h_params.handle = m_tlas_handle;
@@ -1485,39 +1356,31 @@ struct Raytracer : torch::CustomClassHolder {
         m_h_params.dL_dgaussian_lod_scale =
             reinterpret_cast<float *>(m_dL_dgaussian_lod_scale.data_ptr());
 #endif
-//
-#if ATTACH_POSITION == true
+        //
         m_gaussian_position.resize_({num_new_gaussians, 3});
         m_dL_dgaussian_position.resize_({num_new_gaussians, 3});
         m_h_params.gaussian_position =
             reinterpret_cast<float3 *>(m_gaussian_position.data_ptr());
         m_h_params.dL_dgaussian_position =
             reinterpret_cast<float3 *>(m_dL_dgaussian_position.data_ptr());
-#endif
-#if ATTACH_NORMALS == true
         m_gaussian_normal.resize_({num_new_gaussians, 3});
         m_dL_dgaussian_normal.resize_({num_new_gaussians, 3});
         m_h_params.gaussian_normal =
             reinterpret_cast<float3 *>(m_gaussian_normal.data_ptr());
         m_h_params.dL_dgaussian_normal =
             reinterpret_cast<float3 *>(m_dL_dgaussian_normal.data_ptr());
-#endif
-#if ATTACH_F0 == true
         m_gaussian_f0.resize_({num_new_gaussians, 3});
         m_dL_dgaussian_f0.resize_({num_new_gaussians, 3});
         m_h_params.gaussian_f0 =
             reinterpret_cast<float3 *>(m_gaussian_f0.data_ptr());
         m_h_params.dL_dgaussian_f0 =
             reinterpret_cast<float3 *>(m_dL_dgaussian_f0.data_ptr());
-#endif
-#if ATTACH_ROUGHNESS == true
         m_gaussian_roughness.resize_({num_new_gaussians, 1});
         m_dL_dgaussian_roughness.resize_({num_new_gaussians, 1});
         m_h_params.gaussian_roughness =
             reinterpret_cast<float *>(m_gaussian_roughness.data_ptr());
         m_h_params.dL_dgaussian_roughness =
             reinterpret_cast<float *>(m_dL_dgaussian_roughness.data_ptr());
-#endif
         //
         m_gaussian_mask.resize_({num_new_gaussians, 1});
 #endif
@@ -1825,10 +1688,8 @@ struct Raytracer : torch::CustomClassHolder {
 #if LOG_ALL_HITS == true
         m_prev_hit_per_pixel.fill_(999999999);
         m_total_hits.fill_(0);
-#if BACKWARDS_PASS == true
         m_prev_hit_per_pixel_for_backprop.fill_(999999999);
         m_total_hits_for_backprop.fill_(0);
-#endif
 #endif
 
         for (int h = 0; h < NUM_CHUNKS * NUM_CHUNKS; h++) {
@@ -1849,11 +1710,8 @@ struct Raytracer : torch::CustomClassHolder {
 
     void raytrace() {
 
-#if BACKWARDS_PASS == true
         bool grads_enabled = torch::GradMode::is_enabled();
         m_grads_enabled.fill_(grads_enabled);
-#endif
-
         if (m_num_samples.item<int>() > 1) {
             Tensor m_output = torch::zeros_like(m_output_rgb);
             for (int i = 0; i < m_num_samples.item<int>(); i++) {

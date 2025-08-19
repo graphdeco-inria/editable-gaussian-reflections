@@ -5,16 +5,6 @@
 // -----------------------
 
 #define MAX_BOUNCES 2
-#define USE_GT_BRDF false
-#define SURFACE_BRDF_FROM_GT_F0 false
-#define SURFACE_BRDF_FROM_GT_ROUGHNESS false
-#define SURFACE_BRDF_FROM_GT_NORMAL false
-#define REFLECTION_RAY_FROM_GT_POSITION false
-#define REFLECTION_RAY_FROM_GT_NORMAL false
-
-#define POSITION_FROM_EXPECTED_TERMINATION_DEPTH true
-
-#define BACKWARDS_PASS true
 #define NUM_CHUNKS 1
 
 #define CLAMP_MAX_VALUE 9999999999.0f
@@ -29,8 +19,6 @@
 #define ROUGHNESS_DOWNWEIGHT_GRAD_POWER 3.0f
 #define DOWNWEIGHT_EXTRA_BOUNCES true
 #define EXTRA_BOUNCE_WEIGHT 0.01f
-
-#define USE_LUT false
 
 #define INCLUDE_BRDF_WEIGHT true
 
@@ -55,7 +43,6 @@
 // --------------------------------- finalized values below
 
 #define NORMALIZE_NORMAL_MAP true
-#define PROJECT_POSITION_TO_RAY true
 
 #define INIT_F0 0.0f
 #define INIT_ROUGHNESS 0.0f
@@ -64,7 +51,6 @@
 #define GLOBAL_GRADIENT_SCALE 1.0f
 
 #define JITTER true
-#define GLOBAL_SORT false
 
 // -----------------------
 // ----- Rendering mode
@@ -105,9 +91,6 @@
 // ----- Image logging
 // -----------------------
 
-#define SAVE_ALL_MAPS true   //! kind of slow now? includes too many things
-#define SAVE_RAY_IMAGES true // !!!!!
-#define SAVE_LOD_IMAGES false
 #define SAVE_HIT_STATS false
 
 // n.b. writing all maps to memory can several ms per frame and should not be
@@ -142,18 +125,7 @@
 // -----------------------
 
 #define LUT_SIZE 512
-
-#define ACTIVATION_IN_CUDA true
-#define RELU_INSTEAD_OF_SOFTPLUS true
-#define CLIPPED_RELU_INSTEAD_OF_SIGMOID true
-
 #define LOG_ALL_HITS true
 #define RECOMPUTE_ALPHA_IN_FORWARD_PASS false
 #define BBOX_PADDING 0.0f
-
-#define ATTACH_POSITION true
-#define ATTACH_NORMALS true
-#define ATTACH_F0 true
-#define ATTACH_ROUGHNESS true
-
 #define NUM_CLUSTERS 1

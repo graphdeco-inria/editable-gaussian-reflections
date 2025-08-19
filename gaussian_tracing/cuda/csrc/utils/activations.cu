@@ -109,12 +109,7 @@ __device__ float4 backward_normalize_act(float4 dL_dy, float4 x, float4 y) {
 //     return __ldg(ptr);
 // }
 
-#if ACTIVATION_IN_CUDA == true
-#if RELU_INSTEAD_OF_SOFTPLUS == true
 #define READ_RGB(gaussian_id) params.gaussian_rgb[gaussian_id]
-#else
-#define READ_RGB(gaussian_id) softplus_act(params.gaussian_rgb[gaussian_id])
-#endif
 #define READ_OPACITY(gaussian_id)                                              \
     sigmoid_act(params.gaussian_opacity[gaussian_id])
 #define READ_ROTATION(gaussian_id)                                             \
@@ -129,17 +124,3 @@ __device__ float4 backward_normalize_act(float4 dL_dy, float4 x, float4 y) {
 #define READ_ROUGHNESS(gaussian_id)                                            \
     clipped_relu_act(params.gaussian_roughness[gaussian_id])
 #define READ_F0(gaussian_id) clipped_relu_act(params.gaussian_f0[gaussian_id])
-#else
-#define READ_RGB(gaussian_id) params.gaussian_rgb[gaussian_id]
-#define READ_OPACITY(gaussian_id) params.gaussian_opacity[gaussian_id]
-
-#define READ_ROTATION(gaussian_id) params.gaussian_rotations[gaussian_id]
-#define READ_SCALE(gaussian_id) params.gaussian_scales[gaussian_id]
-#define READ_MEAN(gaussian_id) params.gaussian_means[gaussian_id]
-
-#define READ_LOD_MEAN(gaussian_id) params.gaussian_lod_mean[gaussian_id]
-#define READ_LOD_SCALE(gaussian_id) params.gaussian_lod_scale[gaussian_id]
-
-#define READ_ROUGHNESS(gaussian_id) params.gaussian_roughness[gaussian_id]
-#define READ_F0(gaussian_id) params.gaussian_f0[gaussian_id]
-#endif
