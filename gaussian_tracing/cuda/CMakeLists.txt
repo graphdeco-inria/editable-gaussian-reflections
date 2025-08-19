@@ -26,12 +26,6 @@ find_package(OptiX8 REQUIRED)
 # Make sure we have access to Torch
 find_package(Torch REQUIRED)
 
-# === Environment Variables ===
-set(CONFIG $ENV{CONFIG})
-if(NOT CONFIG)
-    set(CONFIG -1)
-endif()
-
 # === Source Files ===
 set(SOURCES
     csrc/gausstracer.cpp
@@ -62,17 +56,11 @@ target_include_directories(optix_program PRIVATE
 
 # === Definitions ===
 target_compile_definitions(gausstracer PRIVATE
-    CONFIG=${CONFIG}
     ENABLE_OPTIX
     CMAKE_BINARY_DIR="${CMAKE_BINARY_DIR}"
     CMAKE_CURRENT_LIST_DIR="${CMAKE_CURRENT_LIST_DIR}"
-    $<$<BOOL:$ENV{EXTRA_H_AVAILABLE}>:EXTRA_H_AVAILABLE=1>
     OPTIX_SAMPLE_NAME_DEFINE=gausstracer
     OPTIX_SAMPLE_DIR_DEFINE=gausstracer
-)
-
-target_compile_definitions(optix_program PRIVATE
-    CONFIG=${CONFIG}
 )
 
 # === Compile Options ===
@@ -107,6 +95,4 @@ add_custom_command(
     DEPENDS ${CMAKE_SOURCE_DIR}/csrc/flags.h
     COMMENT "Generating flags_output.txt"
 )
-
-# === Copy Header File for Build ===
 file(COPY csrc/flags.h DESTINATION ${CMAKE_BINARY_DIR})

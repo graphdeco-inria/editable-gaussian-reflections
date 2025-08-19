@@ -233,10 +233,6 @@
 #define RELU_INSTEAD_OF_SOFTPLUS true
 #define CLIPPED_RELU_INSTEAD_OF_SIGMOID true
 
-#ifdef EXTRA_H_AVAILABLE
-#include "extra.h"
-#endif
-
 #if STORAGE_MODE == NO_STORAGE
 #define BUFFER_SIZE 16
 #endif
@@ -312,44 +308,4 @@
 
 #if USE_CLUSTERING == 0
 #define NUM_CLUSTERS 1
-#endif
-
-// --------------------------------------------------------------------
-
-// Preset configurations
-
-#if CONFIG == 0 // DEFAULT
-#define T_THRESHOLD 0.1f
-#define EXP_POWER 3
-#define ALPHA_THRESHOLD 0.02f
-#define BB_SHRINKAGE 0.8f
-#elif CONFIG == 1 // HIGH_SPEED
-#define T_THRESHOLD 0.2f
-#define EXP_POWER 5
-#define ALPHA_THRESHOLD 0.1f
-#define BB_SHRINKAGE 0.7f
-#elif CONFIG == 2 // HIGH_QUALITY
-#define T_THRESHOLD 0.05f
-#define EXP_POWER 2
-#define ALPHA_THRESHOLD 0.01f
-#elif CONFIG == 3 // MATCH_3DGS
-#define T_THRESHOLD 0.001f
-#define EXP_POWER 1
-#define ALPHA_THRESHOLD 0.001f
-#define GLOBAL_SORT true
-#define BBOX_PADDING 0.002f
-#define ANTIALIAS 0.001f
-#define REMAINING_COLOR_ESTIMATION NO_ESTIMATION
-#define PPLL_STORAGE_SIZE 500000000
-#elif CONFIG == 4          // MATCH_3DRT
-#define T_THRESHOLD 0.001f // (& switch to 0.03 at inference)
-#define EXP_POWER 2
-#define ALPHA_THRESHOLD 0.01f
-#define REMAINING_COLOR_ESTIMATION                                             \
-    NO_ESTIMATION  // using our estimate propbably changes nothing but can only
-                   // improve psnr
-#elif CONFIG == 11 // TMP
-// #define BBOX_PADDING 0.002f
-#elif CONFIG != -1
-#error "Invalid CONFIG value"
 #endif
