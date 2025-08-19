@@ -1,22 +1,20 @@
 #include "params.h"
-#include "vec_math.h"
+#include "utils/vec_math.h"
 #include <iostream>
 #include <random>
 
-#include "ggx_brdf.h"
 #include "tonemapping.h"
+#include "utils/ggx_brdf.h"
 
-#include "activations.cu"
-#include "utils.cu"
+#include "utils/activations.cu"
+#include "utils/misc.cu"
 
 extern "C" {
 __constant__ Params params;
 }
 
-#include "gaussian.cu"
-#include "random.h"
-#include <curand.h>
-#include <curand_kernel.h>
+#include "utils/kernel.cu"
+#include "utils/random.h"
 
 #if USE_GT_BRDF == false
 __device__ float2 bilinear_sample_LUT(float2 uv) {
