@@ -1,11 +1,10 @@
-#include "flags.h"
-#include "params.h"
-#include "vec_math.h"
 #include <optix.h>
 #include <optix_stubs.h>
 
-#include "activations.cu"
-#include "gaussian.cu"
+#include "../flags.h"
+#include "../params.h"
+#include "../utils/activations.cu"
+#include "../utils/kernel.cu"
 
 __device__ void create_transform_matrix(
     const float4 rotation,

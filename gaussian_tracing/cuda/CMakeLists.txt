@@ -35,7 +35,7 @@ endif()
 # === Source Files ===
 set(SOURCES
     csrc/gausstracer.cpp
-    csrc/populate_bvh.cu
+    csrc/optix/bvh_wrapper.cu
 )
 
 # === Main Shared Library Target ===

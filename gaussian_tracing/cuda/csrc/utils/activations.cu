@@ -1,4 +1,4 @@
-
+#include "vec_math.h"
 
 __device__ float sigmoid_act(float x) { return 1.0f / (1.0f + exp(-x)); }
 __device__ float3 sigmoid_act(float3 x) {

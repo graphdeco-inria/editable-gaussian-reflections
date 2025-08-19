@@ -14,9 +14,9 @@
 #include <iostream>
 #include <string>
 
-#include "Exception.h"
+#include "optix/bvh_wrapper.h"
 #include "params.h"
-#include "populate_bvh.h"
+#include "utils/exception.h"
 
 #if DENOISER == true
 #include <optix_denoiser_tiling.h>

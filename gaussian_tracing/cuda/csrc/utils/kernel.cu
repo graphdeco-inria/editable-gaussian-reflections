@@ -1,4 +1,4 @@
-
+#include "vec_math.h"
 
 __device__ __host__ float
 compute_scaling_factor(float opacity, float alpha_threshold, float exp_power) {
