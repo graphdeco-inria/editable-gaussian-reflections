@@ -462,31 +462,7 @@ struct Raytracer : torch::CustomClassHolder {
             {MAX_BOUNCES + 1, image_height, image_width, 3},
             torch::dtype(torch::kFloat32).device(torch::kCUDA));
 #endif
-#if SAVE_LUT_IMAGES == true
-        m_output_effective_reflection_position = torch::zeros(
-            {MAX_BOUNCES + 1, image_height, image_width, 3},
-            torch::dtype(torch::kFloat32).device(torch::kCUDA));
-        m_output_effective_reflection_normal = torch::zeros(
-            {MAX_BOUNCES + 1, image_height, image_width, 3},
-            torch::dtype(torch::kFloat32).device(torch::kCUDA));
-        m_output_effective_F0 = torch::zeros(
-            {MAX_BOUNCES + 1, image_height, image_width, 3},
-            torch::dtype(torch::kFloat32).device(torch::kCUDA));
-        m_output_effective_roughness = torch::zeros(
-            {MAX_BOUNCES + 1, image_height, image_width, 1},
-            torch::dtype(torch::kFloat32).device(torch::kCUDA));
-        m_output_effective_normal = torch::zeros(
-            {MAX_BOUNCES + 1, image_height, image_width, 3},
-            torch::dtype(torch::kFloat32).device(torch::kCUDA));
-#if USE_GT_BRDF == false
-        m_output_lut_values = torch::zeros(
-            {MAX_BOUNCES + 1, image_height, image_width, 2},
-            torch::dtype(torch::kFloat32).device(torch::kCUDA));
-        m_output_n_dot_v = torch::zeros(
-            {MAX_BOUNCES + 1, image_height, image_width, 1},
-            torch::dtype(torch::kFloat32).device(torch::kCUDA));
-#endif
-#endif
+
 #if ATTACH_POSITION == true || POSITION_FROM_EXPECTED_TERMINATION_DEPTH == true
 #if SAVE_ALL_MAPS == true
         m_output_position = torch::zeros(
@@ -560,16 +536,6 @@ struct Raytracer : torch::CustomClassHolder {
 #endif
 #if USE_GT_BRDF == true
         m_target_brdf = torch::zeros(
-            {image_height, image_width, 3},
-            torch::dtype(torch::kFloat32).device(torch::kCUDA));
-#endif
-#if USE_GT_DIFFUSE_IRRADIANCE == true
-#if SAVE_ALL_MAPS == true
-        m_output_diffuse_irradiance = torch::zeros(
-            {MAX_BOUNCES + 1, image_height, image_width, 3},
-            torch::dtype(torch::kFloat32).device(torch::kCUDA));
-#endif
-        m_target_diffuse_irradiance = torch::zeros(
             {image_height, image_width, 3},
             torch::dtype(torch::kFloat32).device(torch::kCUDA));
 #endif
@@ -920,26 +886,6 @@ struct Raytracer : torch::CustomClassHolder {
             m_h_params.output_ray_direction =
                 reinterpret_cast<float3 *>(m_output_ray_direction.data_ptr());
 #endif
-#if SAVE_LUT_IMAGES == true
-            m_h_params.output_effective_reflection_position =
-                reinterpret_cast<float3 *>(
-                    m_output_effective_reflection_position.data_ptr());
-            m_h_params.output_effective_reflection_normal =
-                reinterpret_cast<float3 *>(
-                    m_output_effective_reflection_normal.data_ptr());
-            m_h_params.output_effective_F0 =
-                reinterpret_cast<float3 *>(m_output_effective_F0.data_ptr());
-            m_h_params.output_effective_roughness = reinterpret_cast<float *>(
-                m_output_effective_roughness.data_ptr());
-            m_h_params.output_effective_normal = reinterpret_cast<float3 *>(
-                m_output_effective_normal.data_ptr());
-#if USE_GT_BRDF == false
-            m_h_params.output_lut_values =
-                reinterpret_cast<float2 *>(m_output_lut_values.data_ptr());
-            m_h_params.output_n_dot_v =
-                reinterpret_cast<float *>(m_output_n_dot_v.data_ptr());
-#endif
-#endif
 #if SAVE_ALL_MAPS == true
             m_h_params.output_incident_radiance = reinterpret_cast<float3 *>(
                 m_output_incident_radiance.data_ptr());
@@ -997,14 +943,6 @@ struct Raytracer : torch::CustomClassHolder {
             m_h_params.target_brdf =
                 reinterpret_cast<float3 *>(m_target_brdf.data_ptr());
 #endif
-#endif
-#if USE_GT_DIFFUSE_IRRADIANCE == true
-#if SAVE_ALL_MAPS == true
-            m_h_params.output_diffuse_irradiance = reinterpret_cast<float3 *>(
-                m_output_diffuse_irradiance.data_ptr());
-#endif
-            m_h_params.target_diffuse_irradiance = reinterpret_cast<float3 *>(
-                m_target_diffuse_irradiance.data_ptr());
 #endif
 #if REFLECTIONS_FROM_GT_GLOSSY_IRRADIANCE == true
 #if SAVE_ALL_MAPS == true

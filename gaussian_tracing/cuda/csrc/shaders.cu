@@ -245,10 +245,6 @@ extern "C" __global__ void __intersection__gaussian() {
         }
 #endif
 
-#if USE_LEVEL_OF_DETAIL == true
-        printf("lod not implemented with tiling!\n");
-#endif
-
         // * Log the subpixels
         params.all_alphas[TILE_SIZE * TILE_SIZE * hit_idx + k] = alpha;
 #if BACKWARDS_PASS == true
@@ -358,17 +354,6 @@ extern "C" __global__ void __intersection__gaussian() {
         compute_scaling_factor(opacity, params.alpha_threshold, p);
     float gaussval = eval_gaussian(local_hit, p);
     float alpha = compute_alpha(gaussval, opacity, params.alpha_threshold);
-
-#if USE_LEVEL_OF_DETAIL == true
-    float initial_lod = __uint_as_float(optixGetPayload_0());
-    float lod_by_distance = __uint_as_float(optixGetPayload_1());
-    float ray_lod = initial_lod + lod_by_distance * sorting_distance;
-    float gaussian_lod_mean = READ_LOD_MEAN(gaussian_id);
-    float gaussian_lod_scale = READ_LOD_SCALE(gaussian_id);
-    float windowing =
-        compute_alpha_windowing(ray_lod, gaussian_lod_mean, gaussian_lod_scale);
-    alpha *= windowing;
-#endif
 
 // * Compute the total transmittance for the ray accurately
 #if STORAGE_MODE == NO_STORAGE
@@ -925,19 +910,6 @@ extern "C" __global__ void __raygen__rg() {
                             output_throughput[step - 1][c][k];
                     }
 
-#if SAVE_LUT_IMAGES == true
-                    params
-                        .output_effective_normal[pixel_id + num_pixels * step] =
-                        effective_normal;
-                    params.output_effective_F0[pixel_id + num_pixels * step] =
-                        effective_F0;
-                    params.output_effective_roughness
-                        [pixel_id + num_pixels * step] = effective_roughness;
-                    params.output_lut_values[pixel_id + num_pixels * step] =
-                        lut_values;
-                    params.output_n_dot_v[pixel_id + num_pixels * step] =
-                        n_dot_v;
-#endif
 #endif
                 }
 
@@ -967,27 +939,6 @@ extern "C" __global__ void __raygen__rg() {
                             goto forward_pass_end;
                         }
                     }
-
-#if SAVE_LUT_IMAGES == true
-                    params.output_effective_reflection_position
-                        [pixel_id + num_pixels * step] = effective_position;
-                    params.output_effective_reflection_normal
-                        [pixel_id + num_pixels * step] = effective_normal;
-#endif
-
-#if USE_LEVEL_OF_DETAIL == true
-                    if (step < MAX_BOUNCES) {
-                        float distance_travelled =
-                            length(effective_position - origin[k]);
-                        initial_lod[step + 1] =
-                            initial_lod[step] +
-                            lod_by_distance[step] * distance_travelled;
-                        lod_by_distance[step + 1] =
-                            lod_by_distance[step] +
-                            2.0f *
-                                effective_roughness; // TODO review this mapping
-                    }
-#endif
 
 #if SAMPLE_FROM_BRDF == true
                     float3 next_direction = sample_cook_torrance(
@@ -1023,17 +974,6 @@ extern "C" __global__ void __raygen__rg() {
 #else
                     float3 next_direction =
                         reflect(direction[k], effective_normal);
-#endif
-
-#if USE_RUSSIAN_ROULETTE == true
-                    float3 tmp = output_throughput[step][c][k];
-                    float p_continue =
-                        powf(max(tmp.x, max(tmp.y, tmp.z)), ROULETTE_POWER);
-                    output_throughput[step][c][k] /= p_continue;
-                    float u = rnd(seed);
-                    if (u > p_continue) {
-                        goto forward_pass_end;
-                    }
 #endif
 
                     float3 next_origin =
@@ -1274,25 +1214,8 @@ forward_pass_end:
 // * Run backward pass
 #pragma unroll
     for (int step = total_effective_steps - 1; step >= 0; step--) {
-
         // * Compute error (difference between prediction and target)
         float3 error[TILE_SIZE * TILE_SIZE];
-        float3 dL_doutput_F0_self_supervised[TILE_SIZE * TILE_SIZE];
-        fill_array(
-            dL_doutput_F0_self_supervised,
-            TILE_SIZE * TILE_SIZE,
-            make_float3(0.0f, 0.0f, 0.0f));
-        float3 dL_doutput_normal_self_supervised[TILE_SIZE * TILE_SIZE];
-        fill_array(
-            dL_doutput_normal_self_supervised,
-            TILE_SIZE * TILE_SIZE,
-            make_float3(0.0f, 0.0f, 0.0f));
-        float3 dL_doutput_position_self_supervised[TILE_SIZE * TILE_SIZE];
-        fill_array(
-            dL_doutput_position_self_supervised,
-            TILE_SIZE * TILE_SIZE,
-            make_float3(0.0f, 0.0f, 0.0f));
-
         for (int k = 0; k < TILE_SIZE * TILE_SIZE; k++) {
             if (step == 0) {
 #if MAX_BOUNCES == 0
@@ -1320,8 +1243,6 @@ forward_pass_end:
             }
 
             if (step == total_effective_steps - 1) {
-                dL_doutput_F0_self_supervised[k] =
-                    make_float3(0.0f, 0.0f, 0.0f);
                 // float3 dL_doutput_roughness = make_float3(0.0f, 0.0f, 0.0f);
 
                 // these flow from dL_dray_origin, dL_dray_direction
@@ -1331,26 +1252,13 @@ forward_pass_end:
                 float2 lut_values = output_lut_values[step][0][k];
                 float3 brdf_of_step =
                     lut_values.x * output_f0[step][0][k] * lut_values.y;
-                // dL_doutput_F0_self_supervised[k] =
-                // dL_dthroughput_all_subsequent_steps[k] * lut_values.x;
-                // //!!!!! tmp, only works 1 bounce
 
                 // cook_torrance_weight(effective_normal, -direction[k],
                 // next_direction, effective_roughness, effective_F0);
             }
 
-            // dL_doutput_position_self_supervised[k] =
-            // dot(dL_dray_origin_next_step, direction[k]) * direction[k]; //
-            // todo review
-
             // todo debug optimizing from 0 init in a separate file
             float3 unnormalized_normal = output_normal[step][0][k];
-            // dL_doutput_normal_self_supervised[k] =
-            // dL_dray_direction_next_step; dL_doutput_normal_self_supervised[k]
-            // = dL_dray_direction_next_step / (length(unnormalized_normal) +
-            // 1e-8f) - dot(unnormalized_normal, dL_dray_direction_next_step) *
-            // unnormalized_normal;  / (powf((length(unnormalized_normal) +
-            // 1e-8f), 3.0f) + 1e-8f);
         }
 
         // Reset to 0 since backward pass increments these
@@ -1406,10 +1314,6 @@ forward_pass_end:
                 output_throughput[max(step - 1, 0)][0],
                 dL_dthroughput_out, // calling this function adds gradients to
                                     // this, its a mess sry
-                //
-                dL_doutput_F0_self_supervised,
-                dL_doutput_position_self_supervised,
-                dL_doutput_normal_self_supervised,
                 //
                 target_rgb,
                 target_diffuse,

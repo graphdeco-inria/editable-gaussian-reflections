@@ -80,9 +80,6 @@ __global__ void _populateBVH(
         float3 sizes = scales[i];
 #if ACTIVATION_IN_CUDA == true
         sizes = exp_act(sizes);
-#if USE_LEVEL_OF_DETAIL == true && ADD_LOD_MEAN_TO_SCALE == true
-        sizes = sizes + lod_means[i];
-#endif
 #endif
         sizes = sizes * 3.0;
         if (ANTIALIASING > 0.0f) {
@@ -93,9 +90,6 @@ __global__ void _populateBVH(
         float3 sizes = scales[i];
 #if ACTIVATION_IN_CUDA == true
         sizes = exp_act(sizes);
-#if USE_LEVEL_OF_DETAIL == true && ADD_LOD_MEAN_TO_SCALE == true
-        sizes = sizes + lod_means[i];
-#endif
 #endif
 // ????????? shouldn't clamping be after antialiasing?
 #if OPTIMIZE_EXP_POWER == true
@@ -116,39 +110,6 @@ __global__ void _populateBVH(
             sizes.z < IGNORE_0_VOLUME_MINSIZE) {
             instances[i].visibilityMask = 0;
         }
-#endif
-
-#if USE_LEVEL_OF_DETAIL == true && USE_LEVEL_OF_DETAIL_MASKING == true
-        float MAX_LOD =
-            0.05f; //!!!!!!!!! todo need to read from config somewhere
-        float normalized_lod_mean = lod_means[i] / MAX_LOD;
-        float normalized_lod_scale = exp(lod_scales[i]) / MAX_LOD;
-        float halfwidth = 0.1; // todo
-
-        const int num_bins = 8;
-        // uint8_t mask = 0xFF;
-        uint8_t mask = 0;
-
-        int start = std::max(
-            0,
-            static_cast<int>(
-                (normalized_lod_mean - normalized_lod_scale) * num_bins));
-        int end = std::min(
-            9 - 1,
-            static_cast<int>(
-                (normalized_lod_mean + normalized_lod_scale) * num_bins));
-        for (int i = start; i <= end; ++i) {
-            mask |= (1 << i);
-        }
-        // if (i % 1000 == 0) {
-        //     printf("lod_mean: %f, lod_scale: %f, normalized_lod_mean: %f,
-        //     normalized_lod_scale: %f\n", lod_means[i], lod_scales[i],
-        //     normalized_lod_mean, normalized_lod_scale);
-        //     // printf("\n", normalized_lod_mean, normalized_lod_scale);
-        //     // printf("mask: %08b\n", mask);
-        // }
-
-        instances[i].visibilityMask = mask & (scaling_factor > 0.0f);
 #endif
 
         sizes *= BB_SHRINKAGE;
@@ -247,9 +208,6 @@ __global__ void _populateTensor(
         float3 sizes = scales[i];
 #if ACTIVATION_IN_CUDA == true
         sizes = exp_act(sizes);
-#if USE_LEVEL_OF_DETAIL == true && ADD_LOD_MEAN_TO_SCALE == true
-        sizes = sizes + lod_means[i];
-#endif
 #endif
 // ????????? shouldn't clamping be after antialiasing?
 #if OPTIMIZE_EXP_POWER == true

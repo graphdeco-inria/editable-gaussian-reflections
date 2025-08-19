@@ -41,9 +41,6 @@ __device__ void backward_pass(
     const int num_hits,
     const float3 throughput[TILE_SIZE * TILE_SIZE],
     float3 dL_dthroughput_out[TILE_SIZE * TILE_SIZE],
-    const float3 dL_doutput_F0_self_supervised[TILE_SIZE * TILE_SIZE],
-    const float3 dL_doutput_position_self_supervised[TILE_SIZE * TILE_SIZE],
-    const float3 dL_doutput_normal_self_supervised[TILE_SIZE * TILE_SIZE],
 
     //
     const float3 target_rgb[TILE_SIZE * TILE_SIZE],
@@ -252,10 +249,6 @@ __device__ void backward_pass(
             float3 dL_dexpected_termination_total =
                 make_float3(0.0f, 0.0f, 0.0f);
 #endif
-#if USE_LEVEL_OF_DETAIL == true
-            float dL_dgaussian_lod_mean_total = 0.0f;
-            float dL_dgaussian_lod_scale_total = 0.0f;
-#endif
 
             float weight;
             for (int k = 0; k < TILE_SIZE * TILE_SIZE; k++) {
@@ -329,11 +322,6 @@ __device__ void backward_pass(
                     dL_doutput_rgb *= loss_modulation;
                     //? what about dL_dthroughput_out?
                 }
-
-                // dL_doutput_f0 += dL_doutput_F0_self_supervised[k];
-                // dL_doutput_normal += dL_doutput_normal_self_supervised[k];
-                // dL_doutput_position +=
-                // dL_doutput_position_self_supervised[k];
 
                 // * Color gradient
                 weight = curr_T / (1.0 - alpha) * alpha;
@@ -492,38 +480,7 @@ __device__ void backward_pass(
 #endif
                 }
 
-#if USE_LEVEL_OF_DETAIL == true
-                float blur_level =
-                    initial_blur_level + blur_by_distance * distances[k];
-                float gaussian_lod_mean = READ_LOD_MEAN(gaussian_id);
-                float gaussian_lod_scale = READ_LOD_SCALE(gaussian_id);
-                float windowing = compute_alpha_windowing(
-                    blur_level, gaussian_lod_mean, gaussian_lod_scale);
-                float abs_dist = abs(blur_level - gaussian_lod_mean);
-                float scaled_dist = abs_dist / gaussian_lod_scale;
-                float dL_dgaussian_lod_mean =
-                    dL_dalpha * gaussval * opacity * LOD_KERNEL_EXPONENT *
-                    powf(scaled_dist, LOD_KERNEL_EXPONENT - 1.0f) /
-                    gaussian_lod_scale *
-                    ((blur_level - gaussian_lod_mean) < 0 ? -1.0f : 1.0f);
-                float dL_dgaussian_lod_scale =
-                    dL_dalpha * gaussval * opacity * LOD_KERNEL_EXPONENT *
-                    powf(abs_dist, LOD_KERNEL_EXPONENT) *
-                    powf(gaussian_lod_scale, -(LOD_KERNEL_EXPONENT + 1));
-                if (1.0f - powf(scaled_dist, LOD_KERNEL_EXPONENT) < 0) {
-                    dL_dgaussian_lod_mean = 0.0f;
-                    dL_dgaussian_lod_scale = 0.0f;
-                } else {
-                    dL_dgaussian_lod_mean_total +=
-                        dL_dgaussian_lod_mean; // backward_softplus_act(dL_dgaussian_lod_mean,
-                                               // params.gaussian_lod_mean[gaussian_id],
-                                               // gaussian_lod_mean);
-                    dL_dgaussian_lod_scale_total += backward_exp_act(
-                        dL_dgaussian_lod_scale, gaussian_lod_scale);
-                }
-#else
                 float windowing = 1.0f;
-#endif
 
 #if ALLOW_OPACITY_ABOVE_1 == true
                 float dL_dopacity = dL_dalpha * gaussval * windowing;
@@ -705,14 +662,7 @@ __device__ void backward_pass(
                     dL_dl2w_0 * rot_0 + dL_dl2w_1 * rot_1 + dL_dl2w_2 * rot_2;
 
 #if ACTIVATION_IN_CUDA == true
-#if USE_LEVEL_OF_DETAIL == true && ADD_LOD_MEAN_TO_SCALE == true
-                dL_dscale = backward_exp_act(
-                    dL_dscale, params.gaussian_scales[gaussian_id]);
-                dL_dgaussian_lod_mean_total +=
-                    dL_dscale.x + dL_dscale.y + dL_dscale.z;
-#else
                 dL_dscale = backward_exp_act(dL_dscale, scaling);
-#endif
 #endif
                 dL_dscale_total += dL_dscale;
 
@@ -803,16 +753,6 @@ __device__ void backward_pass(
                             GLOBAL_GRADIENT_SCALE);
 #endif
                 }
-#if USE_LEVEL_OF_DETAIL == true
-                atomicAdd(
-                    &params.dL_dgaussian_lod_mean[gaussian_id],
-                    dL_dgaussian_lod_mean_total * grad_dist_weight *
-                        GLOBAL_GRADIENT_SCALE);
-                atomicAdd(
-                    &params.dL_dgaussian_lod_scale[gaussian_id],
-                    dL_dgaussian_lod_scale_total * grad_dist_weight *
-                        GLOBAL_GRADIENT_SCALE);
-#endif
                 atomicAdd4(
                     &params.dL_drotations[gaussian_id],
                     dL_drot_total * grad_dist_weight * GLOBAL_GRADIENT_SCALE);
