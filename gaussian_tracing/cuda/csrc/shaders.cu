@@ -3,17 +3,10 @@
 #include <iostream>
 #include <random>
 
-#include "tonemapping.h"
-#include "utils/ggx_brdf.h"
-
 #include "utils/activations.cu"
-#include "utils/misc.cu"
-
-extern "C" {
-__constant__ Params params;
-}
-
+#include "utils/ggx_brdf.h"
 #include "utils/kernel.cu"
+#include "utils/misc.cu"
 #include "utils/random.h"
 
 #if USE_GT_BRDF == false
@@ -1118,14 +1111,6 @@ forward_pass_end:
         }
     }
 
-// #if TONEMAP == true
-//     for (int k = 0; k < TILE_SIZE*TILE_SIZE; k++) {
-//         for (int s = 0; s < MAX_BOUNCES + 2; s++) {
-//             output_rgb[s][k] = tonemap(output_rgb[s][k]);
-//         }
-//     }
-// #endif
-
 // * Write image to framebuffer
 #pragma unroll
     for (int ki = 0; ki < TILE_SIZE; ki++)
@@ -1217,11 +1202,6 @@ forward_pass_end:
         for (int j = 0; j < TILE_SIZE; j++) {
             target_rgb[i * TILE_SIZE + j] =
                 params.target_rgb[ray_id + i * params.image_width + j];
-            // #if INVERT_TONEMAP_TARGET == true
-            //     target_rgb[i * TILE_SIZE + j] = untonemap(target_rgb[i *
-            //     TILE_SIZE
-            //     + j]);
-            // #endif
         }
 #if ATTACH_POSITION == true
     for (int i = 0; i < TILE_SIZE; i++)
@@ -1263,19 +1243,11 @@ forward_pass_end:
         for (int j = 0; j < TILE_SIZE; j++) {
             target_diffuse[i * TILE_SIZE + j] =
                 params.target_diffuse[ray_id + i * params.image_width + j];
-            // #if INVERT_TONEMAP_TARGET == true
-            //     target_diffuse[i * TILE_SIZE + j] =
-            //     untonemap(target_diffuse[i * TILE_SIZE + j]);
-            // #endif
         }
     for (int i = 0; i < TILE_SIZE; i++)
         for (int j = 0; j < TILE_SIZE; j++) {
             target_glossy[i * TILE_SIZE + j] =
                 params.target_glossy[ray_id + i * params.image_width + j];
-            // #if INVERT_TONEMAP_TARGET == true
-            //     target_glossy[i * TILE_SIZE + j] = untonemap(target_glossy[i
-            //     * TILE_SIZE + j]);
-            // #endif
         }
 #endif
 
@@ -1470,15 +1442,6 @@ forward_pass_end:
     }
 
 #endif
-
-    // #if INVERT_TONEMAP_TARGET == true
-    //     for (int k = 0; k < TILE_SIZE*TILE_SIZE; k++) {
-    //         for (int step = 0; step < MAX_BOUNCES + 2; step++) {
-    //             params.output_rgb[step][k] =
-    //             tonemap(params.output_rgb[step][k] / params.num_samples);
-    //         }
-    //     }
-    // #endif
 
     params.random_seeds[ray_id] = seed;
 }

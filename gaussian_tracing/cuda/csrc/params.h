@@ -32,10 +32,6 @@
 #include <cuda.h>
 #include <optix.h>
 
-#if ENABLE_DEBUG_DUMP == true
-#include "dump.h"
-#endif
-
 struct Params {
     uint32_t image_width;
     uint32_t image_height;
@@ -224,10 +220,6 @@ struct Params {
     float *__restrict__ dL_dexp_powers;
 #endif
 
-#if ENABLE_DEBUG_DUMP == true
-    Dump *dump;
-#endif
-
 #if LOG_ALL_HITS == true
     uint32_t *total_hits; // total # of hits
 
@@ -292,5 +284,9 @@ template <typename T> struct SbtRecord {
         OPTIX_SBT_RECORD_ALIGNMENT) char header[OPTIX_SBT_RECORD_HEADER_SIZE];
     T data;
 };
+
+extern "C" {
+__constant__ Params params;
+}
 
 #define NULL_GAUSSIAN_ID 1U << 30

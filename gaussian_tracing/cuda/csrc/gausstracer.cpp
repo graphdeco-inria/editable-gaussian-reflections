@@ -104,10 +104,6 @@ struct Raytracer : torch::CustomClassHolder {
 
     cublasHandle_t handle;
 
-#if ENABLE_DEBUG_DUMP == true
-    CUdeviceptr m_d_dump;
-#endif
-
     Tensor m_iteration;
 
     Tensor m_grads_enabled =
@@ -1058,11 +1054,6 @@ struct Raytracer : torch::CustomClassHolder {
 
             // Set TLAS and copy
             m_h_params.handle = m_tlas_handle;
-#if ENABLE_DEBUG_DUMP == true
-            CUDA_CHECK(
-                cudaMalloc(reinterpret_cast<void **>(&m_d_dump), sizeof(Dump)));
-            m_h_params.dump = reinterpret_cast<Dump *>(m_d_dump);
-#endif
             CUDA_CHECK(cudaMalloc(
                 reinterpret_cast<void **>(&m_d_params), sizeof(Params)));
             CUDA_CHECK(cudaMemcpy(
@@ -2116,80 +2107,6 @@ struct Raytracer : torch::CustomClassHolder {
         } else {
             m_accumulated_sample_count[0] += 1;
         }
-
-#if ENABLE_DEBUG_DUMP == true
-        Dump dump;
-        CUDA_CHECK(cudaMemcpy(
-            &dump,
-            reinterpret_cast<void *>(m_d_dump),
-            sizeof(Dump),
-            cudaMemcpyDeviceToHost));
-        torch::save(
-            {torch::from_blob(
-                 dump.step, {MAX_DUMPED_HITS}, torch::dtype(torch::kInt32)),
-             torch::from_blob(dump.origin, {MAX_BOUNCES + 1, 3}),
-             torch::from_blob(dump.direction, {MAX_BOUNCES + 1, 3}),
-             torch::from_blob(dump.distances, {MAX_DUMPED_HITS}),
-             torch::from_blob(
-                 dump.gaussian_ids,
-                 {MAX_DUMPED_HITS},
-                 torch::dtype(torch::kInt32)),
-             torch::from_blob(dump.rgbt, {MAX_BOUNCES + 1, 4}),
-             torch::from_blob(dump.position, {MAX_BOUNCES + 1, 3}),
-             torch::from_blob(dump.normal, {MAX_BOUNCES + 1, 3}),
-             torch::from_blob(dump.f0, {MAX_BOUNCES + 1, 3}),
-             torch::from_blob(dump.roughness, {MAX_BOUNCES + 1}),
-             torch::from_blob(dump.lod_mean, {MAX_DUMPED_HITS}),
-             torch::from_blob(dump.lod_scale, {MAX_DUMPED_HITS}),
-             torch::from_blob(dump.ray_lod, {MAX_DUMPED_HITS}),
-             //
-             torch::from_blob(dump.hit_point_world, {MAX_DUMPED_HITS, 3}),
-             torch::from_blob(dump.hit_point_local, {MAX_DUMPED_HITS, 3}),
-             torch::from_blob(dump.gaussval, {MAX_DUMPED_HITS}),
-             torch::from_blob(dump.alpha, {MAX_DUMPED_HITS}),
-             torch::from_blob(dump.T, {MAX_DUMPED_HITS}),
-             //
-             torch::stack(
-                 {torch::from_blob(dump.xforms_0, {MAX_DUMPED_HITS, 4}),
-                  torch::from_blob(dump.xforms_1, {MAX_DUMPED_HITS, 4}),
-                  torch::from_blob(dump.xforms_2, {MAX_DUMPED_HITS, 4})},
-                 -2),
-             torch::stack(
-                 {torch::from_blob(dump.inv_xforms_0, {MAX_DUMPED_HITS, 4}),
-                  torch::from_blob(dump.inv_xforms_1, {MAX_DUMPED_HITS, 4}),
-                  torch::from_blob(dump.inv_xforms_2, {MAX_DUMPED_HITS, 4})},
-                 -2),
-             torch::from_blob(dump.dL_drgb, {MAX_DUMPED_HITS, 3}),
-             torch::from_blob(dump.dL_dopacity, {MAX_DUMPED_HITS}),
-             torch::from_blob(dump.dL_dgaussian_lod_mean, {MAX_DUMPED_HITS}),
-             torch::from_blob(dump.dL_dgaussian_lod_scale, {MAX_DUMPED_HITS}),
-             torch::from_blob(
-                 dump.backward_weighted_rgb_deltas, {MAX_DUMPED_HITS, 3}),
-             torch::from_blob(
-                 dump.backward_prev_gaussian_rgb, {MAX_DUMPED_HITS, 3}),
-             torch::from_blob(dump.backward_T, {MAX_DUMPED_HITS}),
-             torch::from_blob(dump.dL_dalpha, {MAX_DUMPED_HITS}),
-             torch::from_blob(dump.dL_dgaussval, {MAX_DUMPED_HITS}),
-             torch::from_blob(dump.dL_dx_local, {MAX_DUMPED_HITS, 3}),
-             torch::from_blob(dump.dL_dx_world, {MAX_DUMPED_HITS, 3}),
-             torch::stack(
-                 {torch::from_blob(dump.dL_dxform_0, {MAX_DUMPED_HITS, 4}),
-                  torch::from_blob(dump.dL_dxform_1, {MAX_DUMPED_HITS, 4}),
-                  torch::from_blob(dump.dL_dxform_2, {MAX_DUMPED_HITS, 4})},
-                 -2),
-             torch::stack(
-                 {torch::from_blob(dump.dL_drot_0, {MAX_DUMPED_HITS, 3}),
-                  torch::from_blob(dump.dL_drot_1, {MAX_DUMPED_HITS, 3}),
-                  torch::from_blob(dump.dL_drot_2, {MAX_DUMPED_HITS, 3})},
-                 -2),
-             torch::from_blob(dump.dL_dmeans, {MAX_DUMPED_HITS, 3}),
-             torch::from_blob(dump.dL_dscales, {MAX_DUMPED_HITS, 3}),
-             torch::from_blob(dump.dL_drotations, {MAX_DUMPED_HITS, 4}),
-             torch::from_blob(dump.dL_dexp_powers, {MAX_DUMPED_HITS}),
-             torch::from_blob(dump.full_T, {MAX_BOUNCES + 1}),
-             torch::from_blob(dump.remaining_rgb, {MAX_BOUNCES + 1, 3})},
-            std::string(CMAKE_CURRENT_LIST_DIR) + "/dump.pt");
-#endif
     }
 
     void configure(

@@ -395,14 +395,6 @@ __device__ void froward_pass(
 #endif
 
                 num_hits++; //! was incorrect for tiling, review
-#if ENABLE_DEBUG_DUMP == true
-                int dump_i;
-                if (*params.iteration == 0 && ray_id == DEBUG_DUMP_PIXEL_ID) {
-                    dump_i =
-                        params.dump
-                            ->idx++; // starts at -1 so the indexing works out
-                }
-#endif
 
 #if USE_CLUSTERING == true
 #if TILE_SIZE != 1
@@ -606,31 +598,6 @@ __device__ void froward_pass(
                             output_t[k].x;
                         params.all_gaussvals_for_backprop
                             [TILE_SIZE * TILE_SIZE * new_idx + k] = gaussval;
-                    }
-#endif
-
-#if ENABLE_DEBUG_DUMP == true
-                    if (*params.iteration == 0 &&
-                        ray_id == DEBUG_DUMP_PIXEL_ID && k == 0) {
-                        params.dump->origin[step] = tile_origin;
-                        params.dump->direction[step] = tile_direction;
-
-                        params.dump->step[dump_i] = step;
-                        params.dump->distances[dump_i] = distance;
-                        params.dump->gaussian_ids[dump_i] = gaussian_id;
-
-                        params.dump->hit_point_local[dump_i] =
-                            params.all_local_hits[idxes[i]];
-                        params.dump->gaussval[dump_i] = gaussval;
-                        params.dump->alpha[dump_i] = alpha;
-                        params.dump->T[dump_i] = next_T;
-                        const float4 *xform =
-                            optixGetInstanceTransformFromHandle(
-                                optixGetInstanceTraversableFromIAS(
-                                    params.handle, gaussian_id));
-                        params.dump->xforms_0[dump_i] = xform[0];
-                        params.dump->xforms_1[dump_i] = xform[1];
-                        params.dump->xforms_2[dump_i] = xform[2];
                     }
 #endif
 
@@ -918,33 +885,6 @@ finished_integration:
             output_lod_mean[k][0] + remaining_T * remaining_lod_mean[k][0];
         output_ray_lod[k][0] =
             output_ray_lod[k][0] + remaining_T * remaining_ray_lod[k][0];
-#endif
-    }
-#endif
-
-#if ENABLE_DEBUG_DUMP == true
-    if (*params.iteration == 0 && ray_id == DEBUG_DUMP_PIXEL_ID) {
-        params.dump->remaining_rgb[step] = remaining_rgb[0];
-        params.dump->full_T[step] = output_t[0].y;
-        params.dump->rgbt[step] = make_float4(output_rgb[0], output_t[0].x);
-#if ATTACH_POSITION == true || POSITION_FROM_EXPECTED_TERMINATION_DEPTH == true
-        params.dump->position[step] = output_position[0];
-#endif
-#if ATTACH_NORMALS == true
-        params.dump->normal[step] = output_normal[0];
-#endif
-#if ATTACH_F0 == true
-        params.dump->f0[step] = output_f0[0];
-#endif
-#if ATTACH_ROUGHNESS == true
-        params.dump->roughness[step] = output_roughness[0];
-#endif
-#if RENDER_DISTORTION == true
-        params.dump->distortion[step] = output_distortion[0];
-#endif
-#if SAVE_LOD_IMAGES == true
-        params.dump->lod_mean[step] = output_lod_mean[0];
-        params.dump->ray_lod[step] = output_ray_lod[0];
 #endif
     }
 #endif
