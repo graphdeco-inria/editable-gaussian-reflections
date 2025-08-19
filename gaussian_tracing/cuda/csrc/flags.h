@@ -14,9 +14,6 @@
 
 #define POSITION_FROM_EXPECTED_TERMINATION_DEPTH true
 
-#define USE_CLUSTERING false
-#define NUM_CLUSTERS 2
-
 #define BACKWARDS_PASS true
 #define NUM_CHUNKS 1
 
@@ -40,9 +37,6 @@
 
 #define SAMPLE_FROM_BRDF true
 #define DENOISER true
-
-#define USE_RUSSIAN_ROULETTE false
-#define ROULETTE_POWER 0.10f
 
 #define SKIP_BACKFACING_NORMALS true
 #define SKIP_BACKFACING_MAX_DIST 0.1f
@@ -75,8 +69,6 @@
 
 // --------------------------- let go for now
 
-#define USE_LEVEL_OF_DETAIL false
-#define USE_LEVEL_OF_DETAIL_MASKING false
 #define LOD_KERNEL_EXPONENT 4.0f
 
 #define USE_GRADIENT_SCALING false
@@ -128,7 +120,6 @@
 
 #define SAVE_ALL_MAPS true   //! kind of slow now? includes too many things
 #define SAVE_RAY_IMAGES true // !!!!!
-#define SAVE_LUT_IMAGES false
 #define SAVE_LOD_IMAGES false
 #define SAVE_HIT_STATS false
 
@@ -146,19 +137,6 @@
 #define DISTORTION_LOSS_WEIGHT 1.0f
 
 #define REFLECTIONS_FROM_GT_GLOSSY_IRRADIANCE false
-
-#define SELF_SUPERVISED_POSITION_GRADS                                         \
-    false //  interaction between using gt normals and self-supervised grads?
-          //  need to disable the grads?
-#define SELF_SUPERVISED_NORMAL_GRADS                                           \
-    false //  interaction between using gt normals and self-supervised grads?
-          //  need to disable the grads?
-#define SELF_SUPERVISED_F0_GRADS                                               \
-    false //  interaction between using gt normals and self-supervised grads?
-          //  need to disable the grads?
-#define SELF_SUPERVISED_ROUGHNESS_GRADS                                        \
-    false //  interaction between using gt normals and self-supervised grads?
-          //  need to disable the grads?
 
 // -----------------------
 // ----- Debug options
@@ -233,79 +211,13 @@
 #define RELU_INSTEAD_OF_SOFTPLUS true
 #define CLIPPED_RELU_INSTEAD_OF_SIGMOID true
 
-#if STORAGE_MODE == NO_STORAGE
-#define BUFFER_SIZE 16
-#endif
-
-#if REMAINING_COLOR_ESTIMATION == RENDER_BUT_DETACH
-#define DETACH_AFTER MAX_ITERATIONS
-#define MAX_ITERATIONS 9999
-#endif
-
-#if STORAGE_MODE == PER_PIXEL_LINKED_LIST
 #define LOG_ALL_HITS true
-#else
-#define LOG_ALL_HITS false
-#endif
-
-#if TILE_SIZE > 1
-#define RECOMPUTE_ALPHA_IN_FORWARD_PASS false
-// #define BBOX_PADDING 0.005f
-#define BBOX_PADDING 0.0f
-#else
 #define RECOMPUTE_ALPHA_IN_FORWARD_PASS false
 #define BBOX_PADDING 0.0f
-#endif
 
-#if STORAGE_MODE == NO_STORAGE
-#define RECOMPUTE_ALPHA_IN_FORWARD_PASS true
-#endif
-
-#if DEBUG_VIEW_ELLIPSOIDS == true
-#define RECOMPUTE_ALPHA_IN_FORWARD_PASS true
-#define DYN_CLAMPING false
-#endif
-
-#if FUSED_MESH == true
-#define USE_POLYCAGE 1
-#endif
-
-#if MAX_BOUNCES == 0
-#define DENOISER false
-#define SAVE_RAY_IMAGES false
-#define SAVE_LUT_IMAGES false
-#define SURFACE_BRDF_FROM_GT_F0 false
-#define SURFACE_BRDF_FROM_GT_ROUGHNESS false
-#define SURFACE_BRDF_FROM_GT_NORMAL false
-#define REFLECTION_RAY_FROM_GT_POSITION false
-#define REFLECTION_RAY_FROM_GT_NORMAL false
-#define POSITION_FROM_EXPECTED_TERMINATION_DEPTH false
-#endif
-
-#define USE_GT_DIFFUSE_IRRADIANCE                                              \
-    false // n.b. this is a placeholder for future work
-
-// Specify which values get attached to gaussians
-#define ATTACH_POSITION false
-#define ATTACH_NORMALS false
-#define ATTACH_F0 false
-#define ATTACH_ROUGHNESS false
-//
-
-#if MAX_BOUNCES > 0
 #define ATTACH_POSITION true
 #define ATTACH_NORMALS true
 #define ATTACH_F0 true
 #define ATTACH_ROUGHNESS true
-#endif
 
-#if USE_DISTORTION_LOSS == true
-#define RENDER_DISTORTION true
-#endif
-#if USE_LEVEL_OF_DETAIL == false
-#define SAVE_LOD_IMAGES false
-#endif
-
-#if USE_CLUSTERING == 0
 #define NUM_CLUSTERS 1
-#endif

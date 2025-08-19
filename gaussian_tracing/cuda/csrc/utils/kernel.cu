@@ -66,14 +66,3 @@ compute_alpha(float guassval, float opacity, float alpha_threshold) {
 #endif
     return alpha;
 }
-
-#if USE_LEVEL_OF_DETAIL == true
-__device__ float compute_alpha_windowing(
-    float blur_level, float gaussian_lod_mean, float guassian_lod_scale) {
-    return max(
-        0.0f,
-        1.0 - powf(
-                  abs(blur_level - gaussian_lod_mean) / guassian_lod_scale,
-                  LOD_KERNEL_EXPONENT));
-}
-#endif

@@ -124,13 +124,7 @@ __device__ float4 backward_normalize_act(float4 dL_dy, float4 x, float4 y) {
 #endif
 #define READ_ROTATION(gaussian_id)                                             \
     normalize_act(params.gaussian_rotations[gaussian_id])
-#if USE_LEVEL_OF_DETAIL == true && ADD_LOD_MEAN_TO_SCALE == true
-#define READ_SCALE(gaussian_id)                                                \
-    (exp_act(params.gaussian_scales[gaussian_id]) +                            \
-     params.gaussian_lod_mean[gaussian_id])
-#else
 #define READ_SCALE(gaussian_id) exp_act(params.gaussian_scales[gaussian_id])
-#endif
 #define READ_MEAN(gaussian_id) params.gaussian_means[gaussian_id]
 
 #define READ_LOD_MEAN(gaussian_id) params.gaussian_lod_mean[gaussian_id]

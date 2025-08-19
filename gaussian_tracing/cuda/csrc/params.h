@@ -117,10 +117,6 @@ struct Params {
     const float *__restrict__ target_roughness;
 #endif
 
-#if USE_GT_DIFFUSE_IRRADIANCE == true
-    const float3 *__restrict__ output_diffuse_irradiance;
-    const float3 *__restrict__ target_diffuse_irradiance;
-#endif
 #if REFLECTIONS_FROM_GT_GLOSSY_IRRADIANCE == true
     const float3 *__restrict__ output_glossy_irradiance;
     const float3 *__restrict__ target_glossy_irradiance;
@@ -202,17 +198,6 @@ struct Params {
     const float3 *__restrict__ target_brdf;
 #else
     float2 *lut;
-#endif
-#if SAVE_LUT_IMAGES == true
-    float3 *output_effective_reflection_position;
-    float3 *output_effective_reflection_normal;
-    float3 *output_effective_F0;
-    float *output_effective_roughness;
-    float3 *output_effective_normal;
-#if USE_GT_BRDF == false
-    float2 *__restrict__ output_lut_values;
-    float *__restrict__ output_n_dot_v;
-#endif
 #endif
 
 #if OPTIMIZE_EXP_POWER == true

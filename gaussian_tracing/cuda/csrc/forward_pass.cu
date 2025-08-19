@@ -87,23 +87,6 @@ __device__ void froward_pass(
         if (output_t[0].y > params.transmittance_threshold) {
             uint32_t uint_initial_lod = __float_as_uint(initial_lod);
             uint32_t uint_lod_by_distance = __float_as_uint(lod_by_distance);
-#if USE_LEVEL_OF_DETAIL_MASKING == true
-            // //! tmp only valid for 0 bounces
-            // float min_normalized_lod = (*params.camera_znear *
-            // lod_by_distance) / *params.max_lod_size;
-            // // if (ray_id == 777) {
-            // //     printf("min_normalized_lod %f, camera_znear %f,
-            // lod_by_distance %f, max_lod_size %f\n", min_normalized_lod,
-            // *params.camera_znear, lod_by_distance, *params.max_lod_size);
-            // // }
-            // uint8_t mask = 0;
-            // for (int l = 0; l < 8; l++) {
-            //     if (l / 8.0f >= min_normalized_lod) {
-            //         mask |= (1 << l);
-            //     }
-            // }
-            uint8_t mask = 0xFF;
-#endif
             uint32_t step_uint = (uint32_t)step;
             uint32_t reflected_origin_x = __float_as_uint(reflected_origin.x);
             uint32_t reflected_origin_y = __float_as_uint(reflected_origin.y);
@@ -115,13 +98,7 @@ __device__ void froward_pass(
                 slab_tmin, // tmin
                 slab_tmax,
                 0.0f, // rayTime
-#if USE_LEVEL_OF_DETAIL_MASKING == true
-                OptixVisibilityMask(
-                    mask), // todo when slab rendering, select all levels of
-                           // the hierarchy that the slab overlaps with
-#else
                 OptixVisibilityMask(1),
-#endif
 #if USE_POLYCAGE == true
                 OPTIX_RAY_FLAG_CULL_BACK_FACING_TRIANGLES,
 #else
@@ -559,16 +536,6 @@ __device__ void froward_pass(
                     A[k][c] += weight;
                     D[k][c] += weight * rescaled_distance;
                     D2[k][c] += weight * rescaled_distance * rescaled_distance;
-#endif
-
-#if USE_LEVEL_OF_DETAIL == true && SAVE_LOD_IMAGES == true
-                    float gaussian_lod_mean = READ_LOD_MEAN(gaussian_id);
-                    float gaussian_lod_scale = READ_LOD_SCALE(gaussian_id);
-                    output_lod_mean[k][c] += gaussian_lod_mean * weight;
-                    output_lod_scale[k][c] += gaussian_lod_scale * weight;
-
-                    float lod = initial_lod + lod_by_distance * distance;
-                    output_ray_lod[k][c] += lod * weight;
 #endif
 
                     output_t[k].x = next_T;
