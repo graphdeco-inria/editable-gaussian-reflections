@@ -131,10 +131,6 @@ struct Raytracer : torch::CustomClassHolder {
         torch::dtype(torch::kFloat32).device(torch::kCUDA));
     Tensor m_all_prev_hits = torch::zeros(
         {PPLL_STORAGE_SIZE}, torch::dtype(torch::kInt32).device(torch::kCUDA));
-#if NUM_SLABS > 1
-    Tensor m_all_slab_idx = torch::zeros(
-        {PPLL_STORAGE_SIZE}, torch::dtype(torch::kInt32).device(torch::kCUDA));
-#endif
     Tensor m_prev_hit_per_pixel;
 
 #if BACKWARDS_PASS == true
@@ -356,14 +352,6 @@ struct Raytracer : torch::CustomClassHolder {
             {num_gaussians, 3},
             torch::dtype(torch::kFloat32).device(torch::kCUDA));
 //
-#if OPTIMIZE_EXP_POWER == true
-        m_gaussian_exp_power = torch::zeros(
-            {num_gaussians, 1},
-            torch::dtype(torch::kFloat32).device(torch::kCUDA));
-        m_dL_dexp_powers = torch::zeros(
-            {num_gaussians, 1},
-            torch::dtype(torch::kFloat32).device(torch::kCUDA));
-#endif
 #if true
         // USE_LEVEL_OF_DETAIL == true
         // easier to always allocate these regardless of config even if its a
@@ -513,11 +501,6 @@ struct Raytracer : torch::CustomClassHolder {
             {image_height, image_width, 1},
             torch::dtype(torch::kFloat32).device(torch::kCUDA));
 #endif
-#if RENDER_DISTORTION == true
-        m_output_distortion = torch::zeros(
-            {MAX_BOUNCES + 1, image_height, image_width, 1},
-            torch::dtype(torch::kFloat32).device(torch::kCUDA));
-#endif
 #if SAVE_LOD_IMAGES == true
         m_output_lod_mean = torch::zeros(
             {MAX_BOUNCES + 1, image_height, image_width, 1},
@@ -537,21 +520,6 @@ struct Raytracer : torch::CustomClassHolder {
 #if USE_GT_BRDF == true
         m_target_brdf = torch::zeros(
             {image_height, image_width, 3},
-            torch::dtype(torch::kFloat32).device(torch::kCUDA));
-#endif
-#if REFLECTIONS_FROM_GT_GLOSSY_IRRADIANCE == true
-#if SAVE_ALL_MAPS == true
-        m_output_glossy_irradiance = torch::zeros(
-            {MAX_BOUNCES + 1, image_height, image_width, 3},
-            torch::dtype(torch::kFloat32).device(torch::kCUDA));
-#endif
-        m_target_glossy_irradiance = torch::zeros(
-            {image_height, image_width, 3},
-            torch::dtype(torch::kFloat32).device(torch::kCUDA));
-#endif
-#if MEASURE_LOSS == true
-        m_loss_tensor = torch::zeros(
-            {MAX_BOUNCES + 1, image_height, image_width, 1},
             torch::dtype(torch::kFloat32).device(torch::kCUDA));
 #endif
 #if SAVE_ALL_MAPS == true
@@ -724,10 +692,6 @@ struct Raytracer : torch::CustomClassHolder {
                 reinterpret_cast<uint32_t *>(m_all_prev_hits.data_ptr());
             m_h_params.prev_hit_per_pixel =
                 reinterpret_cast<uint32_t *>(m_prev_hit_per_pixel.data_ptr());
-#if NUM_SLABS > 1
-            m_h_params.all_slab_idx =
-                reinterpret_cast<uint32_t *>(m_all_slab_idx.data_ptr());
-#endif
             m_h_params.total_hits =
                 reinterpret_cast<uint32_t *>(m_total_hits.data_ptr());
 
@@ -761,9 +725,6 @@ struct Raytracer : torch::CustomClassHolder {
             m_gaussian_scales.mutable_grad() = m_dL_dscales;
             m_gaussian_rotations.mutable_grad() = m_dL_drotations;
             m_gaussian_means.mutable_grad() = m_dL_dmeans;
-#if OPTIMIZE_EXP_POWER == true
-            m_gaussian_exp_power.mutable_grad() = m_dL_dexp_powers;
-#endif
 #if true
             // USE_LEVEL_OF_DETAIL == true
             m_gaussian_lod_mean.mutable_grad() = m_dL_dgaussian_lod_mean;
@@ -803,12 +764,6 @@ struct Raytracer : torch::CustomClassHolder {
                 reinterpret_cast<float3 *>(m_gaussian_means.data_ptr());
             m_h_params.dL_dmeans =
                 reinterpret_cast<float3 *>(m_dL_dmeans.data_ptr());
-#if OPTIMIZE_EXP_POWER == true
-            m_h_params.gaussian_exp_power =
-                reinterpret_cast<float *>(gaussian_exp_power.data_ptr());
-            m_h_params.dL_dexp_powers =
-                reinterpret_cast<float *>(dL_dexp_powers.data_ptr());
-#endif
 #if true
             // USE_LEVEL_OF_DETAIL == true
             m_h_params.gaussian_lod_mean =
@@ -930,10 +885,6 @@ struct Raytracer : torch::CustomClassHolder {
             m_h_params.target_roughness =
                 reinterpret_cast<float *>(m_target_roughness.data_ptr());
 #endif
-#if RENDER_DISTORTION == true
-            m_h_params.output_distortion =
-                reinterpret_cast<float *>(m_output_distortion.data_ptr());
-#endif
 #if MAX_BOUNCES > 0
 #if SAVE_ALL_MAPS == true
             m_h_params.output_brdf =
@@ -943,18 +894,6 @@ struct Raytracer : torch::CustomClassHolder {
             m_h_params.target_brdf =
                 reinterpret_cast<float3 *>(m_target_brdf.data_ptr());
 #endif
-#endif
-#if REFLECTIONS_FROM_GT_GLOSSY_IRRADIANCE == true
-#if SAVE_ALL_MAPS == true
-            m_h_params.output_glossy_irradiance = reinterpret_cast<float3 *>(
-                m_output_glossy_irradiance.data_ptr());
-#endif
-            m_h_params.target_glossy_irradiance = reinterpret_cast<float3 *>(
-                m_target_glossy_irradiance.data_ptr());
-#endif
-#if MEASURE_LOSS == true
-            m_h_params.loss_tensor =
-                reinterpret_cast<float *>(m_loss_tensor.data_ptr());
 #endif
 #if SAVE_LOD_IMAGES == true
             m_h_params.output_lod_mean =
@@ -1531,14 +1470,6 @@ struct Raytracer : torch::CustomClassHolder {
             m_densification_gradient_glossy.data_ptr());
 //
 #if MAX_BOUNCES > 0
-#if OPTIMIZE_EXP_POWER == true
-        m_gaussian_exp_power.resize_({num_new_gaussians, 1});
-        m_dL_dexp_powers.resize_({num_new_gaussians, 1});
-        m_h_params.gaussian_exp_power =
-            reinterpret_cast<float *>(m_gaussian_exp_power.data_ptr());
-        m_h_params.dL_dexp_powers =
-            reinterpret_cast<float *>(m_dL_dexp_powers.data_ptr());
-#endif
 #if true
         // USE_LEVEL_OF_DETAIL == true
         m_gaussian_lod_mean.resize_({num_new_gaussians, 1});
@@ -1614,13 +1545,9 @@ struct Raytracer : torch::CustomClassHolder {
     }
 
     void build_bvh() {
-#if FUSED_MESH == true
-        build_fused_bvh(); //!!!
-#else
         // todo free the exsitng ones (free CUdeviceptr)
         build_blas();
         build_tlas();
-#endif
 
         cudaDeviceSynchronize();
     }
@@ -1635,11 +1562,7 @@ struct Raytracer : torch::CustomClassHolder {
         accel_options_tlas.buildFlags = m_build_flags;
         accel_options_tlas.operation = OPTIX_BUILD_OPERATION_BUILD;
 
-#if TRI_SOUP_FOR_MESHES == true
-        int num_verts = mesh_cage_verts_tri_soup.sizes()[0];
-#else
         int num_verts = mesh_cage_verts.sizes()[0];
-#endif
 
         Tensor verts = torch::zeros(
             {num_gaussians * num_verts, 3},
@@ -1649,11 +1572,7 @@ struct Raytracer : torch::CustomClassHolder {
             torch::dtype(torch::kInt32).device(torch::kCUDA));
 
         transformVerts(
-#if TRI_SOUP_FOR_MESHES == true
-            reinterpret_cast<float *>(mesh_cage_verts_tri_soup.data_ptr()),
-#else
             reinterpret_cast<float *>(mesh_cage_verts.data_ptr()),
-#endif
             num_verts,
             reinterpret_cast<int *>(mesh_cage_faces.data_ptr()),
             mesh_cage_faces.sizes()[0],
@@ -1681,11 +1600,6 @@ struct Raytracer : torch::CustomClassHolder {
         m_tlas_input.triangleArray.numVertices = num_verts * num_gaussians;
         m_tlas_input.triangleArray.vertexBuffers = &m_vert_buffer_ptr;
 
-#if TRI_SOUP_FOR_MESHES == true
-        m_face_buffer_ptr = reinterpret_cast<CUdeviceptr>(faces.data_ptr());
-        m_tlas_input.triangleArray.indexFormat = OPTIX_INDICES_FORMAT_NONE;
-        m_tlas_input.triangleArray.numIndexTriplets = 0;
-#else
         m_face_buffer_ptr = reinterpret_cast<CUdeviceptr>(faces.data_ptr());
         m_tlas_input.triangleArray.indexFormat =
             OPTIX_INDICES_FORMAT_UNSIGNED_INT3;
@@ -1693,7 +1607,6 @@ struct Raytracer : torch::CustomClassHolder {
         m_tlas_input.triangleArray.numIndexTriplets =
             mesh_cage_faces.sizes()[0] * num_gaussians;
         m_tlas_input.triangleArray.indexBuffer = m_face_buffer_ptr;
-#endif
 
         OPTIX_CHECK(optixAccelComputeMemoryUsage(
             m_context,
@@ -1793,33 +1706,6 @@ struct Raytracer : torch::CustomClassHolder {
 
         CUDA_CHECK(
             cudaFree(reinterpret_cast<void *>(d_temp_blas_buffer_sizes)));
-
-#if COMPACTION == true
-        size_t *d_compactedSize;
-        OptixAccelEmitDesc property = {};
-        property.type = OPTIX_PROPERTY_TYPE_COMPACTED_SIZE;
-        property.result = d_compactedSize;
-
-        size_t compactedSize;
-        cudaMemcpy(
-            &compactedSize,
-            d_compactedSize,
-            sizeof(size_t),
-            cudaMemcpyDeviceToHost);
-
-        void *d_compactedOutputBuffer;
-        cudaMalloc(&d_compactedOutputBuffer, compactedSize);
-
-        if (compactedSize < bufferSizes.outputSizeInBytes) {
-            optixAccelCompact(
-                optixContext,
-                cuStream,
-                accelHandle,
-                d_compactedOutputBuffer,
-                compactedSize,
-                &compactedAccelHandle);
-        }
-#endif
     }
 
     void build_tlas() {
@@ -1842,12 +1728,7 @@ struct Raytracer : torch::CustomClassHolder {
             reinterpret_cast<bool *>(m_gaussian_mask.data_ptr()),
             m_global_scale_factor[0].item<float>(),
             m_alpha_threshold,
-#if OPTIMIZE_EXP_POWER
-            reinterpret_cast<float *>(m_gaussian_exp_power.data_ptr())
-#else
-            m_exp_power
-#endif
-        );
+            m_exp_power);
 
         OptixAccelBuildOptions accel_options_tlas = {};
         accel_options_tlas.buildFlags =
@@ -1888,9 +1769,6 @@ struct Raytracer : torch::CustomClassHolder {
     }
 
     void update_bvh() {
-#if FUSED_MESH == true
-        return; //!! tmp
-#endif
         // Update XForms
         auto num_gaussians = m_gaussian_means.sizes()[0];
         populateBVH(
@@ -1907,12 +1785,7 @@ struct Raytracer : torch::CustomClassHolder {
             reinterpret_cast<bool *>(m_gaussian_mask.data_ptr()),
             m_global_scale_factor[0].item<float>(),
             m_alpha_threshold,
-#if OPTIMIZE_EXP_POWER
-            reinterpret_cast<float *>(m_gaussian_exp_power.data_ptr())
-#else
-            m_exp_power
-#endif
-        );
+            m_exp_power);
 
         // Update TLAS
         OptixAccelBuildOptions accel_options_tlas = {};
@@ -1975,34 +1848,10 @@ struct Raytracer : torch::CustomClassHolder {
     }
 
     void raytrace() {
-#if MEASURE_LOSS == true
-        m_loss_tensor.fill_(0.0);
-#endif
 
 #if BACKWARDS_PASS == true
         bool grads_enabled = torch::GradMode::is_enabled();
         m_grads_enabled.fill_(grads_enabled);
-#endif
-
-#if DEBUG_CHEAP_TMAX_ESTIMATE == true
-        m_t_maxes.fill_(100000.0);
-#if BACKWARDS_PASS == true
-        m_grads_enabled.fill_(false);
-#endif
-        m_cheap_approx.fill_(true);
-        OPTIX_CHECK(optixLaunch(
-            m_pipeline,
-            nullptr,
-            m_d_params,
-            sizeof(Params),
-            &m_sbt,
-            m_width / CHEAP_TMAX_DOWNSAMPLING,
-            m_height / CHEAP_TMAX_DOWNSAMPLING,
-            1));
-        m_cheap_approx.fill_(false);
-#if BACKWARDS_PASS == true
-        m_grads_enabled.fill_(grads_enabled);
-#endif
 #endif
 
         if (m_num_samples.item<int>() > 1) {

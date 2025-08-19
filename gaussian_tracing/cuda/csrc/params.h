@@ -117,11 +117,6 @@ struct Params {
     const float *__restrict__ target_roughness;
 #endif
 
-#if REFLECTIONS_FROM_GT_GLOSSY_IRRADIANCE == true
-    const float3 *__restrict__ output_glossy_irradiance;
-    const float3 *__restrict__ target_glossy_irradiance;
-#endif
-
     float3 *__restrict__ output_rgb;
     float3 *__restrict__ accumulated_rgb;
     float3 *__restrict__ accumulated_normal;
@@ -198,11 +193,6 @@ struct Params {
     const float3 *__restrict__ target_brdf;
 #else
     float2 *lut;
-#endif
-
-#if OPTIMIZE_EXP_POWER == true
-    const float *gaussian_exp_power;
-    float *__restrict__ dL_dexp_powers;
 #endif
 
 #if LOG_ALL_HITS == true

@@ -242,9 +242,6 @@ __device__ void backward_pass(
             float4 dL_drot_total = make_float4(0.0f, 0.0f, 0.0f, 0.0f);
             float3 dL_dscale_total = make_float3(0.0f, 0.0f, 0.0f);
             float3 dL_dmean_total = make_float3(0.0f, 0.0f, 0.0f);
-#if OPTIMIZE_EXP_POWER == true
-            float dL_dexp_powers_total = 0.0f;
-#endif
 #if EXPECTED_TERMINATION_GRADIENTS == true
             float3 dL_dexpected_termination_total =
                 make_float3(0.0f, 0.0f, 0.0f);
@@ -481,87 +478,24 @@ __device__ void backward_pass(
                 }
 
                 float windowing = 1.0f;
-
-#if ALLOW_OPACITY_ABOVE_1 == true
-                float dL_dopacity = dL_dalpha * gaussval * windowing;
-#else
                 float dL_dopacity =
                     MAX_ALPHA * dL_dalpha * gaussval * windowing;
-#endif
-#if ALPHA_RESCALE == true
-                dL_dopacity /= 1 - params.alpha_threshold;
-#endif
-#if ALPHA_SMOOTHING == true
-                if (alpha < ALPHA_SMOOTHING_THRESHOLD) {
-                    dL_dopacity /= 1 + params.alpha_threshold;
-                }
-#endif
 
 #if ACTIVATION_IN_CUDA == true
-#if ALLOW_OPACITY_ABOVE_1 == true
-                dL_dopacity = backward_softplus_act(dL_dopacity, opacity);
-#else
                 dL_dopacity = backward_sigmoid_act(dL_dopacity, opacity);
-#endif
 #endif
                 dL_dopacity_total += dL_dopacity;
 
-// * Transform gradient
-#if ALLOW_OPACITY_ABOVE_1 == true
-                float dL_dgaussval = dL_dalpha * opacity *
-                                     windowing; // straight-through gradient
-#else
+                // * Transform gradient
                 float dL_dgaussval =
                     MAX_ALPHA * dL_dalpha * opacity * windowing;
-#endif
-#if ALPHA_RESCALE == true
-                dL_dgaussval /= 1 + params.alpha_threshold;
-#endif
-#if ALPHA_SMOOTHING == true
-                if (alpha < ALPHA_SMOOTHING_THRESHOLD) {
-                    dL_dgaussval /= 1 + params.alpha_threshold;
-                }
-#endif
 
-#if OPTIMIZE_EXP_POWER == true
-                float exp_power = params.gaussian_exp_power[gaussian_id];
-#else
                 float exp_power = params.exp_power;
-#endif
                 float sq_norm = dot(local_hit, local_hit);
 
-// * Generalized gaussian exponent gradient
-#if OPTIMIZE_EXP_POWER == true
-                float dL_dexp_powers = -dL_dgaussval * gaussval *
-                                       powf(sq_norm, exp_power) *
-                                       logf(sq_norm) / 2.0f;
-                dL_dexp_powers_total = dL_dexp_powers;
-
-#if USE_EPANECHNIKOV_KERNEL == true
-                printf(
-                    "Epanechnikov kernel not supported with optimized exp "
-                    "power\n");
-#endif
-#endif
-
-// * Local hit point gradient
-#if SQUARE_KERNEL == true
-                float3 dL_dx_local =
-                    -local_hit *
-                    make_float3(
-                        powf(fabs(local_hit.x), 2.0f * exp_power - 2.0f),
-                        powf(fabs(local_hit.y), 2.0f * exp_power - 2.0f),
-                        powf(fabs(local_hit.z), 2.0f * exp_power - 2.0f)) *
-                    gaussval * dL_dgaussval;
-#else
-#if USE_EPANECHNIKOV_KERNEL == true
-                float dL_dsq_norm =
-                    2 * exp_power * powf(sq_norm, exp_power - 1.0f);
-#else
+                // * Local hit point gradient
                 float dL_dsq_norm = gaussval * powf(sq_norm, exp_power - 1.0f);
-#endif
                 float3 dL_dx_local = -local_hit * dL_dsq_norm * dL_dgaussval;
-#endif
 
                 // * World hit point gradient
                 float scaling_factor = compute_scaling_factor(
@@ -649,15 +583,12 @@ __device__ void backward_pass(
                 dL_dmean_total -= dL_dx_world;
 
                 // * Scaling gradient
-                float3 rot_0 =
-                    make_float3(local_to_world[0]) /
-                    (scaling * scaling_factor + ANTIALIASING + EPS_SCALE_GRAD);
-                float3 rot_1 =
-                    make_float3(local_to_world[1]) /
-                    (scaling * scaling_factor + ANTIALIASING + EPS_SCALE_GRAD);
-                float3 rot_2 =
-                    make_float3(local_to_world[2]) /
-                    (scaling * scaling_factor + ANTIALIASING + EPS_SCALE_GRAD);
+                float3 rot_0 = make_float3(local_to_world[0]) /
+                               (scaling * scaling_factor + EPS_SCALE_GRAD);
+                float3 rot_1 = make_float3(local_to_world[1]) /
+                               (scaling * scaling_factor + EPS_SCALE_GRAD);
+                float3 rot_2 = make_float3(local_to_world[2]) /
+                               (scaling * scaling_factor + EPS_SCALE_GRAD);
                 float3 dL_dscale =
                     dL_dl2w_0 * rot_0 + dL_dl2w_1 * rot_1 + dL_dl2w_2 * rot_2;
 
@@ -667,9 +598,9 @@ __device__ void backward_pass(
                 dL_dscale_total += dL_dscale;
 
                 // * Rotation matrix gradient
-                float3 dL_drot_0 = dL_dl2w_0 * (scaling + ANTIALIASING);
-                float3 dL_drot_1 = dL_dl2w_1 * (scaling + ANTIALIASING);
-                float3 dL_drot_2 = dL_dl2w_2 * (scaling + ANTIALIASING);
+                float3 dL_drot_0 = dL_dl2w_0 * (scaling);
+                float3 dL_drot_1 = dL_dl2w_1 * (scaling);
+                float3 dL_drot_2 = dL_dl2w_2 * (scaling);
 
                 // * Rotation quaternion gradient
                 float r = rotation.x;
@@ -703,21 +634,7 @@ __device__ void backward_pass(
                 dL_drot_total += dL_drot;
             }
 
-#if USE_GRADIENT_SCALING == true
-#if TILE_SIZE > 1
-            printf(
-                "Error: gradient scaling not supported with tile size > 1\n");
-#endif
-
-#if GRADIENT_SCALING_UNCLAMPED == true
-            float grad_dist_weight = powf(distances[0], 2.0f);
-#else
-            float grad_dist_weight =
-                max(min(powf(distances[0], 2.0f), 1.0f), 0.0f);
-#endif
-#else
             float grad_dist_weight = 1.0f;
-#endif
 
             // * Flush to memory
             if (i < DETACH_AFTER * BUFFER_SIZE) {
@@ -781,12 +698,6 @@ __device__ void backward_pass(
                 atomicAdd3(
                     &params.dL_dscales[gaussian_id],
                     dL_dscale_total * grad_dist_weight * GLOBAL_GRADIENT_SCALE);
-#if OPTIMIZE_EXP_POWER == true
-                atomicAdd(
-                    &params.dL_dexp_powers[gaussian_id],
-                    dL_dexp_powers_total * grad_dist_weight *
-                        GLOBAL_GRADIENT_SCALE);
-#endif
             }
 
             i--;

@@ -57,12 +57,7 @@ __global__ void _populateBVH(
     bool *mask,
     float global_scaling_factor,
     float alpha_threshold,
-#if OPTIMIZE_EXP_POWER == true
-    float *exp_power
-#else
-    float exp_power
-#endif
-) {
+    float exp_power) {
     auto i = threadIdx.x + blockIdx.x * blockDim.x;
 
     if (i < num_gaussians) {
@@ -82,21 +77,13 @@ __global__ void _populateBVH(
         sizes = exp_act(sizes);
 #endif
         sizes = sizes * 3.0;
-        if (ANTIALIASING > 0.0f) {
-            sizes += ANTIALIASING * 2.0f / 2048.0f; // hacky approximation
-        }
         instances[i].visibilityMask = 255;
 #else
         float3 sizes = scales[i];
 #if ACTIVATION_IN_CUDA == true
         sizes = exp_act(sizes);
 #endif
-// ????????? shouldn't clamping be after antialiasing?
-#if OPTIMIZE_EXP_POWER == true
-        float p = exp_power[i];
-#else
         float p = exp_power;
-#endif
         float scaling_factor =
             compute_scaling_factor(opacity, alpha_threshold, p);
         sizes = sizes * scaling_factor * global_scaling_factor;
@@ -112,10 +99,6 @@ __global__ void _populateBVH(
         }
 #endif
 
-        sizes *= BB_SHRINKAGE;
-        sizes = sizes +
-                ANTIALIASING; //! should be before the scaling no? & also taken
-                              //! into consideration with the dynamic clamping
 #ifdef BBOX_PADDING
         sizes = sizes + BBOX_PADDING;
 #endif
@@ -149,12 +132,7 @@ void populateBVH(
     bool *mask,
     float global_scaling_factor,
     float alpha_threshold,
-#if OPTIMIZE_EXP_POWER == true
-    float *exp_power
-#else
-    float exp_power
-#endif
-) {
+    float exp_power) {
     _populateBVH<<<(num_gaussians + 31) / 32, 32>>>(
         instances,
         gasHandle,
@@ -190,12 +168,7 @@ __global__ void _populateTensor(
     bool *mask,
     float global_scaling_factor,
     float alpha_threshold,
-#if OPTIMIZE_EXP_POWER == true
-    float *exp_power
-#else
-    float exp_power
-#endif
-) {
+    float exp_power) {
     auto i = threadIdx.x + blockIdx.x * blockDim.x;
 
     float4 transform[3];
@@ -209,20 +182,10 @@ __global__ void _populateTensor(
 #if ACTIVATION_IN_CUDA == true
         sizes = exp_act(sizes);
 #endif
-// ????????? shouldn't clamping be after antialiasing?
-#if OPTIMIZE_EXP_POWER == true
-        float p = exp_power[i];
-#else
         float p = exp_power;
-#endif
-
         float scaling_factor =
             compute_scaling_factor(opacity, alpha_threshold, p);
         sizes = sizes * scaling_factor * global_scaling_factor; //!!!!!!!!!!!!
-        sizes *= BB_SHRINKAGE;
-        sizes = sizes +
-                ANTIALIASING; //! should be before the scaling no? & also taken
-                              //! into consideration with the dynamic clamping
 #ifdef BBOX_PADDING
         sizes = sizes + BBOX_PADDING;
 #endif
@@ -241,16 +204,6 @@ __global__ void _populateTensor(
             output_verts[j * 3 + 2 + 3 * num_verts_per_gaussian * i] =
                 dot(vert, transform[2]);
         }
-#if TRI_SOUP_FOR_MESHES == false
-        for (int j = 0; j < num_faces_per_gaussian; j++) {
-            output_faces[j * 3 + 0 + 3 * num_faces_per_gaussian * i] =
-                mesh_cage_faces[j * 3 + 0] + num_verts_per_gaussian * i;
-            output_faces[j * 3 + 1 + 3 * num_faces_per_gaussian * i] =
-                mesh_cage_faces[j * 3 + 1] + num_verts_per_gaussian * i;
-            output_faces[j * 3 + 2 + 3 * num_faces_per_gaussian * i] =
-                mesh_cage_faces[j * 3 + 2] + num_verts_per_gaussian * i;
-        }
-#endif
     }
 }
 
@@ -272,12 +225,7 @@ void transformVerts(
     bool *mask,
     float global_scaling_factor,
     float alpha_threshold,
-#if OPTIMIZE_EXP_POWER == true
-    float *exp_power
-#else
-    float exp_power
-#endif
-) {
+    float exp_power) {
     _populateTensor<<<(num_gaussians + 31) / 32, 32>>>(
         mesh_cage_verts,
         num_verts_per_gaussian,

@@ -12,12 +12,7 @@ void populateBVH(
     bool *mask,
     float global_scale_factor,
     float alpha_threshold,
-#if OPTIMIZE_EXP_POWER == true
-    float *exp_power
-#else
-    float exp_power
-#endif
-);
+    float exp_power);
 
 void transformVerts(
     float *mesh_cage_verts,
@@ -37,9 +32,4 @@ void transformVerts(
     bool *mask,
     float global_scaling_factor,
     float alpha_threshold,
-#if OPTIMIZE_EXP_POWER == true
-    float *exp_power
-#else
-    float exp_power
-#endif
-);
+    float exp_power);

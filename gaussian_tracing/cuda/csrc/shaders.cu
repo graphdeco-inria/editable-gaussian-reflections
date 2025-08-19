@@ -41,10 +41,6 @@ extern "C" __global__ void __intersection__gaussian() {
 #define RETURN return;
 #endif
 
-#if DEBUG_SINGLE_EMPTY_RAYTRACE == true
-    RETURN
-#endif
-
     // * Intersect the ray with the gaussian's maximal value
     const uint32_t gaussian_id = optixGetInstanceIndex();
     float3 local_origin = optixGetObjectRayOrigin();
@@ -59,30 +55,12 @@ extern "C" __global__ void __intersection__gaussian() {
     atomicAdd(&params.num_traversed_per_pixel[ray_id], 1);
 #endif
 
-#if FUSED_MESH == true
-    {
-        // todo fix the gaussian id
-        // int hit_idx = atomicAdd(params.total_hits, 1);
-        // params.all_gaussian_ids[hit_idx] = gaussian_id;
-        // params.all_distances[hit_idx] = sorting_distance;
-        // params.all_prev_hits[hit_idx] = params.prev_hit_per_pixel[ray_id];
-        // params.prev_hit_per_pixel[ray_id] = hit_idx;
-        params.output_rgb[ray_id] = READ_RGB(gaussian_id);
-    }
-    RETURN
-#endif
-
     float opacity = READ_OPACITY(gaussian_id);
     float3 scale = READ_SCALE(gaussian_id);
     if (BBOX_PADDING > 0.0f) {
-#if OPTIMIZE_EXP_POWER == true
-        float p = params.gaussian_exp_power[gaussian_id];
-#else
         float p = params.exp_power;
-#endif
         float3 scaling =
             scale * compute_scaling_factor(opacity, params.alpha_threshold, p);
-        scaling = scaling + ANTIALIASING;
         local_origin = local_origin * (BBOX_PADDING + scaling) / scaling;
         local_direction = local_direction * (BBOX_PADDING + scaling) / scaling;
     }
@@ -106,8 +84,7 @@ extern "C" __global__ void __intersection__gaussian() {
     float sorting_distance = local_hit_distance_along_ray / norm;
 #endif
     float3 local_hit_unscaled =
-        (local_origin + local_hit_distance_along_ray * local_direction) *
-        BB_SHRINKAGE;
+        (local_origin + local_hit_distance_along_ray * local_direction);
 
     // * Clip the gaussian at params.alpha_threshold, taking bounding box scale
     // into account todo: if end up implementing tiling, it is possible to
@@ -128,11 +105,9 @@ extern "C" __global__ void __intersection__gaussian() {
     } else {
         sq_dist = dot(local_hit_unscaled, local_hit_unscaled);
     }
-#if SQUARE_KERNEL == false
     if (sq_dist > 1.0f) {
         RETURN
     }
-#endif
 
 #if STRICT_REJECT_GAUSSIANS_BEHIND_RAY == true
     if (dot(optixGetObjectRayOrigin(), optixGetObjectRayDirection()) > 0.0) {
@@ -174,20 +149,11 @@ extern "C" __global__ void __intersection__gaussian() {
     int hit_idx = atomicAdd(params.total_hits, 1);
     params.all_gaussian_ids[hit_idx] = gaussian_id;
     params.all_distances[hit_idx] = sorting_distance;
-#if NUM_SLABS > 1
-    params.all_slab_idx[hit_idx] = optixGetPayload_2();
-#endif
     params.all_prev_hits[hit_idx] = params.prev_hit_per_pixel[ray_id];
     params.prev_hit_per_pixel[ray_id] = hit_idx;
 
-// * Compute all alpha values
-#if OPTIMIZE_EXP_POWER == true
-    float exp_power =
-        params
-            .gaussian_exp_power[gaussian_id]; // todo reuse existing read above
-#else
+    // * Compute all alpha values
     float exp_power = params.exp_power;
-#endif
 
     float view_size = tan(*params.vertical_fov_radians / 2);
     float aspect_ratio = float(dim.x) / float(dim.y);
@@ -214,7 +180,6 @@ extern "C" __global__ void __intersection__gaussian() {
         if (BBOX_PADDING > 0.0f) {
             float3 scaling = scale * scaling_factor;
             float3 padded_scaling = scaling * scaling_factor;
-            padded_scaling = padded_scaling + ANTIALIASING;
             local_subpixel_direction = local_subpixel_direction *
                                        (BBOX_PADDING + padded_scaling) /
                                        padded_scaling;
@@ -238,12 +203,6 @@ extern "C" __global__ void __intersection__gaussian() {
             gaussval = eval_gaussian(local_hit, exp_power);
             alpha = compute_alpha(gaussval, opacity, params.alpha_threshold);
         }
-
-#if SQUARE_KERNEL == true && TILE_SIZE == 1
-        if (alpha < ALPHA_THRESHOLD) {
-            RETURN
-        }
-#endif
 
         // * Log the subpixels
         params.all_alphas[TILE_SIZE * TILE_SIZE * hit_idx + k] = alpha;
@@ -344,11 +303,7 @@ extern "C" __global__ void __intersection__gaussian() {
 #endif
     }
 #else
-#if OPTIMIZE_EXP_POWER == true
-    float p = params.gaussian_exp_power[gaussian_id];
-#else
     float p = params.exp_power;
-#endif
     float3 local_hit =
         local_hit_unscaled *
         compute_scaling_factor(opacity, params.alpha_threshold, p);
@@ -387,9 +342,6 @@ extern "C" __global__ void __intersection__gaussian() {
         params.all_local_hits[hit_idx] = local_hit;
     }
 #endif
-#endif
-#if NUM_SLABS > 1
-    params.all_slab_idx[hit_idx] = optixGetPayload_3();
 #endif
     params.all_prev_hits[hit_idx] = params.prev_hit_per_pixel[ray_id];
     params.prev_hit_per_pixel[ray_id] = hit_idx;
@@ -436,29 +388,7 @@ extern "C" __global__ void __intersection__gaussian() {
 #endif
 
 // * Insert into the hit buffer
-#if STOCHASTIC == true
-    for (int i = 0; i < BUFFER_SIZE - 1; i++) {
-        float u = rnd(seed);
-        if (sorting_distance < unpackDistance(floats[i]) && u < alpha) {
-            gaussian_ids[i] = packId(gaussian_id, 0);
-            floats[i] = packFloats(sorting_distance, alpha);
-        }
-#if BACKWARDS_PASS == true
-        // sort the array gain
-        for (int j = 0; j < i; j++) {
-            if (sorting_distance < unpackDistance(floats[j])) {
-                auto tmp = floats[i];
-                floats[i] = floats[j];
-                floats[j] = tmp;
-                auto tmp2 = gaussian_ids[i];
-                gaussian_ids[i] = gaussian_ids[j];
-                gaussian_ids[j] = tmp2;
-            }
-        }
-#endif
-    }
-    params.random_seeds[ray_id] = seed;
-#elif STORAGE_MODE != PER_PIXEL_LINKED_LIST
+#if STORAGE_MODE != PER_PIXEL_LINKED_LIST
     if (sorting_distance < unpackDistance(floats[BUFFER_SIZE - 1])) {
         floats[BUFFER_SIZE - 1] = packFloats(sorting_distance, alpha);
         gaussian_ids[BUFFER_SIZE - 1] = packId(gaussian_id, 0);
@@ -555,19 +485,6 @@ extern "C" __global__ void __raygen__rg() {
     float view_size = tan(*params.vertical_fov_radians / 2);
     float aspect_ratio = float(dim.x) / float(dim.y);
 
-#if ORTHO_CAM == true
-    float x = 2.0f * ((idxf.x * TILE_SIZE + float(TILE_SIZE) / 2) /
-                      (float(dim.x) * TILE_SIZE)) -
-              1.0f;
-    float y = 1.0f - 2.0f * ((idxf.y * TILE_SIZE + float(TILE_SIZE) / 2) /
-                             (float(dim.y) * TILE_SIZE));
-    float z = 1.0f;
-
-    tile_origin =
-        *params.camera_position_world + x * params.camera_rotation_w2c[0] +
-        y * params.camera_rotation_w2c[1] + z * params.camera_rotation_w2c[2];
-    tile_direction = -params.camera_rotation_w2c[2];
-#else
     float _y = (idxf.y * TILE_SIZE + float(TILE_SIZE) / 2) /
                (float(dim.y) * TILE_SIZE);
     float _x = (idxf.x * TILE_SIZE + float(TILE_SIZE) / 2) /
@@ -578,7 +495,6 @@ extern "C" __global__ void __raygen__rg() {
         params.camera_rotation_w2c[0] * x + params.camera_rotation_w2c[1] * y -
         params.camera_rotation_w2c[2]);
     tile_origin = *params.camera_position_world;
-#endif
 
     for (int k = 0; k < TILE_SIZE * TILE_SIZE; k++) {
         origin[k] = tile_origin;
@@ -823,16 +739,6 @@ extern "C" __global__ void __raygen__rg() {
             // cluster_weights[step][c][k] and F0
         }
 #endif
-
-        // #if REFLECTIONS_FROM_GT_GLOSSY_IRRADIANCE
-        //     step = MAX_BOUNCES + 1;
-        //     for (int ki = 0; ki < TILE_SIZE; ki++) for (int kj = 0; kj <
-        //     TILE_SIZE; kj++) {
-        //         int pixel_id = ray_id + ki * params.image_width + kj;
-        //         output_rgb[1][0][pixel_id] =
-        //         params.target_glossy_irradiance[pixel_id];
-        //     }
-        // #endif
 
 #if MAX_BOUNCES > 0
         for (int ki = 0; ki < TILE_SIZE; ki++)
@@ -1104,10 +1010,6 @@ forward_pass_end:
                     params.output_brdf[pixel_id] =
                         output_throughput[s][max_c][tile_id];
 #endif
-#endif
-#if RENDER_DISTORTION == true
-                    params.output_distortion[pixel_id] =
-                        output_distortion[s][max_c][tile_id];
 #endif
 #if SAVE_LOD_IMAGES == true
                     params.output_lod_mean[pixel_id] =
