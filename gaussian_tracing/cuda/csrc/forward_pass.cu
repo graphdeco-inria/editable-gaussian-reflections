@@ -40,10 +40,6 @@ __device__ void froward_pass(
     float (&remaining_ray_lod)[NUM_CLUSTERS][TILE_SIZE * TILE_SIZE],
     //
     int &num_hits) {
-#if NUM_SLABS > 1
-    float near_plane = 0.5f; // hard-coded tmp value
-    float far_plane = 2.5f;  // hard-coded tmp value
-#else
     float near_plane = *params.camera_znear; // like 0.5 in kitchen scene
     float far_plane = *params.camera_zfar;   // like 2.5 in kitchen scene
     // float near_plane = 0.0f;
@@ -51,30 +47,11 @@ __device__ void froward_pass(
     if (step != 0) {
         near_plane = 0.0f;
     }
-#endif
 
     float tmin = near_plane;
     float endpoint = -1.0f;
 
-#if STORAGE_MODE == PER_PIXEL_LINKED_LIST || DEBUG_SINGLE_EMPTY_RAYTRACE == true
-#if DEBUG_ASSUME_KNOWING_TMIN == true
-    near_plane = max(near_plane, params.t_mins[ray_id] - 1e-8);
-#endif
-
-#if DEBUG_ASSUME_KNOWING_TMAX == true
-    far_plane = min(far_plane, params.t_maxes[ray_id] + 1e-8);
-#endif
-#if DEBUG_CHEAP_TMAX_ESTIMATE == true
-    if (!*params.cheap_approx) {
-        uint3 idx = optixGetLaunchIndex();
-        uint3 dim = optixGetLaunchDimensions();
-        uint32_t ray_id_downsampled =
-            (idx.y / CHEAP_TMAX_DOWNSAMPLING) * params.image_width +
-            idx.x / CHEAP_TMAX_DOWNSAMPLING;
-        far_plane = min(far_plane, params.t_maxes[ray_id_downsampled] + 1e-8);
-    }
-#endif
-
+#if STORAGE_MODE == PER_PIXEL_LINKED_LIST
     uint32_t full_T_uint[TILE_SIZE * TILE_SIZE];
     fill_array(full_T_uint, TILE_SIZE * TILE_SIZE, __float_as_uint(1.0f));
 
@@ -141,25 +118,6 @@ __device__ void froward_pass(
             }
         }
     }
-#if DEBUG_SINGLE_EMPTY_RAYTRACE == true
-    return;
-#endif
-#endif
-
-#if FUSED_MESH == true
-    for (int k = 0; k < TILE_SIZE * TILE_SIZE; k++) {
-        output_rgb[k][0] =
-            params.output_rgb[ray_id]; // *** tmp stuff for debugging
-    }
-    return;
-#endif
-
-#if DEBUG_ASSUME_KNOWING_TMAX == true || DEBUG_CHEAP_TMAX_ESTIMATE == true
-    float tmax_to_store = far_plane;
-#endif
-
-#if STOCHASTIC == true
-#include "stochastic.cu"
 #endif
 
 // * Initialize registers holding the BUFFER_SIZE nearest gaussians
@@ -178,10 +136,6 @@ __device__ void froward_pass(
     int current_cluster = 0;
 #endif
 
-#if NUM_SLABS > 1
-    int current_slab = 0;
-
-#endif
     for (int iteration = 0; iteration < MAX_ITERATIONS && tmin < 99.9f;
          iteration++) {
 #if STORAGE_MODE == PER_PIXEL_LINKED_LIST
@@ -193,14 +147,6 @@ __device__ void froward_pass(
         while (hit_idx != 999999999u) {
             float curr_distance = params.all_distances[hit_idx];
             uint32_t prev_hit = params.all_prev_hits[hit_idx];
-
-#if NUM_SLABS > 1
-            uint32_t slab_idx = params.all_slab_idx[hit_idx];
-            if (slab_idx > current_slab) {
-                params.prev_hit_per_pixel[ray_id] = hit_idx;
-                current_slab = slab_idx;
-            }
-#endif
 
             if (curr_distance > tmin &&
                 curr_distance < distances[BUFFER_SIZE - 1]) {
@@ -236,13 +182,9 @@ __device__ void froward_pass(
             params.handle,
             tile_origin,
             tile_direction,
-            tmin, //
-#if DEBUG_ASSUME_KNOWING_TMAX == true
-            params.t_maxes[ray_id],
-#else
+            tmin,     //
             100000.0, // tmax
-#endif
-            0.0f, // rayTime
+            0.0f,     // rayTime
             OptixVisibilityMask(1),
 #if USE_POLYCAGE == true
             OPTIX_RAY_FLAG_CULL_BACK_FACING_TRIANGLES,
@@ -297,15 +239,6 @@ __device__ void froward_pass(
         tmin = max(tmin, unpackDistance(floats[0]));
 #endif
 
-#if RENDER_DISTORTION == true
-        float A[TILE_SIZE * TILE_SIZE];
-        fill_array(A, TILE_SIZE * TILE_SIZE, 0.0f);
-        float D[TILE_SIZE * TILE_SIZE];
-        fill_array(D, TILE_SIZE * TILE_SIZE, 0.0f);
-        float D2[TILE_SIZE * TILE_SIZE];
-        fill_array(D2, TILE_SIZE * TILE_SIZE, 0.0f);
-#endif
-
 #pragma unroll
         for (int i = 0; i < BUFFER_SIZE; i++) {
 #if STORAGE_MODE == PER_PIXEL_LINKED_LIST
@@ -313,19 +246,10 @@ __device__ void froward_pass(
 #elif STORAGE_MODE == NO_STORAGE
             float distance = unpackDistance(floats[i]);
 #endif
-#if DEBUG_ASSUME_KNOWING_TMIN == true
-            if (iteration == 0 && i == 0) {
-                params.t_mins[ray_id] = distance;
-            }
-#endif
-
             tmin = max(distance, tmin); // todo: fails if its not a max, but the
                                         // values should already be sorted??
 
             if (distance < 99.9f) {
-#if DEBUG_ASSUME_KNOWING_TMAX == true || DEBUG_CHEAP_TMAX_ESTIMATE == true
-                tmax_to_store = tmin;
-#endif
 
 #if SAVE_HIT_STATS == true
                 atomicAdd(&params.num_hits_per_pixel[ray_id], 1);
@@ -364,11 +288,7 @@ __device__ void froward_pass(
                     optixGetInstanceInverseTransformFromHandle(
                         optixGetInstanceTraversableFromIAS(
                             params.handle, gaussian_id));
-#if OPTIMIZE_EXP_POWER == true
-                float exp_power = params.gaussian_exp_power[gaussian_id];
-#else
                 float exp_power = params.exp_power;
-#endif
 #endif
 
                 num_hits++; //! was incorrect for tiling, review
@@ -426,7 +346,6 @@ __device__ void froward_pass(
                         opacity, params.alpha_threshold, exp_power);
                     if (BBOX_PADDING > 0.0f) {
                         float3 padded_scaling = scaling * scaling_factor;
-                        padded_scaling = padded_scaling + ANTIALIASING;
                         local_origin = local_origin *
                                        (BBOX_PADDING + padded_scaling) /
                                        padded_scaling;
@@ -446,48 +365,9 @@ __device__ void froward_pass(
                     float alpha = 0.0f;
                     if (sq_dist <= 1.0f) {
                         float3 local_hit = local_hit_unscaled * scaling_factor;
-
-#if DEBUG_VIEW_ELLIPSOIDS == true
-                        alpha = 1.0f;
-
-                        float x = sqrtf(1.0f - powf(length(local_hit), 2.0f));
-
-                        float3 local_sphere_hit =
-                            local_hit - x * local_direction;
-                        const float4 *local_to_world =
-                            optixGetInstanceInverseTransformFromHandle(
-                                optixGetInstanceTraversableFromIAS(
-                                    params.handle, gaussian_id));
-                        float3 world_sphere_hit_centered = make_float3(
-                            dot(make_float3(
-                                    world_to_local[0].x,
-                                    world_to_local[1].x,
-                                    world_to_local[2].x),
-                                local_sphere_hit),
-                            dot(make_float3(
-                                    world_to_local[0].y,
-                                    world_to_local[1].y,
-                                    world_to_local[2].y),
-                                local_sphere_hit),
-                            dot(make_float3(
-                                    world_to_local[0].z,
-                                    world_to_local[1].z,
-                                    world_to_local[2].z),
-                                local_sphere_hit));
-                        float3 world_normal =
-                            normalize(world_sphere_hit_centered);
-
-                        float3 light_dir =
-                            normalize(make_float3(0.5f, -1.0f, 0.5f));
-                        float shading = dot(world_normal, light_dir);
-                        gaussian_rgb =
-                            gaussian_rgb * (max(0.0f, shading) * 0.6f + 0.4f);
-#else
                         gaussval = eval_gaussian(local_hit, exp_power);
                         alpha = compute_alpha(
                             gaussval, opacity, params.alpha_threshold);
-
-#endif
                     }
 #else
                     float alpha =
@@ -522,20 +402,6 @@ __device__ void froward_pass(
 #endif
 #if ATTACH_ROUGHNESS == true
                     output_roughness[k][c] += gaussian_roughness * weight;
-#endif
-#if RENDER_DISTORTION == true
-                    float rescaled_distance =
-                        distance -
-                        DISTORTION_NEAR_PLANE /
-                            (DISTORTION_FAR_PLANE - DISTORTION_NEAR_PLANE);
-
-                    output_distortion[k] +=
-                        ((rescaled_distance * rescaled_distance) * A[k] +
-                         D2[k] - 2.0f * rescaled_distance * D[k]);
-
-                    A[k][c] += weight;
-                    D[k][c] += weight * rescaled_distance;
-                    D2[k][c] += weight * rescaled_distance * rescaled_distance;
 #endif
 
                     output_t[k].x = next_T;
@@ -612,9 +478,6 @@ finished_integration:
     //             #if ATTACH_ROUGHNESS == true
     //                 output_roughness[k][c] *= cw;
     //             #endif
-    //             #if RENDER_DISTORTION == true
-    //                 output_distortion[k] *= cw;
-    //             #endif
     //             #if SAVE_LOD_IMAGES == true
     //                 output_lod_mean[k][c] *= cw;
     //                 output_ray_lod[k][c] *= cw;
@@ -625,16 +488,6 @@ finished_integration:
 
 #if LOG_ALL_HITS == true
     params.prev_hit_per_pixel[ray_id] = 999999999u;
-#endif
-
-#if DEBUG_CHEAP_TMAX_ESTIMATE == true
-    if (*params.cheap_approx) {
-        params.t_maxes[ray_id] = tmax_to_store;
-    }
-#endif
-
-#if DEBUG_ASSUME_KNOWING_TMAX == true
-    params.t_maxes[ray_id] = tmax_to_store;
 #endif
 
 #if REMAINING_COLOR_ESTIMATION == ASSUME_SAME_AS_FORGROUND
@@ -658,9 +511,6 @@ finished_integration:
 #if ATTACH_ROUGHNESS == true
         remaining_roughness[k][0] = output_roughness[k][0] / normalization;
 #endif
-#if RENDER_DISTORTION == true
-        remaining_distortion[k][0] = output_distortion[k][0] / normalization;
-#endif
 #if SAVE_LOD_IMAGES == true
         remaining_lod_mean[k][0] = output_lod_mean[k][0] / normalization;
         remaining_ray_lod[k][0] = output_ray_lod[k][0] / normalization;
@@ -681,9 +531,6 @@ finished_integration:
 #endif
 #if ATTACH_ROUGHNESS == true
     float average_roughness = 0.0f;
-#endif
-#if RENDER_DISTORTION == true
-    float average_distortion = 0.0f;
 #endif
 #if SAVE_LOD_IMAGES == true
     float average_lod_mean = 0.0f;
@@ -714,10 +561,6 @@ finished_integration:
             float roughness = READ_ROUGHNESS(gaussian_id);
             average_roughness += roughness * alpha;
 #endif
-#if RENDER_DISTORTION == true
-            float distortion = params.gaussian_distortion[gaussian_id];
-            average_distortion += distortion * alpha;
-#endif
             alpha_sum += alpha;
         }
         hit_idx = prev_hit;
@@ -734,9 +577,6 @@ finished_integration:
 #endif
 #if ATTACH_ROUGHNESS == true
     average_roughness /= max(alpha_sum, 1e-8);
-#endif
-#if RENDER_DISTORTION == true
-    average_distortion /= max(alpha_sum, 1e-8);
 #endif
     for (int k = 0; k < TILE_SIZE * TILE_SIZE; k++) {
         remaining_rgb[k][0][0] = average_rgb;
@@ -789,10 +629,6 @@ finished_integration:
         float sample_roughness =
             READ_ROUGHNESS(gaussian_id) / NUM_STOCH_SAMPLES;
 #endif
-#if RENDER_DISTORTION == true
-        float sample_distortion =
-            params.gaussian_distortion[gaussian_id] / NUM_STOCH_SAMPLES;
-#endif
 
         for (int k = 0; k < TILE_SIZE * TILE_SIZE; k++) {
             remaining_rgb[k][0] += sample_color;
@@ -807,9 +643,6 @@ finished_integration:
 #endif
 #if ATTACH_ROUGHNESS == true
             remaining_roughness[k][0] += sample_roughness;
-#endif
-#if RENDER_DISTORTION == true
-            remaining_distortion[k][0] += sample_distortion;
 #endif
 #if SAVE_LOD_IMAGES == true
             printf("unimplemented!\n");
@@ -843,10 +676,6 @@ finished_integration:
         output_roughness[k][0] =
             output_roughness[k][0] + remaining_T * remaining_roughness[k][0];
 #endif
-#if RENDER_DISTORTION == true
-        output_distortion[k][0] =
-            output_distortion[k][0] + remaining_T * remaining_distortion[k][0];
-#endif
 #if SAVE_LOD_IMAGES == true
         output_lod_mean[k][0] =
             output_lod_mean[k][0] + remaining_T * remaining_lod_mean[k][0];
@@ -854,9 +683,5 @@ finished_integration:
             output_ray_lod[k][0] + remaining_T * remaining_ray_lod[k][0];
 #endif
     }
-#endif
-
-#if OPACITY_MODULATION == true
-    float roughness = params.input_roughness[ray_id];
 #endif
 }

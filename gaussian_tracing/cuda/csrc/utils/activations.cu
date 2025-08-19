@@ -115,13 +115,8 @@ __device__ float4 backward_normalize_act(float4 dL_dy, float4 x, float4 y) {
 #else
 #define READ_RGB(gaussian_id) softplus_act(params.gaussian_rgb[gaussian_id])
 #endif
-#if ALLOW_OPACITY_ABOVE_1 == true
-#define READ_OPACITY(gaussian_id)                                              \
-    softplus_act(params.gaussian_opacity[gaussian_id])
-#else
 #define READ_OPACITY(gaussian_id)                                              \
     sigmoid_act(params.gaussian_opacity[gaussian_id])
-#endif
 #define READ_ROTATION(gaussian_id)                                             \
     normalize_act(params.gaussian_rotations[gaussian_id])
 #define READ_SCALE(gaussian_id) exp_act(params.gaussian_scales[gaussian_id])

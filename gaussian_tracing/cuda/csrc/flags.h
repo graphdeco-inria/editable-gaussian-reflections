@@ -32,7 +32,6 @@
 
 #define USE_LUT false
 
-#define USE_EPANECHNIKOV_KERNEL false
 #define INCLUDE_BRDF_WEIGHT true
 
 #define SAMPLE_FROM_BRDF true
@@ -66,18 +65,6 @@
 
 #define JITTER true
 #define GLOBAL_SORT false
-
-// --------------------------- let go for now
-
-#define LOD_KERNEL_EXPONENT 4.0f
-
-#define USE_GRADIENT_SCALING false
-#define GRADIENT_SCALING_UNCLAMPED false
-
-#define INDEPENDENT_GLOSSY_LOSS false
-#define SEMI_INDEPENDENT_GLOSSY_LOSS false
-
-#define ADD_LOD_MEAN_TO_SCALE false
 
 // -----------------------
 // ----- Rendering mode
@@ -127,63 +114,12 @@
 // done at inference
 
 // -----------------------
-// ----- WIP feature flags
-// -----------------------
-
-#define RENDER_DISTORTION false
-#define DISTORTION_NEAR_PLANE 0.2f
-#define DISTORTION_FAR_PLANE 1000.0f
-#define USE_DISTORTION_LOSS false
-#define DISTORTION_LOSS_WEIGHT 1.0f
-
-#define REFLECTIONS_FROM_GT_GLOSSY_IRRADIANCE false
-
-// -----------------------
 // ----- Debug options
 // -----------------------
 
-#define DYN_CLAMPING true
 #define DETACH_AFTER 9999
-
-#define DEBUG_ASSUME_KNOWING_TMAX false
-#define DEBUG_ASSUME_KNOWING_TMIN false
-#define DEBUG_VIEW_ELLIPSOIDS false
-
-#define DEBUG_CHEAP_TMAX_ESTIMATE false
-#define CHEAP_TMAX_DOWNSAMPLING 6
-#define DEBUG_SINGLE_EMPTY_RAYTRACE false
-#define DEBUG_SECOND_BOUNCE false
-
-#define DEBUG_DISABLE_CLIPPING false
-
-// -----------------------
-// ----- Legacy options
-// -----------------------
-
-#define SQUARE_KERNEL false
 #define USE_POLYCAGE false
-#define ALPHA_SMOOTHING false
-#define ALPHA_SMOOTHING_THRESHOLD 0.1f
-#define ALPHA_RESCALE false
-#define USE_MASKING false
-#define STOCHASTIC false
-#define BB_SHRINKAGE 1.0f
-
-// -----------------------
-// ----- Incomplete options
-// -----------------------
-
 #define TILE_SIZE 1
-#define OPTIMIZE_EXP_POWER false
-#define GRADS_ON_REMAINING_GAUSSIANS false
-#define COMPACTION false
-#define FUSED_MESH false
-#define TRI_SOUP_FOR_MESHES false
-#define OPACITY_MODULATION false
-#define ORTHO_CAM false
-#define ANTIALIASING 0.0f
-#define MEASURE_LOSS false
-#define ALLOW_OPACITY_ABOVE_1 false
 #define NUM_SLABS 1
 
 // -----------------------
