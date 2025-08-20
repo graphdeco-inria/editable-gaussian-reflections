@@ -26,18 +26,8 @@ __device__ float2 bilinear_sample_LUT(float2 uv) {
     return value0 + uv_fract.x * (value1 - value0);
 }
 
-#if USE_POLYCAGE == true
-extern "C" __global__ void __anyhit__ah() {
-#else
 extern "C" __global__ void __intersection__gaussian() {
-#endif
-#if USE_POLYCAGE == true
-#define RETURN                                                                 \
-    optixIgnoreIntersection();                                                 \
-    return;
-#else
 #define RETURN return;
-#endif
 
     // * Intersect the ray with the gaussian's maximal value
     const uint32_t gaussian_id = optixGetInstanceIndex();
@@ -49,20 +39,8 @@ extern "C" __global__ void __intersection__gaussian() {
     uint32_t ray_id =
         (idx.y * TILE_SIZE) * params.image_width + idx.x * TILE_SIZE;
 
-#if SAVE_HIT_STATS == true
-    atomicAdd(&params.num_traversed_per_pixel[ray_id], 1);
-#endif
-
     float opacity = READ_OPACITY(gaussian_id);
     float3 scale = READ_SCALE(gaussian_id);
-    if (BBOX_PADDING > 0.0f) {
-        float p = params.exp_power;
-        float3 scaling =
-            scale * compute_scaling_factor(opacity, params.alpha_threshold, p);
-        local_origin = local_origin * (BBOX_PADDING + scaling) / scaling;
-        local_direction = local_direction * (BBOX_PADDING + scaling) / scaling;
-    }
-
     float norm = length(local_direction);
     local_direction /= norm;
     float local_hit_distance_along_ray = dot(-local_origin, local_direction);
@@ -76,39 +54,15 @@ extern "C" __global__ void __intersection__gaussian() {
     // into account todo: if end up implementing tiling, it is possible to
     // optimize further considering the worse ray of the tile, or by using
     // capsules
-    float sq_dist;
-    if (BBOX_PADDING > 0.0f) {
-        // Clip against the full bbox after padding its size
-        float3 local_origin_fullbox = optixGetObjectRayOrigin();
-        float3 local_direction_fullbox = optixGetObjectRayDirection();
-        local_direction_fullbox /= length(local_direction_fullbox);
-        float local_hit_distance_along_ray_fullbox =
-            dot(-local_origin_fullbox, local_direction_fullbox);
-        float3 local_hit_unscaled_fullbox =
-            local_origin_fullbox +
-            local_hit_distance_along_ray_fullbox * local_direction_fullbox;
-        sq_dist = dot(local_hit_unscaled_fullbox, local_hit_unscaled_fullbox);
-    } else {
-        sq_dist = dot(local_hit_unscaled, local_hit_unscaled);
-    }
+    float sq_dist = dot(local_hit_unscaled, local_hit_unscaled);
     if (sq_dist > 1.0f) {
         RETURN
     }
 
-#if STRICT_REJECT_GAUSSIANS_BEHIND_RAY == true
     if (dot(optixGetObjectRayOrigin(), optixGetObjectRayDirection()) > 0.0) {
         RETURN
     }
-#endif
 
-#if STORAGE_MODE == NO_STORAGE
-    float tmin = optixGetRayTmin();
-    if (sorting_distance <= tmin) {
-        RETURN
-    }
-#endif
-
-#if SKIP_BACKFACING_NORMALS == true
     int step = optixGetPayload_2();
     if (step != 0 && sorting_distance < SKIP_BACKFACING_MAX_DIST) {
         float3 gaussian_normal = params.gaussian_normal[gaussian_id];
@@ -118,175 +72,7 @@ extern "C" __global__ void __intersection__gaussian() {
             RETURN
         }
     }
-#endif
 
-#if TILE_SIZE > 1
-#if STORAGE_MODE == NO_STORAGE
-    printf("Error! NO_STORAGE mode not supported with TILE_SIZE > 1\n");
-#endif
-#if LOG_ALL_HITS != true
-    printf("Error! Only LOG_ALL_HITS mode supported with TILE_SIZE > 1\n");
-#endif
-    if (BBOX_PADDING != 0.0f) {
-        printf("Error! BBOX_PADDING not supported yet!\n");
-    }
-
-    // * Log the shared info for all subpixels
-    int hit_idx = atomicAdd(params.total_hits, 1);
-    params.all_gaussian_ids[hit_idx] = gaussian_id;
-    params.all_distances[hit_idx] = sorting_distance;
-    params.all_prev_hits[hit_idx] = params.prev_hit_per_pixel[ray_id];
-    params.prev_hit_per_pixel[ray_id] = hit_idx;
-
-    // * Compute all alpha values
-    float exp_power = params.exp_power;
-
-    float view_size = tan(*params.vertical_fov_radians / 2);
-    float aspect_ratio = float(dim.x) / float(dim.y);
-
-    for (int k = 0; k < TILE_SIZE * TILE_SIZE; k++) {
-        int ki = k / TILE_SIZE;
-        int kj = k % TILE_SIZE;
-        float _y = (idx.y * TILE_SIZE + ki) / (float(dim.y) * TILE_SIZE) +
-                   0.5f / (float(dim.y) * TILE_SIZE);
-        float _x = (idx.x * TILE_SIZE + kj) / (float(dim.x) * TILE_SIZE) +
-                   0.5f / (float(dim.x) * TILE_SIZE);
-        float y = view_size * (1.0f - 2.0f * _y);
-        float x = aspect_ratio * view_size * (2.0f * _x - 1.0f);
-        float3 subpixel_direction = normalize(
-            params.camera_rotation_w2c[0] * x +
-            params.camera_rotation_w2c[1] * y - params.camera_rotation_w2c[2]);
-
-        // use a direct api call
-        float3 local_subpixel_direction =
-            optixTransformVectorFromWorldToObjectSpace(subpixel_direction);
-        float scaling_factor =
-            compute_scaling_factor(opacity, params.alpha_threshold, exp_power);
-
-        if (BBOX_PADDING > 0.0f) {
-            float3 scaling = scale * scaling_factor;
-            float3 padded_scaling = scaling * scaling_factor;
-            local_subpixel_direction = local_subpixel_direction *
-                                       (BBOX_PADDING + padded_scaling) /
-                                       padded_scaling;
-        }
-
-        float norm = length(local_subpixel_direction);
-        local_subpixel_direction /= norm;
-
-        auto local_hit_distance_along_ray =
-            dot(-local_origin, local_subpixel_direction);
-        float3 local_hit_unscaled =
-            local_origin +
-            local_hit_distance_along_ray * local_subpixel_direction;
-
-        float sq_dist = dot(local_hit_unscaled, local_hit_unscaled);
-        float gaussval = 0.0f;
-        float alpha = 0.0f;
-        float3 local_hit = make_float3(0.0f, 0.0f, 0.0f);
-        if (sq_dist <= 1.0f) {
-            local_hit = local_hit_unscaled * scaling_factor;
-            gaussval = eval_gaussian(local_hit, exp_power);
-            alpha = compute_alpha(gaussval, opacity, params.alpha_threshold);
-        }
-
-        // * Log the subpixels
-        params.all_alphas[TILE_SIZE * TILE_SIZE * hit_idx + k] = alpha;
-        if (*params
-                 .grads_enabled) { // todo check impact of this on forward pass
-            params.all_gaussvals[TILE_SIZE * TILE_SIZE * hit_idx + k] =
-                gaussval;
-            params.all_local_hits[TILE_SIZE * TILE_SIZE * hit_idx + k] =
-                local_hit;
-        }
-
-#if TILE_SIZE == 2
-        switch (k) {
-        case 0: {
-            float full_T = __uint_as_float(optixGetPayload_3());
-            full_T *= 1.0 - alpha;
-            optixSetPayload_1(__float_as_uint(full_T));
-            break;
-        }
-        case 1: {
-            float full_T = __uint_as_float(optixGetPayload_4());
-            full_T *= 1.0 - alpha;
-            optixSetPayload_2(__float_as_uint(full_T));
-            break;
-        }
-        case 2: {
-            float full_T = __uint_as_float(optixGetPayload_5());
-            full_T *= 1.0 - alpha;
-            optixSetPayload_3(__float_as_uint(full_T));
-            break;
-        }
-        case 3: {
-            float full_T = __uint_as_float(optixGetPayload_6());
-            full_T *= 1.0 - alpha;
-            optixSetPayload_4(__float_as_uint(full_T));
-            break;
-        }
-        }
-#elif TILE_SIZE == 3
-        switch (k) {
-        case 0: {
-            float full_T = __uint_as_float(optixGetPayload_3());
-            full_T *= 1.0 - alpha;
-            optixSetPayload_1(__float_as_uint(full_T));
-            break;
-        }
-        case 1: {
-            float full_T = __uint_as_float(optixGetPayload_4());
-            full_T *= 1.0 - alpha;
-            optixSetPayload_2(__float_as_uint(full_T));
-            break;
-        }
-        case 2: {
-            float full_T = __uint_as_float(optixGetPayload_5());
-            full_T *= 1.0 - alpha;
-            optixSetPayload_3(__float_as_uint(full_T));
-            break;
-        }
-        case 3: {
-            float full_T = __uint_as_float(optixGetPayload_6());
-            full_T *= 1.0 - alpha;
-            optixSetPayload_4(__float_as_uint(full_T));
-            break;
-        }
-        case 4: {
-            float full_T = __uint_as_float(optixGetPayload_7());
-            full_T *= 1.0 - alpha;
-            optixSetPayload_5(__float_as_uint(full_T));
-            break;
-        }
-        case 5: {
-            float full_T = __uint_as_float(optixGetPayload_8());
-            full_T *= 1.0 - alpha;
-            optixSetPayload_6(__float_as_uint(full_T));
-            break;
-        }
-        case 6: {
-            float full_T = __uint_as_float(optixGetPayload_9());
-            full_T *= 1.0 - alpha;
-            optixSetPayload_7(__float_as_uint(full_T));
-            break;
-        }
-        case 7: {
-            float full_T = __uint_as_float(optixGetPayload_10());
-            full_T *= 1.0 - alpha;
-            optixSetPayload_8(__float_as_uint(full_T));
-            break;
-        }
-        case 8: {
-            float full_T = __uint_as_float(optixGetPayload_11());
-            full_T *= 1.0 - alpha;
-            optixSetPayload_9(__float_as_uint(full_T));
-            break;
-        }
-        }
-#endif
-    }
-#else
     float p = params.exp_power;
     float3 local_hit =
         local_hit_unscaled *
@@ -294,143 +80,24 @@ extern "C" __global__ void __intersection__gaussian() {
     float gaussval = eval_gaussian(local_hit, p);
     float alpha = compute_alpha(gaussval, opacity, params.alpha_threshold);
 
-// * Compute the total transmittance for the ray accurately
-#if STORAGE_MODE == NO_STORAGE
-    params.full_T[ray_id] *= 1.0 - alpha;
-#else
+    // * Compute the total transmittance for the ray accurately
     float full_T = __uint_as_float(optixGetPayload_3());
     full_T *= 1.0 - alpha;
     optixSetPayload_3(__float_as_uint(full_T));
-#endif
 
-#if USE_CLUSTERING == true
-    float half_chord_length =
-        sqrtf(1.0f - dot(local_hit, local_hit)) / local_hit_distance_along_ray;
-#endif
-
-// * Log all hits if required by configuration
-#if LOG_ALL_HITS == true
     int hit_idx = atomicAdd(params.total_hits, 1);
-    // if (alpha >= params.alpha_threshold) { //? why was there a check again
-    // here?
     params.all_gaussian_ids[hit_idx] = gaussian_id;
     params.all_distances[hit_idx] = sorting_distance;
-#if USE_CLUSTERING == true
-    params.all_half_chord_lengths[hit_idx] = half_chord_length;
-#endif
-#if RECOMPUTE_ALPHA_IN_FORWARD_PASS == false
     params.all_alphas[hit_idx] = alpha;
     if (*params.grads_enabled) { // todo check impact of this on forward pass
         params.all_gaussvals[hit_idx] = gaussval;
         params.all_local_hits[hit_idx] = local_hit;
     }
-#endif
     params.all_prev_hits[hit_idx] = params.prev_hit_per_pixel[ray_id];
     params.prev_hit_per_pixel[ray_id] = hit_idx;
-    // }
-#endif
-#endif
-
-// * Read payload
-#if STORAGE_MODE != PER_PIXEL_LINKED_LIST
-    register unsigned int floats[BUFFER_SIZE] = {
-        optixGetPayload_0(),
-        optixGetPayload_1(),
-        optixGetPayload_2(),
-        optixGetPayload_3(),
-        optixGetPayload_4(),
-        optixGetPayload_5(),
-        optixGetPayload_6(),
-        optixGetPayload_7(),
-        optixGetPayload_8(),
-        optixGetPayload_9(),
-        optixGetPayload_10(),
-        optixGetPayload_11(),
-        optixGetPayload_12(),
-        optixGetPayload_13(),
-        optixGetPayload_14(),
-        optixGetPayload_15()};
-    register unsigned int gaussian_ids[BUFFER_SIZE] = {
-        optixGetPayload_16(),
-        optixGetPayload_17(),
-        optixGetPayload_18(),
-        optixGetPayload_19(),
-        optixGetPayload_20(),
-        optixGetPayload_21(),
-        optixGetPayload_22(),
-        optixGetPayload_23(),
-        optixGetPayload_24(),
-        optixGetPayload_25(),
-        optixGetPayload_26(),
-        optixGetPayload_27(),
-        optixGetPayload_28(),
-        optixGetPayload_29(),
-        optixGetPayload_30(),
-        optixGetPayload_31()};
-#endif
-
-// * Insert into the hit buffer
-#if STORAGE_MODE != PER_PIXEL_LINKED_LIST
-    if (sorting_distance < unpackDistance(floats[BUFFER_SIZE - 1])) {
-        floats[BUFFER_SIZE - 1] = packFloats(sorting_distance, alpha);
-        gaussian_ids[BUFFER_SIZE - 1] = packId(gaussian_id, 0);
-    }
-#pragma unroll
-    for (int i = BUFFER_SIZE - 1; i > 0; i--) {
-        if (unpackDistance(floats[i]) < unpackDistance(floats[i - 1])) {
-            unsigned int tmp_dist = floats[i];
-            unsigned int tmp_id = gaussian_ids[i];
-            floats[i] = floats[i - 1];
-            gaussian_ids[i] = gaussian_ids[i - 1];
-            floats[i - 1] = tmp_dist;
-            gaussian_ids[i - 1] = tmp_id;
-        }
-    }
-#endif
-
-// * Write payload
-#if STORAGE_MODE != PER_PIXEL_LINKED_LIST
-    optixSetPayload_0(floats[0]);
-    optixSetPayload_1(floats[1]);
-    optixSetPayload_2(floats[2]);
-    optixSetPayload_3(floats[3]);
-    optixSetPayload_4(floats[4]);
-    optixSetPayload_5(floats[5]);
-    optixSetPayload_6(floats[6]);
-    optixSetPayload_7(floats[7]);
-    optixSetPayload_8(floats[8]);
-    optixSetPayload_9(floats[9]);
-    optixSetPayload_10(floats[10]);
-    optixSetPayload_11(floats[11]);
-    optixSetPayload_12(floats[12]);
-    optixSetPayload_13(floats[13]);
-    optixSetPayload_14(floats[14]);
-    optixSetPayload_15(floats[15]);
-    optixSetPayload_16(gaussian_ids[0]);
-    optixSetPayload_17(gaussian_ids[1]);
-    optixSetPayload_18(gaussian_ids[2]);
-    optixSetPayload_19(gaussian_ids[3]);
-    optixSetPayload_20(gaussian_ids[4]);
-    optixSetPayload_21(gaussian_ids[5]);
-    optixSetPayload_22(gaussian_ids[6]);
-    optixSetPayload_23(gaussian_ids[7]);
-    optixSetPayload_24(gaussian_ids[8]);
-    optixSetPayload_25(gaussian_ids[9]);
-    optixSetPayload_26(gaussian_ids[10]);
-    optixSetPayload_27(gaussian_ids[11]);
-    optixSetPayload_28(gaussian_ids[12]);
-    optixSetPayload_29(gaussian_ids[13]);
-    optixSetPayload_30(gaussian_ids[14]);
-    optixSetPayload_31(gaussian_ids[15]);
-#endif
 
     RETURN
 }
-
-#if USE_POLYCAGE == true
-extern "C" __global__ void __intersection__gaussian() {}
-#else
-#endif
 
 #include "backward_pass.cu"
 #include "forward_pass.cu"
@@ -453,15 +120,8 @@ extern "C" __global__ void __raygen__rg() {
     float3 tile_direction;
     float3 origin[TILE_SIZE * TILE_SIZE];
     float3 direction[TILE_SIZE * TILE_SIZE];
-#if JITTER == true && MAX_BOUNCES > 0
     const float2 jitter_offset =
         make_float2(rnd(seed) - 0.5f, rnd(seed) - 0.5f);
-    // const float2 jitter_offset = *params.grads_enabled ?
-    // make_float2(rnd(seed)
-    // - 0.5f, rnd(seed) - 0.5f) : make_float2(0.0f, 0.0f);
-#else
-    const float2 jitter_offset = make_float2(0.0f, 0.0f);
-#endif
     float2 idxf = make_float2(idx.x, idx.y) + jitter_offset;
 
     float view_size = tan(*params.vertical_fov_radians / 2);
@@ -480,22 +140,7 @@ extern "C" __global__ void __raygen__rg() {
 
     for (int k = 0; k < TILE_SIZE * TILE_SIZE; k++) {
         origin[k] = tile_origin;
-#if TILE_SIZE > 1
-        int ki = k / TILE_SIZE;
-        int kj = k % TILE_SIZE;
-        float _y = (idx.y * TILE_SIZE + ki) / (float(dim.y) * TILE_SIZE) +
-                   0.5f / (float(dim.y) * TILE_SIZE);
-        float _x = (idx.x * TILE_SIZE + kj) / (float(dim.x) * TILE_SIZE) +
-                   0.5f / (float(dim.x) * TILE_SIZE);
-        float y = view_size * (1.0f - 2.0f * _y);
-        float x = aspect_ratio * view_size * (2.0f * _x - 1.0f);
-        direction[k] = normalize(
-            params.camera_rotation_w2c[0] * x +
-            params.camera_rotation_w2c[1] * y - params.camera_rotation_w2c[2]);
-        origin[k] = tile_origin;
-#else
         direction[k] = tile_direction;
-#endif
     }
 
     float3 output_rgb[MAX_BOUNCES + 2][TILE_SIZE * TILE_SIZE];
@@ -545,13 +190,12 @@ extern "C" __global__ void __raygen__rg() {
             fill_array(
                 output_f0[i][c],
                 TILE_SIZE * TILE_SIZE,
-                make_float3(INIT_F0, INIT_F0, INIT_F0));
+                make_float3(0.0f, 0.0f, 0.0f));
     float output_roughness[MAX_BOUNCES + 1][NUM_CLUSTERS]
                           [TILE_SIZE * TILE_SIZE];
     for (int i = 0; i < MAX_BOUNCES + 1; i++)
         for (int c = 0; c < NUM_CLUSTERS; c++)
-            fill_array(
-                output_roughness[i][c], TILE_SIZE * TILE_SIZE, INIT_ROUGHNESS);
+            fill_array(output_roughness[i][c], TILE_SIZE * TILE_SIZE, 0.0f);
     float output_distortion[MAX_BOUNCES + 1][NUM_CLUSTERS]
                            [TILE_SIZE * TILE_SIZE];
     for (int i = 0; i < MAX_BOUNCES + 1; i++)
@@ -607,15 +251,12 @@ extern "C" __global__ void __raygen__rg() {
             fill_array(
                 remaining_f0[i][c],
                 TILE_SIZE * TILE_SIZE,
-                make_float3(INIT_F0, INIT_F0, INIT_F0));
+                make_float3(0.0f, 0.0f, 0.0f));
     float remaining_roughness[MAX_BOUNCES + 1][NUM_CLUSTERS]
                              [TILE_SIZE * TILE_SIZE];
     for (int i = 0; i < MAX_BOUNCES + 1; i++)
         for (int c = 0; c < NUM_CLUSTERS; c++)
-            fill_array(
-                remaining_roughness[i][c],
-                TILE_SIZE * TILE_SIZE,
-                INIT_ROUGHNESS);
+            fill_array(remaining_roughness[i][c], TILE_SIZE * TILE_SIZE, 0.0f);
     float remaining_distortion[MAX_BOUNCES + 1][NUM_CLUSTERS]
                               [TILE_SIZE * TILE_SIZE];
     for (int i = 0; i < MAX_BOUNCES + 1; i++)
@@ -715,66 +356,31 @@ extern "C" __global__ void __raygen__rg() {
             num_hits[step]);
 
         float max_weight = 0.0f;
-#if USE_CLUSTERING == true
-        for (int k = 0; k < TILE_SIZE * TILE_SIZE; k++) {
-            // randomly select a cluster based on the weights
-            // cluster_weights[step][c][k] and F0
-        }
-#endif
 
 #if MAX_BOUNCES > 0
         for (int ki = 0; ki < TILE_SIZE; ki++)
             for (int kj = 0; kj < TILE_SIZE; kj++) {
                 int k = ki * TILE_SIZE + kj;
                 int pixel_id = ray_id + ki * params.image_width + kj;
-
-#if USE_CLUSTERING == true
-                // int c = selected_clusters[step][k];
                 int c = 0;
-#else
-                int c = 0;
-#endif
-
                 incident_radiance[step][k] = output_rgb[step][k];
 
                 // * Multiply by the BRDF of the previous step
                 if (step > 0) {
-                    // #if USE_CLUSTERING == true
-                    //     int prev_c = selected_clusters[step - 1][k];
-                    // #else
                     int prev_c = 0;
-                    // #endif
                     output_rgb[step][k] =
                         output_rgb[step][k] *
                         output_throughput[step - 1][prev_c][k];
-                    // #if USE_CLUSTERING == true
-                    //     float ww = cluster_weights[step - 1][prev_c][k]; // !
-                    //     tmp and todo fails for multibounce
-                    //     output_rgb[step][k] *= ww;
-                    // #endif
                 }
 
                 float effective_roughness = output_roughness[step][c][k];
                 effective_roughness = max(effective_roughness, MIN_ROUGHNESS);
                 float3 unnormalized_normal = output_normal[step][c][k];
-#if NORMALIZE_NORMAL_MAP == true
                 float3 effective_normal = normalize(unnormalized_normal);
-#else
-                float3 effective_normal = unnormalized_normal;
-#endif
                 float3 effective_F0 = output_f0[step][c][k];
 
                 // * Compute the BRDF for this step
                 {
-#if SAMPLE_FROM_BRDF == false
-                    // USE LUT
-                    float n_dot_v = dot(-direction[k], effective_normal);
-                    float2 uv = make_float2(n_dot_v, effective_roughness);
-                    float2 lut_values = bilinear_sample_LUT(uv);
-                    output_throughput[step][c][k] *=
-                        lut_values.x * effective_F0 + lut_values.y;
-#endif
-
                     if (step > 0) {
                         output_throughput[step][c][k] *=
                             output_throughput[step - 1][c][k];
@@ -792,31 +398,17 @@ extern "C" __global__ void __raygen__rg() {
                         }
                     }
 
-#if SAMPLE_FROM_BRDF == true
                     float3 next_direction = sample_cook_torrance(
                         effective_normal,
                         -direction[k],
                         effective_roughness,
                         make_float2(rnd(seed), rnd(seed)));
-
-#if INCLUDE_BRDF_WEIGHT == true
                     output_throughput[step][c][k] *= cook_torrance_weight(
                         effective_normal,
                         -direction[k],
                         next_direction,
                         effective_roughness,
                         effective_F0);
-#else
-                    if (effective_F0.x == 0.0f && effective_F0.y == 0.0f &&
-                        effective_F0.z == 0.0f) {
-                        output_throughput[step][c][k] *= 0.0f;
-                    }
-#endif
-#else
-                    float3 next_direction =
-                        reflect(direction[k], effective_normal);
-#endif
-
                     float3 next_origin =
                         effective_position + SURFACE_EPS * next_direction;
                     reflected_origin = next_origin;
@@ -897,21 +489,7 @@ forward_pass_end:
             int tile_id = ki * TILE_SIZE + kj;
 
             for (int s = 0; s < *params.num_bounces + 1; s++) {
-                // todo refactor
-                // #if USE_CLUSTERING == true
-                //     int max_c = 0;
-                //     float max_weight = 0.0f;
-                //     for (int c = 0; c < NUM_CLUSTERS; c++) {
-                //         float weight = cluster_weights[s][c][tile_id];
-                //         if (weight > max_weight) {
-                //             max_weight = weight;
-                //             max_c = c;
-                //         }
-                //     }
-                // #else
                 int max_c = 0;
-                // #endif
-
                 int pixel_id =
                     ray_id + ki * params.image_width + kj + num_pixels * s;
                 params.output_rgb[pixel_id] = output_rgb[s][tile_id];
@@ -1077,13 +655,8 @@ forward_pass_end:
 #else
             float roughness_weight = 1.0f;
 #endif
-
-#if DOWNWEIGHT_EXTRA_BOUNCES == true
             float extra_bounce_weight =
                 powf(EXTRA_BOUNCE_WEIGHT, float(max(step - 1, 0)));
-#else
-            float extra_bounce_weight = 1.0f;
-#endif
 
             backward_pass(
                 step,

@@ -67,12 +67,6 @@ __global__ void _populateBVH(
         float opacity = opacities[i];
         opacity = sigmoid_act(opacity);
 
-#if COMPATIBILITY_MODE == true
-        float3 sizes = scales[i];
-        sizes = exp_act(sizes);
-        sizes = sizes * 3.0;
-        instances[i].visibilityMask = 255;
-#else
         float3 sizes = scales[i];
         sizes = exp_act(sizes);
         float p = exp_power;
@@ -83,24 +77,9 @@ __global__ void _populateBVH(
             scaling_factor >
             0.0f; // & mask[i]; // todo & product of scales also > 0
 
-#if IGNORE_0_VOLUME_GAUSSIANS == true
-        if (sizes.x < IGNORE_0_VOLUME_MINSIZE ||
-            sizes.y < IGNORE_0_VOLUME_MINSIZE ||
-            sizes.z < IGNORE_0_VOLUME_MINSIZE) {
+        if (sizes.x < 0.0f || sizes.y < 0.0f || sizes.z < 0.0f) {
             instances[i].visibilityMask = 0;
         }
-#endif
-
-#ifdef BBOX_PADDING
-        sizes = sizes + BBOX_PADDING;
-#endif
-#ifdef MIN_BBOX_SIZE
-        sizes = make_float3(
-            fmaxf(sizes.x, MIN_BBOX_SIZE),
-            fmaxf(sizes.y, MIN_BBOX_SIZE),
-            fmaxf(sizes.z, MIN_BBOX_SIZE));
-#endif
-#endif
 
         create_transform_matrix(
             rotations[i],
@@ -173,9 +152,6 @@ __global__ void _populateTensor(
         float scaling_factor =
             compute_scaling_factor(opacity, alpha_threshold, p);
         sizes = sizes * scaling_factor * global_scaling_factor; //!!!!!!!!!!!!
-#ifdef BBOX_PADDING
-        sizes = sizes + BBOX_PADDING;
-#endif
 
         create_transform_matrix(rotations[i], sizes, means[i], transform);
         for (int j = 0; j < num_verts_per_gaussian; j++) {

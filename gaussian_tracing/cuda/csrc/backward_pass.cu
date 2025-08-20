@@ -127,39 +127,11 @@ __device__ void backward_pass(
             float gaussvals[TILE_SIZE * TILE_SIZE];
             float distances[TILE_SIZE * TILE_SIZE];
 
-#if TILE_SIZE == 1
             local_hits[0] = params.all_local_hits_for_backprop[hit_idx];
             curr_Ts[0] = params.all_Ts_for_backprop[hit_idx];
             alphas[0] = params.all_alphas_for_backprop[hit_idx];
             gaussvals[0] = params.all_gaussvals_for_backprop[hit_idx];
             distances[0] = params.all_distances_for_backprop[hit_idx];
-#else
-#pragma unroll
-            for (int k = 0; k < TILE_SIZE * TILE_SIZE; k++) {
-                // #if TILE_SIZE > 1
-                //     float curr_T = params.all_Ts_for_backprop[TILE_SIZE *
-                //     TILE_SIZE * hit_idx + k]; float alpha =
-                //     params.all_alphas_for_backprop[TILE_SIZE * TILE_SIZE *
-                //     hit_idx + k]; float gaussval =
-                //     params.all_gaussvals_for_backprop[TILE_SIZE
-                //     * TILE_SIZE * hit_idx + k]; float3 local_hit =
-                //     params.all_local_hits_for_backprop[TILE_SIZE * TILE_SIZE
-                //     * hit_idx + k];
-                //     // float3 local_hit =
-                //     params.all_local_hits_for_backprop[hit_idx];
-                // #endif
-                curr_Ts[k] = params.all_Ts_for_backprop
-                                 [TILE_SIZE * TILE_SIZE * hit_idx + k];
-                alphas[k] = params.all_alphas_for_backprop
-                                [TILE_SIZE * TILE_SIZE * hit_idx + k];
-                gaussvals[k] = params.all_gaussvals_for_backprop
-                                   [TILE_SIZE * TILE_SIZE * hit_idx + k];
-                local_hits[k] = params.all_local_hits_for_backprop
-                                    [TILE_SIZE * TILE_SIZE * hit_idx + k];
-                distances[k] = params.all_distances_for_backprop
-                                   [TILE_SIZE * TILE_SIZE * hit_idx + k];
-            }
-#endif
 
             // float3 gaussian_rgb = READ_RGB(gaussian_id);
             float3 gaussian_rgb_unactivated = params.gaussian_rgb[gaussian_id];
@@ -198,37 +170,14 @@ __device__ void backward_pass(
             float4 dL_drot_total = make_float4(0.0f, 0.0f, 0.0f, 0.0f);
             float3 dL_dscale_total = make_float3(0.0f, 0.0f, 0.0f);
             float3 dL_dmean_total = make_float3(0.0f, 0.0f, 0.0f);
-#if EXPECTED_TERMINATION_GRADIENTS == true
-            float3 dL_dexpected_termination_total =
-                make_float3(0.0f, 0.0f, 0.0f);
-#endif
 
             float weight;
             for (int k = 0; k < TILE_SIZE * TILE_SIZE; k++) {
-                // #if TILE_SIZE > 1
-                //     float curr_T = params.all_Ts_for_backprop[TILE_SIZE *
-                //     TILE_SIZE * hit_idx + k]; float alpha =
-                //     params.all_alphas_for_backprop[TILE_SIZE * TILE_SIZE *
-                //     hit_idx + k]; float gaussval =
-                //     params.all_gaussvals_for_backprop[TILE_SIZE
-                //     * TILE_SIZE * hit_idx + k]; float3 local_hit =
-                //     params.all_local_hits_for_backprop[TILE_SIZE * TILE_SIZE
-                //     * hit_idx + k];
-                //     // float3 local_hit =
-                //     params.all_local_hits_for_backprop[hit_idx];
-                // #endif
-
                 float curr_T = curr_Ts[k];
                 float alpha = alphas[k];
                 float gaussval = gaussvals[k];
                 float3 local_hit = local_hits[k];
-
-// * Loss gradient
-#if SKIP_LOSS_AVG_NUM_PIXELS == true
                 int num_pixels = 1;
-#else
-                int num_pixels = params.image_height * params.image_width;
-#endif
 
                 // the *2 is the exponent dropping down, and the / 3 is the 3
                 // channels being averaged over
@@ -330,8 +279,6 @@ __device__ void backward_pass(
                 float dL_dalpha =
                     dot(backward_weighted_rgb_deltas[k] / (1.0f - alpha),
                         dL_doutput_rgb);
-
-#if REMAINING_COLOR_ESTIMATION != NO_ESTIMATION
                 dL_dalpha +=
                     -((output_t[k].x - output_t[k].y) / (1.0 - alpha)) *
                     dot(remaining_rgb[k], dL_doutput_rgb);
@@ -347,7 +294,6 @@ __device__ void backward_pass(
                 dL_dalpha +=
                     -((output_t[k].x - output_t[k].y) / (1.0 - alpha)) *
                     remaining_roughness[k] * dL_doutput_roughness;
-#endif
 
                 if (step == 0) {
                     dL_dalpha += backward_weighted_depth_deltas[k] /
@@ -400,62 +346,6 @@ __device__ void backward_pass(
                                                  world_to_local[2].z),
                                              dL_dx_local)) *
                                      scaling_factor;
-
-                // {   // todo pull out changes of basis into a function
-                //     float norm = sqrtf(sq_norm) + 1e-12f;
-                //     float3 direction_world = ray_direction_world;
-                //     float3 direction_local_unnormalized  = make_float3(
-                //         dot(make_float3(world_to_local[0]),
-                //         ray_direction_world),
-                //         dot(make_float3(world_to_local[1]),
-                //         ray_direction_world),
-                //         dot(make_float3(world_to_local[2]),
-                //         ray_direction_world)
-                //     ) / (scaling_factor + EPS_SCALE_GRAD); //!!!!!!! review
-                //     scaling factor, factor on dL_dx_world is also sus since
-                //     it is used below float3 direction_local =
-                //     normalize(direction_local_unnormalized); float3
-                //     origin_local = make_float3(
-                //         dot(make_float3(world_to_local[0]),
-                //         ray_origin_world),
-                //         dot(make_float3(world_to_local[1]),
-                //         ray_origin_world),
-                //         dot(make_float3(world_to_local[2]), ray_origin_world)
-                //     ) / (scaling_factor + EPS_SCALE_GRAD);
-                //     float dL_dt_world = dot(dL_dx_world, direction_world);
-                //     float dL_dt_local = dL_dt_world / norm;
-                //     float3 dL_dorigin_local = dL_dt_local * -direction_local;
-                //     float3 dL_dorigin_world = make_float3(
-                //         dot(make_float3(world_to_local[0].x,
-                //         world_to_local[1].x, world_to_local[2].x),
-                //         dL_dorigin_local),
-                //         dot(make_float3(world_to_local[0].y,
-                //         world_to_local[1].y, world_to_local[2].y),
-                //         dL_dorigin_local),
-                //         dot(make_float3(world_to_local[0].z,
-                //         world_to_local[1].z, world_to_local[2].z),
-                //         dL_dorigin_local)
-                //     ) + dL_dx_world;
-                //     float3 dL_ddirection_local = dL_dt_local * -origin_local;
-                //     float3 dL_direction_local_unnormalized =
-                //     dL_ddirection_local * (dL_ddirection_local/norm -
-                //     dot(direction_local_unnormalized, dL_ddirection_local) *
-                //     direction_local_unnormalized / powf(norm, 3.0f)); float3
-                //     dL_ddirection_world = make_float3(
-                //         dot(make_float3(world_to_local[0].x,
-                //         world_to_local[1].x, world_to_local[2].x),
-                //         dL_direction_local_unnormalized),
-                //         dot(make_float3(world_to_local[0].y,
-                //         world_to_local[1].y, world_to_local[2].y),
-                //         dL_direction_local_unnormalized),
-                //         dot(make_float3(world_to_local[0].z,
-                //         world_to_local[1].z, world_to_local[2].z),
-                //         dL_direction_local_unnormalized)
-                //     );
-
-                //     dL_dray_origin_out += dL_dorigin_world;
-                //     dL_dray_direction_out += dL_ddirection_world;
-                // }
 
                 // * Local to world matrix gradient
                 float3 dL_dl2w_0 = -dL_dx_world.x * local_hit;
@@ -519,31 +409,27 @@ __device__ void backward_pass(
             if (i < DETACH_AFTER * BUFFER_SIZE) {
                 atomicAdd3(
                     &params.dL_drgb[gaussian_id],
-                    dL_drgb_total * grad_dist_weight * GLOBAL_GRADIENT_SCALE);
+                    dL_drgb_total * grad_dist_weight);
                 atomicAdd(
                     &params.dL_dopacity[gaussian_id],
-                    dL_dopacity_total * grad_dist_weight *
-                        GLOBAL_GRADIENT_SCALE);
+                    dL_dopacity_total * grad_dist_weight);
                 if (step == 0) {
                     atomicAdd3(
                         &params.dL_dgaussian_normal[gaussian_id],
-                        dL_dgaussian_normal_total * grad_dist_weight *
-                            GLOBAL_GRADIENT_SCALE);
+                        dL_dgaussian_normal_total * grad_dist_weight);
                     atomicAdd3(
                         &params.dL_dgaussian_f0[gaussian_id],
-                        dL_dgaussian_f0_total * grad_dist_weight *
-                            GLOBAL_GRADIENT_SCALE);
+                        dL_dgaussian_f0_total * grad_dist_weight);
                     atomicAdd(
                         &params.dL_dgaussian_roughness[gaussian_id],
-                        dL_dgaussian_roughness_total * grad_dist_weight *
-                            GLOBAL_GRADIENT_SCALE);
+                        dL_dgaussian_roughness_total * grad_dist_weight);
                 }
                 atomicAdd4(
                     &params.dL_drotations[gaussian_id],
-                    dL_drot_total * grad_dist_weight * GLOBAL_GRADIENT_SCALE);
+                    dL_drot_total * grad_dist_weight);
                 atomicAdd3(
                     &params.dL_dmeans[gaussian_id],
-                    dL_dmean_total * grad_dist_weight * GLOBAL_GRADIENT_SCALE);
+                    dL_dmean_total * grad_dist_weight);
 
                 //
 
@@ -553,19 +439,17 @@ __device__ void backward_pass(
                 if (step == 0) {
                     atomicAdd3(
                         &params.densification_gradient_diffuse[gaussian_id],
-                        dL_dmean_total * grad_dist_weight *
-                            GLOBAL_GRADIENT_SCALE);
+                        dL_dmean_total * grad_dist_weight);
                 } else {
                     atomicAdd3(
                         &params.densification_gradient_glossy[gaussian_id],
                         dL_dmean_total / params.glossy_loss_weight *
-                            grad_dist_weight / MAX_BOUNCES *
-                            GLOBAL_GRADIENT_SCALE);
+                            grad_dist_weight / MAX_BOUNCES);
                 }
 
                 atomicAdd3(
                     &params.dL_dscales[gaussian_id],
-                    dL_dscale_total * grad_dist_weight * GLOBAL_GRADIENT_SCALE);
+                    dL_dscale_total * grad_dist_weight);
             }
 
             i--;

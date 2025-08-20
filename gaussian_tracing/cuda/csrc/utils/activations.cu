@@ -97,18 +97,6 @@ __device__ float4 backward_normalize_act(float4 dL_dy, float4 x, float4 y) {
     return dot(dL_dy, x) * -x / powf(length(x), 3) + dL_dy / length(x);
 }
 
-// this doesn't change much
-// __device__ float3 __intrinsic_read(const float3* ptr) {
-//     float3 result;
-//     result.x = __ldg(&ptr->x);
-//     result.y = __ldg(&ptr->y);
-//     result.z = __ldg(&ptr->z);
-//     return result;
-// }
-// __device__ float __intrinsic_read(const float* ptr) {
-//     return __ldg(ptr);
-// }
-
 #define READ_RGB(gaussian_id) params.gaussian_rgb[gaussian_id]
 #define READ_OPACITY(gaussian_id)                                              \
     sigmoid_act(params.gaussian_opacity[gaussian_id])

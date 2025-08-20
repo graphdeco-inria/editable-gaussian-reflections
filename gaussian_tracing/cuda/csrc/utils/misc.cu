@@ -46,19 +46,7 @@ __device__ float unpackDistance(const float &packed) {
 __device__ float unpackAlpha(const float &packed) {
     return __uint_as_float(packed);
 }
-// #endif
 
-#ifdef SORT_BY_COUNTING
-__device__ unsigned int packId(const uint32_t gaussian_id, uint32_t count) {
-    // store the last 4 bits of count into the 4 most significant bits of
-    // gaussian_id
-    return (gaussian_id << 4) | (count & 0xF);
-}
-
-__device__ uint32_t unpackId(const uint32_t &packed) { return packed >> 4; }
-
-__device__ uint32_t unpackCount(const uint32_t &packed) { return packed & 0xF; }
-#else
 __device__ unsigned int packId(const uint32_t gaussian_id, uint32_t count) {
     // store the last 4 bits of count into the 4 most significant bits of
     // gaussian_id
@@ -68,4 +56,3 @@ __device__ unsigned int packId(const uint32_t gaussian_id, uint32_t count) {
 __device__ uint32_t unpackId(const uint32_t &packed) { return packed; }
 
 __device__ uint32_t unpackCount(const uint32_t &packed) { return 0; }
-#endif
