@@ -18,9 +18,7 @@
 #include "params.h"
 #include "utils/exception.h"
 
-#if DENOISER == true
 #include <optix_denoiser_tiling.h>
-#endif
 
 using namespace at;
 
@@ -111,7 +109,6 @@ struct Raytracer : torch::CustomClassHolder {
     Tensor m_total_hits =
         torch::zeros({1}, torch::dtype(torch::kInt32).device(torch::kCUDA));
 
-#if LOG_ALL_HITS == true
     // PPLL storage for forward pass
     Tensor m_all_gaussian_ids = torch::zeros(
         {PPLL_STORAGE_SIZE}, torch::dtype(torch::kInt32).device(torch::kCUDA));
@@ -160,7 +157,6 @@ struct Raytracer : torch::CustomClassHolder {
         {PPLL_STORAGE_SIZE_BACKWARD * TILE_SIZE * TILE_SIZE},
         torch::dtype(torch::kFloat32).device(torch::kCUDA));
     Tensor m_prev_hit_per_pixel_for_backprop;
-#endif
 
     // Gaussian attributes
     Tensor m_gaussian_rgb;
@@ -280,7 +276,6 @@ struct Raytracer : torch::CustomClassHolder {
     float m_alpha_threshold = ALPHA_THRESHOLD;
     float m_transmittance_threshold = T_THRESHOLD;
 
-#if DENOISER == true
     OptixDenoiser m_denoiser = nullptr;
     uint32_t m_scratch_size = 0;
     CUdeviceptr m_intensity = 0;
@@ -292,7 +287,6 @@ struct Raytracer : torch::CustomClassHolder {
     OptixDenoiserParams m_params_denoiser = {};
     OptixDenoiserGuideLayer m_guideLayer = {};
     std::vector<OptixDenoiserLayer> m_layers;
-#endif
 
     Tensor m_num_hits_per_pixel;
     Tensor m_num_traversed_per_pixel;
@@ -347,11 +341,7 @@ struct Raytracer : torch::CustomClassHolder {
         m_densification_gradient_glossy = torch::zeros(
             {num_gaussians, 3},
             torch::dtype(torch::kFloat32).device(torch::kCUDA));
-//
-#if true
-        // USE_LEVEL_OF_DETAIL == true
-        // easier to always allocate these regardless of config even if its a
-        // bit of a waste
+        //
         m_gaussian_lod_mean = torch::zeros(
             {num_gaussians, 1},
             torch::dtype(torch::kFloat32).device(torch::kCUDA));
@@ -364,7 +354,6 @@ struct Raytracer : torch::CustomClassHolder {
         m_dL_dgaussian_lod_scale = torch::zeros(
             {num_gaussians, 1},
             torch::dtype(torch::kFloat32).device(torch::kCUDA));
-#endif
         m_gaussian_mask = torch::zeros(
             {num_gaussians, 1},
             torch::dtype(torch::kInt32).device(torch::kCUDA));
@@ -501,8 +490,6 @@ struct Raytracer : torch::CustomClassHolder {
         m_num_traversed_per_pixel = torch::zeros(
             {m_height, m_width},
             torch::dtype(torch::kInt32).device(torch::kCUDA));
-
-#if LOG_ALL_HITS == true
         m_prev_hit_per_pixel = torch::zeros(
             {m_height, m_width},
             torch::dtype(torch::kInt32).device(torch::kCUDA));
@@ -511,7 +498,6 @@ struct Raytracer : torch::CustomClassHolder {
             {m_height, m_width},
             torch::dtype(torch::kInt32).device(torch::kCUDA));
         m_prev_hit_per_pixel_for_backprop.fill_(999999999);
-#endif
         {
             std::cout << "initializing CUDA and creating OptiX context"
                       << std::endl;
@@ -538,23 +524,14 @@ struct Raytracer : torch::CustomClassHolder {
             pipeline_compile_options.traversableGraphFlags =
                 OPTIX_TRAVERSABLE_GRAPH_FLAG_ALLOW_SINGLE_GAS |
                 OPTIX_TRAVERSABLE_GRAPH_FLAG_ALLOW_SINGLE_LEVEL_INSTANCING;
-#if STORAGE_MODE == PER_PIXEL_LINKED_LIST
             pipeline_compile_options.numPayloadValues =
                 1 + (TILE_SIZE * TILE_SIZE) + 2 + 3;
-#else
-            pipeline_compile_options.numPayloadValues = 32;
-#endif
             pipeline_compile_options.numAttributeValues = 0;
             pipeline_compile_options.exceptionFlags = OPTIX_EXCEPTION_FLAG_NONE;
             pipeline_compile_options.pipelineLaunchParamsVariableName =
                 "params";
-#if USE_POLYCAGE == true
-            pipeline_compile_options.usesPrimitiveTypeFlags =
-                OPTIX_PRIMITIVE_TYPE_FLAGS_TRIANGLE;
-#else
             pipeline_compile_options.usesPrimitiveTypeFlags =
                 OPTIX_PRIMITIVE_TYPE_FLAGS_CUSTOM;
-#endif
 
             auto ptxData = loadPtxFile();
             OPTIX_CHECK_LOG(optixModuleCreate(
@@ -606,7 +583,6 @@ struct Raytracer : torch::CustomClassHolder {
             m_h_params.camera_position_world =
                 reinterpret_cast<float3 *>(m_camera_position_world.data_ptr());
 
-#if LOG_ALL_HITS == true
             m_h_params.all_gaussian_ids =
                 reinterpret_cast<uint32_t *>(m_all_gaussian_ids.data_ptr());
             m_h_params.all_distances =
@@ -649,18 +625,14 @@ struct Raytracer : torch::CustomClassHolder {
                     m_prev_hit_per_pixel_for_backprop.data_ptr());
             m_h_params.total_hits_for_backprop = reinterpret_cast<uint32_t *>(
                 m_total_hits_for_backprop.data_ptr());
-#endif
 
             m_gaussian_rgb.mutable_grad() = m_dL_drgb;
             m_gaussian_opacity.mutable_grad() = m_dL_dopacity;
             m_gaussian_scales.mutable_grad() = m_dL_dscales;
             m_gaussian_rotations.mutable_grad() = m_dL_drotations;
             m_gaussian_means.mutable_grad() = m_dL_dmeans;
-#if true
-            // USE_LEVEL_OF_DETAIL == true
             m_gaussian_lod_mean.mutable_grad() = m_dL_dgaussian_lod_mean;
             m_gaussian_lod_scale.mutable_grad() = m_dL_dgaussian_lod_scale;
-#endif
             m_gaussian_position.mutable_grad() = m_dL_dgaussian_position;
             m_gaussian_normal.mutable_grad() = m_dL_dgaussian_normal;
             m_gaussian_f0.mutable_grad() = m_dL_dgaussian_f0;
@@ -687,8 +659,6 @@ struct Raytracer : torch::CustomClassHolder {
                 reinterpret_cast<float3 *>(m_gaussian_means.data_ptr());
             m_h_params.dL_dmeans =
                 reinterpret_cast<float3 *>(m_dL_dmeans.data_ptr());
-#if true
-            // USE_LEVEL_OF_DETAIL == true
             m_h_params.gaussian_lod_mean =
                 reinterpret_cast<float *>(m_gaussian_lod_mean.data_ptr());
             m_h_params.dL_dgaussian_lod_mean =
@@ -697,7 +667,6 @@ struct Raytracer : torch::CustomClassHolder {
                 reinterpret_cast<float *>(m_gaussian_lod_scale.data_ptr());
             m_h_params.dL_dgaussian_lod_scale =
                 reinterpret_cast<float *>(m_dL_dgaussian_lod_scale.data_ptr());
-#endif
             m_h_params.gaussian_position =
                 reinterpret_cast<float3 *>(m_gaussian_position.data_ptr());
             m_h_params.dL_dgaussian_position =
@@ -851,19 +820,11 @@ struct Raytracer : torch::CustomClassHolder {
             hitgroup_prog_group_desc.hitgroup.moduleCH = nullptr;
             hitgroup_prog_group_desc.hitgroup.entryFunctionNameCH = nullptr;
 
-#if USE_POLYCAGE == true
-            hitgroup_prog_group_desc.hitgroup.moduleAH = module;
-            hitgroup_prog_group_desc.hitgroup.entryFunctionNameAH =
-                "__anyhit__ah";
-            hitgroup_prog_group_desc.hitgroup.moduleIS = nullptr;
-            hitgroup_prog_group_desc.hitgroup.entryFunctionNameIS = nullptr;
-#else
             hitgroup_prog_group_desc.hitgroup.moduleAH = nullptr;
             hitgroup_prog_group_desc.hitgroup.entryFunctionNameAH = nullptr;
             hitgroup_prog_group_desc.hitgroup.moduleIS = module;
             hitgroup_prog_group_desc.hitgroup.entryFunctionNameIS =
                 "__intersection__gaussian";
-#endif
             OPTIX_CHECK_LOG(optixProgramGroupCreate(
                 m_context,
                 &hitgroup_prog_group_desc,
@@ -979,26 +940,13 @@ struct Raytracer : torch::CustomClassHolder {
     }
 
     void init_denoiser() {
-#if DENOISER == true
         {
             OptixDenoiserOptions options = {};
             options.guideNormal = 1; // data.normal ? 1 : 0;
             options.denoiseAlpha = (OptixDenoiserAlphaMode)0; // alphaMode;
 
             OptixDenoiserModelKind modelKind;
-            // if( upscale2xMode )
-            //     modelKind = temporalMode ?
-            //     OPTIX_DENOISER_MODEL_KIND_TEMPORAL_UPSCALE2X :
-            //     OPTIX_DENOISER_MODEL_KIND_UPSCALE2X;
-            // else if( kpMode || data.aovs.size() > 0 )
-            //     modelKind = temporalMode ?
-            //     OPTIX_DENOISER_MODEL_KIND_TEMPORAL_AOV :
-            //     OPTIX_DENOISER_MODEL_KIND_AOV;
-            // else
-            //     modelKind = temporalMode ? OPTIX_DENOISER_MODEL_KIND_TEMPORAL
-            //     : OPTIX_DENOISER_MODEL_KIND_HDR;
             modelKind = OPTIX_DENOISER_MODEL_KIND_HDR;
-            // modelKind = OPTIX_DENOISER_MODEL_KIND_TEMPORAL;  // implies HDR
             OPTIX_CHECK(optixDenoiserCreate(
                 m_context, modelKind, &options, &m_denoiser));
         }
@@ -1017,31 +965,11 @@ struct Raytracer : torch::CustomClassHolder {
                 // m_tileHeight,
                 &denoiser_sizes));
 
-            // if( tileWidth == 0 )
-            // {
             m_scratch_size = static_cast<uint32_t>(
                 denoiser_sizes.withoutOverlapScratchSizeInBytes);
             m_overlap = 0;
-            // }
-            // else
-            // {
-            //     m_scratch_size = static_cast<uint32_t>(
-            //     denoiser_sizes.withOverlapScratchSizeInBytes ); m_overlap =
-            //     denoiser_sizes.overlapWindowSizeInPixels;
-            // }
-
-            // if( data.aovs.size() == 0 && kpMode == false )
-            // {
-            //     CUDA_CHECK( cudaMalloc(
-            //                 reinterpret_cast<void**>( &m_intensity ),
-            //                 sizeof( float )
-            //                 ) );
-            // }
-            // else
-            // {
             CUDA_CHECK(cudaMalloc(
                 reinterpret_cast<void **>(&m_avgColor), 3 * sizeof(float)));
-            // }
 
             CUDA_CHECK(cudaMalloc(
                 reinterpret_cast<void **>(&m_scratch), m_scratch_size));
@@ -1090,7 +1018,6 @@ struct Raytracer : torch::CustomClassHolder {
             m_params_denoiser.blendFactor = 0.0f;
             m_params_denoiser.temporalModeUsePreviousLayers = 0;
         }
-#endif
     }
 
     ~Raytracer() {
@@ -1110,146 +1037,6 @@ struct Raytracer : torch::CustomClassHolder {
 
     Tensor unit_bbox_tensor = torch::tensor(
         {-1.0, -1.0, -1.0, 1.0, 1.0, 1.0}, torch::device(torch::kCUDA));
-
-#if USE_POLYCAGE == 1
-    Tensor mesh_cage_verts = torch::tensor(
-                                 {{0., 0., -1.},
-                                  {0.72359997, -0.52572, -0.44721499},
-                                  {-0.27638501, -0.85064, -0.44721499},
-                                  {-0.89442497, 0., -0.44721499},
-                                  {-0.27638501, 0.85064, -0.44721499},
-                                  {0.72359997, 0.52572, -0.44721499},
-                                  {0.27638501, -0.85064, 0.44721499},
-                                  {-0.72359997, -0.52572, 0.44721499},
-                                  {-0.72359997, 0.52572, 0.44721499},
-                                  {0.27638501, 0.85064, 0.44721499},
-                                  {0.89442497, 0., 0.44721499},
-                                  {0., 0., 1.}},
-                                 torch::device(torch::kCUDA)) *
-                             1.24;
-    Tensor mesh_cage_verts_half =
-        torch::tensor(
-            {{0., 0., -1.},
-             {0.72359997, -0.52572, -0.44721499},
-             {-0.27638501, -0.85064, -0.44721499},
-             {-0.89442497, 0., -0.44721499},
-             {-0.27638501, 0.85064, -0.44721499},
-             {0.72359997, 0.52572, -0.44721499},
-             {0.27638501, -0.85064, 0.44721499},
-             {-0.72359997, -0.52572, 0.44721499},
-             {-0.72359997, 0.52572, 0.44721499},
-             {0.27638501, 0.85064, 0.44721499},
-             {0.89442497, 0., 0.44721499},
-             {0., 0., 1.}},
-            torch::device(torch::kCUDA).dtype(torch::kfloat6)) *
-        1.24;
-    Tensor mesh_cage_faces = torch::tensor(
-        {{0, 1, 2},   {1, 0, 5},  {0, 2, 3},  {0, 3, 4},  {0, 4, 5},
-         {1, 5, 10},  {2, 1, 6},  {3, 2, 7},  {4, 3, 8},  {5, 4, 9},
-         {1, 10, 6},  {2, 6, 7},  {3, 7, 8},  {4, 8, 9},  {5, 9, 10},
-         {6, 10, 11}, {7, 6, 11}, {8, 7, 11}, {9, 8, 11}, {10, 9, 11}},
-        torch::dtype(torch::kInt32).device(torch::kCUDA));
-
-    Tensor mesh_cage_verts_tri_soup =
-        torch::tensor(
-            {{-0.8944, 0.0000, -0.4472},  {-0.7236, -0.5257, 0.4472},
-             {-0.7236, 0.5257, 0.4472},   {0.2764, -0.8506, 0.4472},
-             {-0.7236, -0.5257, 0.4472},  {0.0000, 0.0000, 1.0000},
-             {-0.7236, -0.5257, 0.4472},  {-0.7236, 0.5257, 0.4472},
-             {0.0000, 0.0000, 1.0000},    {-0.2764, -0.8506, -0.4472},
-             {0.2764, -0.8506, 0.4472},   {-0.7236, -0.5257, 0.4472},
-             {-0.2764, -0.8506, -0.4472}, {-0.8944, 0.0000, -0.4472},
-             {-0.7236, -0.5257, 0.4472},  {-0.8944, 0.0000, -0.4472},
-             {-0.2764, 0.8506, -0.4472},  {-0.7236, 0.5257, 0.4472},
-             {0.0000, 0.0000, -1.0000},   {-0.2764, -0.8506, -0.4472},
-             {-0.8944, 0.0000, -0.4472},  {0.0000, 0.0000, -1.0000},
-             {-0.8944, 0.0000, -0.4472},  {-0.2764, 0.8506, -0.4472},
-             {0.0000, 0.0000, -1.0000},   {0.7236, -0.5257, -0.4472},
-             {-0.2764, -0.8506, -0.4472}, {0.7236, -0.5257, -0.4472},
-             {-0.2764, -0.8506, -0.4472}, {0.2764, -0.8506, 0.4472},
-             {0.7236, -0.5257, -0.4472},  {0.2764, -0.8506, 0.4472},
-             {0.8944, 0.0000, 0.4472},    {0.7236, -0.5257, -0.4472},
-             {0.7236, 0.5257, -0.4472},   {0.8944, 0.0000, 0.4472},
-             {0.0000, 0.0000, -1.0000},   {0.7236, -0.5257, -0.4472},
-             {0.7236, 0.5257, -0.4472},   {0.0000, 0.0000, -1.0000},
-             {-0.2764, 0.8506, -0.4472},  {0.7236, 0.5257, -0.4472},
-             {-0.2764, 0.8506, -0.4472},  {0.7236, 0.5257, -0.4472},
-             {0.2764, 0.8506, 0.4472},    {-0.2764, 0.8506, -0.4472},
-             {-0.7236, 0.5257, 0.4472},   {0.2764, 0.8506, 0.4472},
-             {-0.7236, 0.5257, 0.4472},   {0.2764, 0.8506, 0.4472},
-             {0.0000, 0.0000, 1.0000},    {0.2764, 0.8506, 0.4472},
-             {0.8944, 0.0000, 0.4472},    {0.0000, 0.0000, 1.0000},
-             {0.7236, 0.5257, -0.4472},   {0.2764, 0.8506, 0.4472},
-             {0.8944, 0.0000, 0.4472},    {0.2764, -0.8506, 0.4472},
-             {0.8944, 0.0000, 0.4472},    {0.0000, 0.0000, 1.0000}},
-            torch::device(torch::kCUDA)) *
-        1.24;
-#elif USE_POLYCAGE == 2
-    Tensor mesh_cage_verts =
-        torch::tensor(
-            {{0.0, 0.0, -1.0},
-             {0.7236073017120361, -0.5257253050804138, -0.44721952080726624},
-             {-0.276388019323349, -0.8506492376327515, -0.4472198486328125},
-             {-0.8944262266159058, 0.0, -0.44721561670303345},
-             {-0.276388019323349, 0.8506492376327515, -0.4472198486328125},
-             {0.7236073017120361, 0.5257253050804138, -0.44721952080726624},
-             {0.276388019323349, -0.8506492376327515, 0.4472198486328125},
-             {-0.7236073017120361, -0.5257253050804138, 0.44721952080726624},
-             {-0.7236073017120361, 0.5257253050804138, 0.44721952080726624},
-             {0.276388019323349, 0.8506492376327515, 0.4472198486328125},
-             {0.8944262266159058, 0.0, 0.44721561670303345},
-             {0.0, 0.0, 1.0},
-             {-0.16245555877685547, -0.49999526143074036, -0.8506544232368469},
-             {0.42532268166542053, -0.30901139974594116, -0.8506541848182678},
-             {0.26286882162094116, -0.8090116381645203, -0.5257376432418823},
-             {0.8506478667259216, 0.0, -0.5257359147071838},
-             {0.42532268166542053, 0.30901139974594116, -0.8506541848182678},
-             {-0.525729775428772, 0.0, -0.8506516814231873},
-             {-0.6881893873214722, -0.49999693036079407, -0.5257362127304077},
-             {-0.16245555877685547, 0.49999526143074036, -0.8506544232368469},
-             {-0.6881893873214722, 0.49999693036079407, -0.5257362127304077},
-             {0.26286882162094116, 0.8090116381645203, -0.5257376432418823},
-             {0.9510578513145447, -0.30901262164115906, 0.0},
-             {0.9510578513145447, 0.30901262164115906, 0.0},
-             {0.0, -0.9999999403953552, 0.0},
-             {0.5877856016159058, -0.8090167045593262, 0.0},
-             {-0.9510578513145447, -0.30901262164115906, 0.0},
-             {-0.5877856016159058, -0.8090167045593262, 0.0},
-             {-0.5877856016159058, 0.8090167045593262, 0.0},
-             {-0.9510578513145447, 0.30901262164115906, 0.0},
-             {0.5877856016159058, 0.8090167045593262, 0.0},
-             {0.0, 0.9999999403953552, 0.0},
-             {0.6881893873214722, -0.49999693036079407, 0.5257362127304077},
-             {-0.26286882162094116, -0.8090116381645203, 0.5257376432418823},
-             {-0.8506478667259216, 0.0, 0.5257359147071838},
-             {-0.26286882162094116, 0.8090116381645203, 0.5257376432418823},
-             {0.6881893873214722, 0.49999693036079407, 0.5257362127304077},
-             {0.16245555877685547, -0.49999526143074036, 0.8506543636322021},
-             {0.525729775428772, 0.0, 0.8506516814231873},
-             {-0.42532268166542053, -0.30901139974594116, 0.8506541848182678},
-             {-0.42532268166542053, 0.30901139974594116, 0.8506541848182678},
-             {0.16245555877685547, 0.49999526143074036, 0.8506543636322021}},
-            torch::device(torch::kCUDA)) *
-        1.09;
-    Tensor mesh_cage_faces = torch::tensor(
-        {{0, 13, 12},  {1, 13, 15},  {0, 12, 17},  {0, 17, 19},  {0, 19, 16},
-         {1, 15, 22},  {2, 14, 24},  {3, 18, 26},  {4, 20, 28},  {5, 21, 30},
-         {1, 22, 25},  {2, 24, 27},  {3, 26, 29},  {4, 28, 31},  {5, 30, 23},
-         {6, 32, 37},  {7, 33, 39},  {8, 34, 40},  {9, 35, 41},  {10, 36, 38},
-         {38, 41, 11}, {38, 36, 41}, {36, 9, 41},  {41, 40, 11}, {41, 35, 40},
-         {35, 8, 40},  {40, 39, 11}, {40, 34, 39}, {34, 7, 39},  {39, 37, 11},
-         {39, 33, 37}, {33, 6, 37},  {37, 38, 11}, {37, 32, 38}, {32, 10, 38},
-         {23, 36, 10}, {23, 30, 36}, {30, 9, 36},  {31, 35, 9},  {31, 28, 35},
-         {28, 8, 35},  {29, 34, 8},  {29, 26, 34}, {26, 7, 34},  {27, 33, 7},
-         {27, 24, 33}, {24, 6, 33},  {25, 32, 6},  {25, 22, 32}, {22, 10, 32},
-         {30, 31, 9},  {30, 21, 31}, {21, 4, 31},  {28, 29, 8},  {28, 20, 29},
-         {20, 3, 29},  {26, 27, 7},  {26, 18, 27}, {18, 2, 27},  {24, 25, 6},
-         {24, 14, 25}, {14, 1, 25},  {22, 23, 10}, {22, 15, 23}, {15, 5, 23},
-         {16, 21, 5},  {16, 19, 21}, {19, 4, 21},  {19, 20, 4},  {19, 17, 20},
-         {17, 3, 20},  {17, 18, 3},  {17, 12, 18}, {12, 2, 18},  {15, 16, 5},
-         {15, 13, 16}, {13, 0, 16},  {12, 14, 2},  {12, 13, 14}, {13, 1, 14}},
-        torch::dtype(torch::kInt32).device(torch::kCUDA));
-#endif
 
     CUdeviceptr m_vert_buffer_ptr;
     CUdeviceptr m_face_buffer_ptr;
@@ -1341,8 +1128,6 @@ struct Raytracer : torch::CustomClassHolder {
             m_densification_gradient_glossy.data_ptr());
 //
 #if MAX_BOUNCES > 0
-#if true
-        // USE_LEVEL_OF_DETAIL == true
         m_gaussian_lod_mean.resize_({num_new_gaussians, 1});
         m_dL_dgaussian_lod_mean.resize_({num_new_gaussians, 1});
         m_h_params.gaussian_lod_mean =
@@ -1355,7 +1140,6 @@ struct Raytracer : torch::CustomClassHolder {
             reinterpret_cast<float *>(m_gaussian_lod_scale.data_ptr());
         m_h_params.dL_dgaussian_lod_scale =
             reinterpret_cast<float *>(m_dL_dgaussian_lod_scale.data_ptr());
-#endif
         //
         m_gaussian_position.resize_({num_new_gaussians, 3});
         m_dL_dgaussian_position.resize_({num_new_gaussians, 3});
@@ -1415,119 +1199,13 @@ struct Raytracer : torch::CustomClassHolder {
         cudaDeviceSynchronize();
     }
 
-    void build_fused_bvh() {
-#if USE_POLYCAGE == false
-        throw std::runtime_error("Configuration error");
-#else
-        auto num_gaussians = m_gaussian_means.sizes()[0];
-
-        OptixAccelBuildOptions accel_options_tlas = {};
-        accel_options_tlas.buildFlags = m_build_flags;
-        accel_options_tlas.operation = OPTIX_BUILD_OPERATION_BUILD;
-
-        int num_verts = mesh_cage_verts.sizes()[0];
-
-        Tensor verts = torch::zeros(
-            {num_gaussians * num_verts, 3},
-            torch::dtype(torch::kFloat32).device(torch::kCUDA));
-        Tensor faces = torch::zeros(
-            {num_gaussians * mesh_cage_faces.sizes()[0], 3},
-            torch::dtype(torch::kInt32).device(torch::kCUDA));
-
-        transformVerts(
-            reinterpret_cast<float *>(mesh_cage_verts.data_ptr()),
-            num_verts,
-            reinterpret_cast<int *>(mesh_cage_faces.data_ptr()),
-            mesh_cage_faces.sizes()[0],
-            reinterpret_cast<float *>(verts.data_ptr()),
-            reinterpret_cast<int *>(faces.data_ptr()),
-            num_gaussians,
-            reinterpret_cast<float3 *>(m_camera_position_world.data_ptr()),
-            reinterpret_cast<float3 *>(m_gaussian_scales.data_ptr()),
-            reinterpret_cast<float4 *>(m_gaussian_rotations.data_ptr()),
-            reinterpret_cast<float3 *>(m_gaussian_means.data_ptr()),
-            reinterpret_cast<float *>(m_gaussian_opacity.data_ptr()),
-            reinterpret_cast<bool *>(m_gaussian_mask.data_ptr()),
-            m_global_scale_factor[0].item<float>(),
-            m_alpha_threshold,
-            m_exp_power);
-
-        verts = verts.to(torch::kHalf).contiguous();
-
-        m_vert_buffer_ptr = reinterpret_cast<CUdeviceptr>(verts.data_ptr());
-        m_tlas_input.type = OPTIX_BUILD_INPUT_TYPE_TRIANGLES;
-        m_tlas_input.triangleArray.flags = m_aabb_input_flags;
-        m_tlas_input.triangleArray.numSbtRecords = 1;
-        m_tlas_input.triangleArray.vertexFormat = OPTIX_VERTEX_FORMAT_HALF3;
-        m_tlas_input.triangleArray.vertexStrideInBytes = sizeof(float3) / 2;
-        m_tlas_input.triangleArray.numVertices = num_verts * num_gaussians;
-        m_tlas_input.triangleArray.vertexBuffers = &m_vert_buffer_ptr;
-
-        m_face_buffer_ptr = reinterpret_cast<CUdeviceptr>(faces.data_ptr());
-        m_tlas_input.triangleArray.indexFormat =
-            OPTIX_INDICES_FORMAT_UNSIGNED_INT3;
-        m_tlas_input.triangleArray.indexStrideInBytes = sizeof(uint3);
-        m_tlas_input.triangleArray.numIndexTriplets =
-            mesh_cage_faces.sizes()[0] * num_gaussians;
-        m_tlas_input.triangleArray.indexBuffer = m_face_buffer_ptr;
-
-        OPTIX_CHECK(optixAccelComputeMemoryUsage(
-            m_context,
-            &accel_options_tlas,
-            &m_tlas_input,
-            1,
-            &m_tlas_buffer_sizes));
-
-        CUDA_CHECK(cudaMalloc(
-            reinterpret_cast<void **>(&m_d_temp_tlas_buffer_sizes),
-            m_tlas_buffer_sizes.tempSizeInBytes));
-        CUDA_CHECK(cudaMalloc(
-            reinterpret_cast<void **>(&m_d_tlas_output_buffer),
-            m_tlas_buffer_sizes.outputSizeInBytes));
-
-        OPTIX_CHECK(optixAccelBuild(
-            m_context,
-            0,
-            &accel_options_tlas,
-            &m_tlas_input,
-            1,
-            m_d_temp_tlas_buffer_sizes,
-            m_tlas_buffer_sizes.tempSizeInBytes,
-            m_d_tlas_output_buffer,
-            m_tlas_buffer_sizes.outputSizeInBytes,
-            &m_tlas_handle,
-            nullptr,
-            0));
-#endif
-    }
+    void build_fused_bvh() { throw std::runtime_error("Configuration error"); }
 
     void build_blas() {
         OptixAccelBuildOptions accel_options_blas = {};
         accel_options_blas.buildFlags = m_build_flags;
         accel_options_blas.operation = OPTIX_BUILD_OPERATION_BUILD;
 
-#if USE_POLYCAGE == true
-        m_vert_buffer_ptr =
-            reinterpret_cast<CUdeviceptr>(mesh_cage_verts_half.data_ptr());
-        m_blas_input.type = OPTIX_BUILD_INPUT_TYPE_TRIANGLES;
-        m_blas_input.triangleArray.flags = m_aabb_input_flags;
-        m_blas_input.triangleArray.numSbtRecords = 1;
-
-        m_blas_input.triangleArray.vertexFormat = OPTIX_VERTEX_FORMAT_HALF3;
-        m_blas_input.triangleArray.vertexStrideInBytes = sizeof(float3) / 2;
-        m_blas_input.triangleArray.numVertices =
-            mesh_cage_verts_half.sizes()[0];
-        m_blas_input.triangleArray.vertexBuffers = &m_vert_buffer_ptr;
-
-        m_face_buffer_ptr =
-            reinterpret_cast<CUdeviceptr>(mesh_cage_faces.data_ptr());
-        m_blas_input.triangleArray.indexFormat =
-            OPTIX_INDICES_FORMAT_UNSIGNED_INT3;
-        m_blas_input.triangleArray.indexStrideInBytes = sizeof(uint3);
-        m_blas_input.triangleArray.numIndexTriplets =
-            mesh_cage_faces.sizes()[0];
-        m_blas_input.triangleArray.indexBuffer = m_face_buffer_ptr;
-#else
         m_d_aabb_buffer =
             reinterpret_cast<CUdeviceptr>(unit_bbox_tensor.data_ptr());
         m_blas_input.type = OPTIX_BUILD_INPUT_TYPE_CUSTOM_PRIMITIVES;
@@ -1535,7 +1213,6 @@ struct Raytracer : torch::CustomClassHolder {
         m_blas_input.customPrimitiveArray.numPrimitives = 1;
         m_blas_input.customPrimitiveArray.flags = m_aabb_input_flags;
         m_blas_input.customPrimitiveArray.numSbtRecords = 1;
-#endif
 
         OptixAccelBufferSizes blas_buffer_sizes;
         OPTIX_CHECK(optixAccelComputeMemoryUsage(
@@ -1684,13 +1361,10 @@ struct Raytracer : torch::CustomClassHolder {
     void sample() {
         m_num_hits_per_pixel.zero_();
         m_num_traversed_per_pixel.zero_();
-
-#if LOG_ALL_HITS == true
         m_prev_hit_per_pixel.fill_(999999999);
         m_total_hits.fill_(0);
         m_prev_hit_per_pixel_for_backprop.fill_(999999999);
         m_total_hits_for_backprop.fill_(0);
-#endif
 
         for (int h = 0; h < NUM_CHUNKS * NUM_CHUNKS; h++) {
             OPTIX_CHECK(optixLaunch(
@@ -1723,7 +1397,6 @@ struct Raytracer : torch::CustomClassHolder {
             sample();
         }
 
-#if DENOISER == true
         if (!torch::GradMode::is_enabled() && m_denoise.item<bool>()) {
 
             OPTIX_CHECK(optixDenoiserInvoke(
@@ -1740,7 +1413,6 @@ struct Raytracer : torch::CustomClassHolder {
                 m_scratch,
                 m_scratch_size));
         }
-#endif
 
         if (!m_accumulate.item<bool>()) {
             m_accumulated_rgb.zero_();

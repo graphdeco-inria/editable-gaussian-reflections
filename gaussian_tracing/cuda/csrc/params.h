@@ -1,31 +1,3 @@
-//
-// Copyright (c) 2023, NVIDIA CORPORATION. All rights reserved.
-//
-// Redistribution and use in source and binary forms, with or without
-// modification, are permitted provided that the following conditions
-// are met:
-//  * Redistributions of source code must retain the above copyright
-//    notice, this list of conditions and the following disclaimer.
-//  * Redistributions in binary form must reproduce the above copyright
-//    notice, this list of conditions and the following disclaimer in the
-//    documentation and/or other materials provided with the distribution.
-//  * Neither the name of NVIDIA CORPORATION nor the names of its
-//    contributors may be used to endorse or promote products derived
-//    from this software without specific prior written permission.
-//
-// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS ``AS IS'' AND ANY
-// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-// PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE COPYRIGHT OWNER OR
-// CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-// EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-// PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY
-// OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
-// (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
-// OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-//
-
 #pragma once
 
 #include "flags.h"
@@ -80,14 +52,11 @@ struct Params {
     const float *__restrict__ gaussian_opacity;
     float *__restrict__ dL_dopacity;
 
-#if true
-    // USE_LEVEL_OF_DETAIL == true
     const float *__restrict__ gaussian_lod_mean;
     float *__restrict__ dL_dgaussian_lod_mean;
 
     const float *__restrict__ gaussian_lod_scale;
     float *__restrict__ dL_dgaussian_lod_scale;
-#endif
 
     const float *__restrict__ gaussian_alpha;
 
@@ -166,7 +135,6 @@ struct Params {
 
     float2 *lut;
 
-#if LOG_ALL_HITS == true
     uint32_t *total_hits; // total # of hits
 
     // hit data, total_hits entries
@@ -184,7 +152,6 @@ struct Params {
 
     // per-pixel record of the last hit, 1 entry per slab
     uint32_t *__restrict__ prev_hit_per_pixel;
-#endif
 
     uint32_t *total_hits_for_backprop; // total # of hits
 

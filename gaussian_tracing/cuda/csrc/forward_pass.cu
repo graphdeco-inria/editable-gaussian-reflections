@@ -51,7 +51,6 @@ __device__ void froward_pass(
     float tmin = near_plane;
     float endpoint = -1.0f;
 
-#if STORAGE_MODE == PER_PIXEL_LINKED_LIST
     uint32_t full_T_uint[TILE_SIZE * TILE_SIZE];
     fill_array(full_T_uint, TILE_SIZE * TILE_SIZE, __float_as_uint(1.0f));
 
@@ -76,69 +75,30 @@ __device__ void froward_pass(
                 slab_tmax,
                 0.0f, // rayTime
                 OptixVisibilityMask(1),
-#if USE_POLYCAGE == true
-                OPTIX_RAY_FLAG_CULL_BACK_FACING_TRIANGLES,
-#else
                 OPTIX_RAY_FLAG_NONE,
-#endif
                 0, // SBT offset
                 0, // SBT stride
                 0,
                 uint_initial_lod,
                 uint_lod_by_distance,
                 step_uint, // step, replaces slab idx
-// i, // slab idx
-#if TILE_SIZE == 1
                 full_T_uint[0],
                 reflected_origin_x,
                 reflected_origin_y,
-                reflected_origin_z
-#elif TILE_SIZE == 2
-                printf("dead code\n");
-                full_T_uint[0], full_T_uint[1], full_T_uint[2], full_T_uint[3]
-#elif TILE_SIZE == 3
-                printf("dead code\n");
-                full_T_uint[0],
-                full_T_uint[1],
-                full_T_uint[2],
-                full_T_uint[3],
-                full_T_uint[4],
-                full_T_uint[5],
-                full_T_uint[6],
-                full_T_uint[7],
-                full_T_uint[8]
-#else
-                           // raise an error
-                printf("TILE_SIZE not supported\n");
-#endif
-
-            );
+                reflected_origin_z);
             for (int k = 0; k < TILE_SIZE * TILE_SIZE; k++) {
                 output_t[k].y = __uint_as_float(full_T_uint[k]);
             }
         }
     }
-#endif
 
-// * Initialize registers holding the BUFFER_SIZE nearest gaussians
-#if STORAGE_MODE == PER_PIXEL_LINKED_LIST
+    // * Initialize registers holding the BUFFER_SIZE nearest gaussians
     register float distances[BUFFER_SIZE];
     register unsigned int idxes[BUFFER_SIZE];
-#else
-    register unsigned int idxes[BUFFER_SIZE];
-    register unsigned int floats[BUFFER_SIZE];
-    register unsigned int gaussian_ids[BUFFER_SIZE];
-#endif
 
     const uint3 idx = optixGetLaunchIndex();
-
-#if USE_CLUSTERING == true
-    int current_cluster = 0;
-#endif
-
     for (int iteration = 0; iteration < MAX_ITERATIONS && tmin < 99.9f;
          iteration++) {
-#if STORAGE_MODE == PER_PIXEL_LINKED_LIST
         fill_array(distances, BUFFER_SIZE, 999.9f);
         fill_array(idxes, BUFFER_SIZE, 999999999u);
 
@@ -167,201 +127,31 @@ __device__ void froward_pass(
             }
             hit_idx = prev_hit;
         }
-#else
-        for (int ki = 0; ki < TILE_SIZE; ki++)
-            for (int kj = 0; kj < TILE_SIZE; kj++) {
-                params.full_T[ray_id + ki * params.image_width + kj] =
-                    1.0f; // todo this was a tmp solution, doesn't work with
-                          // multibounce
-            }
 
-        fill_array(floats, BUFFER_SIZE, packFloats(999.9f, 999.9f));
-        fill_array(idxes, BUFFER_SIZE, 999999999u);
-        fill_array(gaussian_ids, BUFFER_SIZE, NULL_GAUSSIAN_ID);
-        optixTraverse(
-            params.handle,
-            tile_origin,
-            tile_direction,
-            tmin,     //
-            100000.0, // tmax
-            0.0f,     // rayTime
-            OptixVisibilityMask(1),
-#if USE_POLYCAGE == true
-            OPTIX_RAY_FLAG_CULL_BACK_FACING_TRIANGLES,
-#else
-            OPTIX_RAY_FLAG_NONE,
-#endif
-            0, // SBT offset
-            0, // SBT stride
-            0,
-            floats[0],
-            floats[1],
-            floats[2],
-            floats[3],
-            floats[4],
-            floats[5],
-            floats[6],
-            floats[7],
-            floats[8],
-            floats[9],
-            floats[10],
-            floats[11],
-            floats[12],
-            floats[13],
-            floats[14],
-            floats[15],
-            gaussian_ids[0],
-            gaussian_ids[1],
-            gaussian_ids[2],
-            gaussian_ids[3],
-            gaussian_ids[4],
-            gaussian_ids[5],
-            gaussian_ids[6],
-            gaussian_ids[7],
-            gaussian_ids[8],
-            gaussian_ids[9],
-            gaussian_ids[10],
-            gaussian_ids[11],
-            gaussian_ids[12],
-            gaussian_ids[13],
-            gaussian_ids[14],
-            gaussian_ids[15]);
-
-        for (int k = 0; k < TILE_SIZE * TILE_SIZE; k++) {
-            output_t[k].y = params.full_T[ray_id];
-        }
-#endif
-
-// * Integrate the values
-#if STORAGE_MODE == PER_PIXEL_LINKED_LIST
+        // * Integrate the values
         tmin = max(tmin, distances[0]);
-#elif STORAGE_MODE == NO_STORAGE
-        tmin = max(tmin, unpackDistance(floats[0]));
-#endif
 
 #pragma unroll
         for (int i = 0; i < BUFFER_SIZE; i++) {
-#if STORAGE_MODE == PER_PIXEL_LINKED_LIST
             float distance = distances[i];
-#elif STORAGE_MODE == NO_STORAGE
-            float distance = unpackDistance(floats[i]);
-#endif
             tmin = max(distance, tmin); // todo: fails if its not a max, but the
                                         // values should already be sorted??
 
             if (distance < 99.9f) {
-
-#if SAVE_HIT_STATS == true
-                atomicAdd(&params.num_hits_per_pixel[ray_id], 1);
-#endif
-
-#if STORAGE_MODE == PER_PIXEL_LINKED_LIST
                 uint32_t gaussian_id = params.all_gaussian_ids[idxes[i]];
-#if RECOMPUTE_ALPHA_IN_FORWARD_PASS == false && TILE_SIZE == 1
                 float gaussval = params.all_gaussvals[idxes[i]];
                 float alpha = params.all_alphas[idxes[i]];
-#endif
-#else
-                uint32_t gaussian_id = gaussian_ids[i];
-#endif
-
                 float3 gaussian_rgb = READ_RGB(gaussian_id);
                 float3 gaussian_position =
                     params.gaussian_position[gaussian_id];
                 float3 gaussian_normal = params.gaussian_normal[gaussian_id];
                 float3 gaussian_f0 = READ_F0(gaussian_id);
                 float gaussian_roughness = READ_ROUGHNESS(gaussian_id);
-
-#if RECOMPUTE_ALPHA_IN_FORWARD_PASS == true
-                float opacity = READ_OPACITY(gaussian_id);
-                float3 scaling = READ_SCALE(gaussian_id);
-                float3 mean = READ_MEAN(gaussian_id);
-                const float4 *world_to_local =
-                    optixGetInstanceInverseTransformFromHandle(
-                        optixGetInstanceTraversableFromIAS(
-                            params.handle, gaussian_id));
-                float exp_power = params.exp_power;
-#endif
-
                 num_hits++; //! was incorrect for tiling, review
 
-#if USE_CLUSTERING == true
-#if TILE_SIZE != 1
-                printf("TILING DOESN'T WORK WITH CLUSTERING YET!\n");
-#endif
-                float half_chord_length =
-                    params.all_half_chord_lengths[idxes[i]];
-                if (ray_id == 777) {
-                    printf(
-                        "endpoint: %f, distance: %f, half_chord_length: %f\n",
-                        endpoint,
-                        distance,
-                        half_chord_length);
-                }
-                // if ((endpoint > 0.0f) && (distance > endpoint) && (distance -
-                // endpoint) <= half_chord_length) {
-                //     if (current_cluster < NUM_CLUSTERS - 1) {
-                //         current_cluster++; // todo starting for the secondary
-                //         ray, ignore the first cluster
-                //     }
-                // }
-                endpoint = max(distance + half_chord_length, endpoint);
-                int c = current_cluster;
-#else
                 int c = 0;
-#endif
-
                 int new_idx;
                 for (int k = 0; k < TILE_SIZE * TILE_SIZE; k++) {
-                    // #if TILE_SIZE > 1 // this is actually slower than just
-                    // stopping at the same point for all subpixels
-                    //     if (output_t[k].x < params.transmittance_threshold) {
-                    //         continue;
-                    //     }
-                    // #endif
-
-#if RECOMPUTE_ALPHA_IN_FORWARD_PASS == true
-#if JITTER == true
-                    printf("TILING DOESN'T WORK WITH JITTER YET!\n");
-#endif
-
-                    float3 local_origin = make_float3(
-                        dot(world_to_local[0], make_float4(origin[k], 1.0)),
-                        dot(world_to_local[1], make_float4(origin[k], 1.0)),
-                        dot(world_to_local[2], make_float4(origin[k], 1.0)));
-                    float3 local_direction = make_float3(
-                        dot(make_float3(world_to_local[0]), direction[k]),
-                        dot(make_float3(world_to_local[1]), direction[k]),
-                        dot(make_float3(world_to_local[2]), direction[k]));
-
-                    float scaling_factor = compute_scaling_factor(
-                        opacity, params.alpha_threshold, exp_power);
-                    if (BBOX_PADDING > 0.0f) {
-                        float3 padded_scaling = scaling * scaling_factor;
-                        local_origin = local_origin *
-                                       (BBOX_PADDING + padded_scaling) /
-                                       padded_scaling;
-                        local_direction = local_direction *
-                                          (BBOX_PADDING + padded_scaling) /
-                                          padded_scaling;
-                    }
-                    float norm = length(local_direction);
-                    local_direction /= norm;
-                    auto local_hit_distance_along_ray =
-                        dot(-local_origin, local_direction);
-                    float3 local_hit_unscaled =
-                        local_origin +
-                        local_hit_distance_along_ray * local_direction;
-                    float sq_dist = dot(local_hit_unscaled, local_hit_unscaled);
-                    float gaussval = 0.0f;
-                    float alpha = 0.0f;
-                    if (sq_dist <= 1.0f) {
-                        float3 local_hit = local_hit_unscaled * scaling_factor;
-                        gaussval = eval_gaussian(local_hit, exp_power);
-                        alpha = compute_alpha(
-                            gaussval, opacity, params.alpha_threshold);
-                    }
-#else
                     float alpha =
                         params.all_alphas[TILE_SIZE * TILE_SIZE * idxes[i] + k];
                     float gaussval = params.all_gaussvals
@@ -369,16 +159,11 @@ __device__ void froward_pass(
                     float3 local_hit =
                         params.all_local_hits
                             [TILE_SIZE * TILE_SIZE * idxes[i] + k];
-#endif
 
                     float next_T = output_t[k].x * (1.0f - alpha);
                     float weight = output_t[k].x - next_T;
                     output_rgb[k] += gaussian_rgb * weight;
 
-                    // float3 world_hit = tile_origin + tile_direction *
-                    // distance; float3 world_hit = READ_MEAN(gaussian_id);
-                    // output_position[k][c] += world_hit * weight;
-                    // float3 world_hit = READ_MEAN(gaussian_id);
                     output_depth[k][c] += distance * weight;
                     output_normal[k][c] += gaussian_normal * weight;
                     output_f0[k][c] += gaussian_f0 * weight;
@@ -417,34 +202,13 @@ __device__ void froward_pass(
                                                    // instead of this (continue
                                                    // etc)
                     }
-
-                    // #if REMAINING_COLOR_ESTIMATION != RENDER_BUT_DETACH
-                    //     printf("transmittance_threshold %f",
-                    //     params.transmittance_threshold); if
-                    //     (params.transmittance_threshold > 0.0f) {
-                    //         float all_done = true;
-                    //         for (int k = 0; k < TILE_SIZE*TILE_SIZE; k++) {
-                    //             if (output_t[k].x >=
-                    //             params.transmittance_threshold) {
-                    //                 all_done = false;
-                    //             }
-                    //         }
-                    //         if (all_done) {
-                    //             goto finished_integration;
-                    //         }
-                    //     }
-                    // #endif
                 }
             }
         }
     }
 finished_integration:
 
-#if LOG_ALL_HITS == true
     params.prev_hit_per_pixel[ray_id] = 999999999u;
-#endif
-
-#if REMAINING_COLOR_ESTIMATION == ASSUME_SAME_AS_FORGROUND
 
     for (int k = 0; k < TILE_SIZE * TILE_SIZE; k++) {
         float normalization = max((1.0f - output_t[k].x), 1e-12);
@@ -456,97 +220,7 @@ finished_integration:
         remaining_f0[k][0] = output_f0[k][0] / normalization;
         remaining_roughness[k][0] = output_roughness[k][0] / normalization;
     }
-#elif REMAINING_COLOR_ESTIMATION == IGNORE_OCCLUSION
-    float alpha_sum = 0.0f;
 
-    float3 average_rgb = make_float3(0.0f, 0.0f, 0.0f);
-    float3 average_position = make_float3(0.0f, 0.0f, 0.0f);
-    float3 average_normal = make_float3(0.0f, 0.0f, 0.0f);
-    float3 average_f0 = make_float3(0.0f, 0.0f, 0.0f);
-    float average_roughness = 0.0f;
-    uint32_t hit_idx = params.prev_hit_per_pixel[ray_id];
-    while (hit_idx != 999999999) {
-        uint32_t prev_hit = params.all_prev_hits[hit_idx];
-        float dist = params.all_distances[hit_idx];
-        if (dist > tmin) {
-            float alpha = params.all_alphas[hit_idx];
-            unsigned int gaussian_id = params.all_gaussian_ids[hit_idx];
-            float3 color = READ_RGB(gaussian_id);
-            average_rgb += color * alpha;
-            float3 position = params.gaussian_position[gaussian_id];
-            average_position += position * alpha;
-            float3 normal = params.gaussian_normal[gaussian_id];
-            average_normal += normal * alpha;
-            float3 f0 = READ_F0(gaussian_id);
-            average_f0 += f0 * alpha;
-            float roughness = READ_ROUGHNESS(gaussian_id);
-            average_roughness += roughness * alpha;
-            alpha_sum += alpha;
-        }
-        hit_idx = prev_hit;
-    }
-    average_rgb /= max(alpha_sum, 1e-8);
-    average_position /= max(alpha_sum, 1e-8);
-    average_normal /= max(alpha_sum, 1e-8);
-    average_f0 /= max(alpha_sum, 1e-8);
-    average_roughness /= max(alpha_sum, 1e-8);
-    for (int k = 0; k < TILE_SIZE * TILE_SIZE; k++) {
-        remaining_rgb[k][0][0] = average_rgb;
-    }
-#elif REMAINING_COLOR_ESTIMATION == STOCHASTIC_SAMPLING
-    auto seed = params.random_seeds[ray_id];
-
-#define NUM_STOCH_SAMPLES 16
-
-    register unsigned int gaussian_id_buffer[NUM_STOCH_SAMPLES];
-    fill_array(gaussian_id_buffer, NUM_STOCH_SAMPLES, NULL_GAUSSIAN_ID);
-    register float distances_buffer[NUM_STOCH_SAMPLES];
-    fill_array(distances_buffer, NUM_STOCH_SAMPLES, 999.9f);
-
-    uint32_t hit_idx = params.prev_hit_per_pixel[ray_id];
-    while (hit_idx != 999999999) {
-        uint32_t prev_hit = params.all_prev_hits[hit_idx];
-        for (int i = 0; i < NUM_STOCH_SAMPLES; i++) {
-            float dist = params.all_distances[hit_idx];
-            if (dist > tmin && dist < distances_buffer[i]) {
-                float u = rnd(seed);
-                if (u < params.all_alphas[hit_idx]) {
-                    gaussian_id_buffer[i] = params.all_gaussian_ids[hit_idx];
-                    distances_buffer[i] = dist;
-                }
-            }
-        }
-        hit_idx = prev_hit;
-    }
-
-    for (int i = 0; i < NUM_STOCH_SAMPLES; i++) {
-        uint32_t gaussian_id = (gaussian_id_buffer[i]);
-        float distance = (distances_buffer[i]);
-        if (distance >= 89.9f) {
-            continue;
-        }
-        float3 sample_color = READ_RGB(gaussian_id) / NUM_STOCH_SAMPLES;
-        float3 sample_position =
-            params.gaussian_position[gaussian_id] / NUM_STOCH_SAMPLES;
-        float3 sample_normal =
-            params.gaussian_normal[gaussian_id] / NUM_STOCH_SAMPLES;
-        float3 sample_f0 = READ_F0(gaussian_id) / NUM_STOCH_SAMPLES;
-        float sample_roughness =
-            READ_ROUGHNESS(gaussian_id) / NUM_STOCH_SAMPLES;
-
-        for (int k = 0; k < TILE_SIZE * TILE_SIZE; k++) {
-            remaining_rgb[k][0] += sample_color;
-            remaining_position[k][0] += sample_position;
-            remaining_normal[k][0] += sample_normal;
-            remaining_f0[k][0] += sample_f0;
-            remaining_roughness[k][0] += sample_roughness;
-        }
-    }
-
-    params.random_seeds[ray_id] = seed;
-#endif
-
-#if REMAINING_COLOR_ESTIMATION != NO_ESTIMATION
     for (int k = 0; k < TILE_SIZE * TILE_SIZE; k++) {
         float remaining_T = output_t[k].x - output_t[k].y;
         output_rgb[k] = output_rgb[k] + remaining_T * remaining_rgb[k][0];
@@ -560,5 +234,4 @@ finished_integration:
         output_roughness[k][0] =
             output_roughness[k][0] + remaining_T * remaining_roughness[k][0];
     }
-#endif
 }
