@@ -4,15 +4,11 @@ __device__ __host__ float
 compute_scaling_factor(float opacity, float alpha_threshold, float exp_power) {
     float k = 2.0f * exp_power;
     return max(
-        MIN_SCALING_FACTOR,
+        0.0f,
         opacity <= alpha_threshold
             ? 0.0
             : powf(k * log(opacity / alpha_threshold), 1.0f / k));
 }
-// exp(-x^2/2) = y
-// x = +- sqrt(2 * log(y))
-// exp(-x^k/k) = y
-// x = +- (k * log(y))^(1/k)
 
 __device__ float eval_gaussian(float3 local_hit, float exp_power) {
     float k = 2.0f * exp_power;
@@ -22,6 +18,5 @@ __device__ float eval_gaussian(float3 local_hit, float exp_power) {
 
 __device__ float
 compute_alpha(float guassval, float opacity, float alpha_threshold) {
-    float alpha = MAX_ALPHA * guassval * opacity;
-    return alpha;
+    return MAX_ALPHA * guassval * opacity;
 }

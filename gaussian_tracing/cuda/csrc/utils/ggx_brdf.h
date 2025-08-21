@@ -1,10 +1,7 @@
-#ifndef GGX_BRDF_CUH
-#define GGX_BRDF_CUH
+#pragma once
 
 #include <cmath>
 #include <cuda_runtime.h>
-
-// New version below
 
 #define BRDF_EPS 1e-8
 
@@ -129,7 +126,6 @@ __device__ void fresnel_schlick_backward(
     float dF_dF0_scalar = 1.0f - one_minus_cos5;
     dl_dF0 = dl_dF * dF_dF0_scalar;
 
-    // ∂F/∂cosTheta
     float3 dF_dcosTheta = make_float3(
         -5.0f * one_minus_F0.x * one_minus_cos4,
         -5.0f * one_minus_F0.y * one_minus_cos4,
@@ -181,8 +177,7 @@ cook_torrance_weight(float3 N, float3 V, float3 L, float roughness, float3 F0) {
 
 __device__ float3 sample_cook_torrance(
     float3 N, float3 V, float roughness, float2 uniform_samples) {
-
-    // Walter's trick
+    // * Walter's trick
     float alpha = roughness * roughness;
     float phi = 2.0f * M_PI * uniform_samples.x;
     float y = uniform_samples.y;
@@ -191,7 +186,7 @@ __device__ float3 sample_cook_torrance(
     float3 H_local =
         make_float3(sinTheta * cosf(phi), sinTheta * sinf(phi), cosTheta);
 
-    // Transform H to world space
+    // * Transform H to world space
     float3 up = fabsf(N.z) < 0.99f ? make_float3(0.0f, 0.0f, 1.0f)
                                    : make_float3(1.0f, 0.0f, 0.0f);
     float3 T = normalize(
@@ -201,5 +196,3 @@ __device__ float3 sample_cook_torrance(
 
     return reflect(-V, H);
 }
-
-#endif

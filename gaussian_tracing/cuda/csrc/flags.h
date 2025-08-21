@@ -27,7 +27,6 @@
 // ----- To remove
 // -----------------------
 
-#define NUM_CHUNKS 1
 #define CLAMP_MAX_VALUE 9999999999.0f
 #define EXTRA_BOUNCE_WEIGHT 0.01f
 #define SKIP_BACKFACING_MAX_DIST 0.1f
@@ -37,8 +36,6 @@
 #define REFLECTION_VALID_NORMAL_MIN_NORM 0.7f
 #define DETACH_AFTER 9999
 #define TILE_SIZE 1
-#define NUM_SLABS 1
-#define MIN_SCALING_FACTOR 0.0f
 #define EPS_SCALE_GRAD 1e-12f
 #define LUT_SIZE 512
 #define NUM_CLUSTERS 1

@@ -322,7 +322,7 @@ extern "C" __global__ void __raygen__rg() {
         total_effective_steps++;
 
         // * Compute the indicent radiance
-        froward_pass(
+        forward_pass(
             step,
             initial_lod[step],
             lod_by_distance[step],
