@@ -400,27 +400,27 @@ __device__ void backward_pass(
 
             // * Flush to memory
             if (i < DETACH_AFTER * BUFFER_SIZE) {
-                atomicAdd3(
+                atomicAddX(
                     &params.dL_drgb[gaussian_id],
                     dL_drgb_total * grad_dist_weight);
                 atomicAdd(
                     &params.dL_dopacity[gaussian_id],
                     dL_dopacity_total * grad_dist_weight);
                 if (step == 0) {
-                    atomicAdd3(
+                    atomicAddX(
                         &params.dL_dgaussian_normal[gaussian_id],
                         dL_dgaussian_normal_total * grad_dist_weight);
-                    atomicAdd3(
+                    atomicAddX(
                         &params.dL_dgaussian_f0[gaussian_id],
                         dL_dgaussian_f0_total * grad_dist_weight);
                     atomicAdd(
                         &params.dL_dgaussian_roughness[gaussian_id],
                         dL_dgaussian_roughness_total * grad_dist_weight);
                 }
-                atomicAdd4(
+                atomicAddX(
                     &params.dL_drotations[gaussian_id],
                     dL_drot_total * grad_dist_weight);
-                atomicAdd3(
+                atomicAddX(
                     &params.dL_dmeans[gaussian_id],
                     dL_dmean_total * grad_dist_weight);
 
@@ -430,17 +430,17 @@ __device__ void backward_pass(
                     &params.gaussian_total_weight[gaussian_id],
                     weight); // todo assumes tile size 1
                 if (step == 0) {
-                    atomicAdd3(
+                    atomicAddX(
                         &params.densification_gradient_diffuse[gaussian_id],
                         dL_dmean_total * grad_dist_weight);
                 } else {
-                    atomicAdd3(
+                    atomicAddX(
                         &params.densification_gradient_glossy[gaussian_id],
                         dL_dmean_total / params.glossy_loss_weight *
                             grad_dist_weight / MAX_BOUNCES);
                 }
 
-                atomicAdd3(
+                atomicAddX(
                     &params.dL_dscales[gaussian_id],
                     dL_dscale_total * grad_dist_weight);
             }
