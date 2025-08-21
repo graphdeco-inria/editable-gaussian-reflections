@@ -10,7 +10,6 @@
 #include <string>
 #include <tuple>
 
-#include "cublas_v2.h"
 #include "headers/torch.h"
 #include "utils/exception.h"
 
@@ -46,7 +45,6 @@ struct Raytracer : torch::CustomClassHolder {
 
     OptixBuildInput m_aabb_input = {};
 
-    CUstream m_stream;
     CUdeviceptr m_d_aabb_buffer;
     CUdeviceptr m_unit_bbox;
 
@@ -61,8 +59,6 @@ struct Raytracer : torch::CustomClassHolder {
     Params m_h_params;
     CUdeviceptr m_d_params;
 
-    cublasHandle_t handle;
-
     Tensor m_iteration;
 
     Tensor m_grads_enabled =
@@ -76,8 +72,6 @@ struct Raytracer : torch::CustomClassHolder {
     Tensor m_all_distances = torch::zeros(
         {PPLL_STORAGE_SIZE},
         torch::dtype(torch::kFloat32).device(torch::kCUDA));
-    // Tensor m_all_half_chord_lengths = torch::zeros({PPLL_STORAGE_SIZE},
-    // torch::dtype(torch::kFloat32).device(torch::kCUDA));
     Tensor m_all_alphas = torch::zeros(
         {PPLL_STORAGE_SIZE * TILE_SIZE * TILE_SIZE},
         torch::dtype(torch::kFloat32).device(torch::kCUDA));
@@ -374,7 +368,6 @@ struct Raytracer : torch::CustomClassHolder {
         m_output_t = torch::zeros(
             {MAX_BOUNCES + 1, image_height, image_width, 2},
             torch::dtype(torch::kFloat32).device(torch::kCUDA));
-#if MAX_BOUNCES > 0
         m_target_diffuse = torch::zeros(
             {image_height, image_width, 3},
             torch::dtype(torch::kFloat32).device(torch::kCUDA));
@@ -387,7 +380,6 @@ struct Raytracer : torch::CustomClassHolder {
         m_output_ray_direction = torch::zeros(
             {MAX_BOUNCES + 1, image_height, image_width, 3},
             torch::dtype(torch::kFloat32).device(torch::kCUDA));
-#endif
         m_output_position = torch::zeros(
             {MAX_BOUNCES + 1, image_height, image_width, 3},
             torch::dtype(torch::kFloat32).device(torch::kCUDA));
@@ -418,11 +410,9 @@ struct Raytracer : torch::CustomClassHolder {
         m_target_roughness = torch::zeros(
             {image_height, image_width, 1},
             torch::dtype(torch::kFloat32).device(torch::kCUDA));
-#if MAX_BOUNCES > 0
         m_output_brdf = torch::zeros(
             {MAX_BOUNCES + 1, image_height, image_width, 3},
             torch::dtype(torch::kFloat32).device(torch::kCUDA));
-#endif
         m_output_incident_radiance = torch::zeros(
             {MAX_BOUNCES + 1, image_height, image_width, 3},
             torch::dtype(torch::kFloat32).device(torch::kCUDA));
@@ -506,7 +496,10 @@ struct Raytracer : torch::CustomClassHolder {
                 &module));
         }
 
-        build_bvh();
+        // TODO: Use bvh_wrapper
+        build_blas();
+        build_tlas();
+        cudaDeviceSynchronize();
 
         { // Create params object
             m_h_params.image_width = m_width;
@@ -514,8 +507,6 @@ struct Raytracer : torch::CustomClassHolder {
 
             // Render settings
             m_h_params.denoise = reinterpret_cast<bool *>(m_denoise.data_ptr());
-            m_h_params.num_samples =
-                reinterpret_cast<int *>(m_num_samples.data_ptr());
             m_h_params.num_bounces =
                 reinterpret_cast<int *>(m_num_bounces.data_ptr());
 
@@ -674,12 +665,10 @@ struct Raytracer : torch::CustomClassHolder {
                 reinterpret_cast<float3 *>(m_target_rgb.data_ptr());
             m_h_params.output_t =
                 reinterpret_cast<float2 *>(m_output_t.data_ptr());
-#if MAX_BOUNCES > 0
             m_h_params.target_diffuse =
                 reinterpret_cast<float3 *>(m_target_diffuse.data_ptr());
             m_h_params.target_glossy =
                 reinterpret_cast<float3 *>(m_target_glossy.data_ptr());
-#endif
             m_h_params.output_ray_origin =
                 reinterpret_cast<float3 *>(m_output_ray_origin.data_ptr());
             m_h_params.output_ray_direction =
@@ -706,10 +695,8 @@ struct Raytracer : torch::CustomClassHolder {
                 reinterpret_cast<float *>(m_output_roughness.data_ptr());
             m_h_params.target_roughness =
                 reinterpret_cast<float *>(m_target_roughness.data_ptr());
-#if MAX_BOUNCES > 0
             m_h_params.output_brdf =
                 reinterpret_cast<float3 *>(m_output_brdf.data_ptr());
-#endif
 
             // Other buffers
             m_h_params.t_maxes =
@@ -893,8 +880,6 @@ struct Raytracer : torch::CustomClassHolder {
             m_sbt.hitgroupRecordCount = num_records;
         }
 
-        CUDA_CHECK(cudaStreamCreate(&m_stream));
-
         init_denoiser();
 
         cudaDeviceSynchronize();
@@ -982,7 +967,6 @@ struct Raytracer : torch::CustomClassHolder {
     }
 
     ~Raytracer() {
-        CUDA_CHECK(cudaStreamDestroy(m_stream));
         CUDA_CHECK(cudaFree(reinterpret_cast<void *>(m_sbt.raygenRecord)));
         CUDA_CHECK(cudaFree(reinterpret_cast<void *>(m_sbt.missRecordBase)));
         CUDA_CHECK(
@@ -1087,8 +1071,6 @@ struct Raytracer : torch::CustomClassHolder {
         m_densification_gradient_glossy.resize_({num_new_gaussians, 3});
         m_h_params.densification_gradient_glossy = reinterpret_cast<float3 *>(
             m_densification_gradient_glossy.data_ptr());
-//
-#if MAX_BOUNCES > 0
         m_gaussian_lod_mean.resize_({num_new_gaussians, 1});
         m_dL_dgaussian_lod_mean.resize_({num_new_gaussians, 1});
         m_h_params.gaussian_lod_mean =
@@ -1128,7 +1110,6 @@ struct Raytracer : torch::CustomClassHolder {
             reinterpret_cast<float *>(m_dL_dgaussian_roughness.data_ptr());
         //
         m_gaussian_mask.resize_({num_new_gaussians, 1});
-#endif
 
         cudaDeviceSynchronize();
     }
@@ -1151,16 +1132,6 @@ struct Raytracer : torch::CustomClassHolder {
 
         cudaDeviceSynchronize();
     }
-
-    void build_bvh() {
-        // todo free the exsitng ones (free CUdeviceptr)
-        build_blas();
-        build_tlas();
-
-        cudaDeviceSynchronize();
-    }
-
-    void build_fused_bvh() { throw std::runtime_error("Configuration error"); }
 
     void build_blas() {
         OptixAccelBuildOptions accel_options_blas = {};
@@ -1314,12 +1285,13 @@ struct Raytracer : torch::CustomClassHolder {
         torch::tensor({false}, torch::dtype(torch::kBool).device(torch::kCUDA));
     Tensor m_denoise_glossy =
         torch::tensor({false}, torch::dtype(torch::kBool).device(torch::kCUDA));
-    Tensor m_num_samples =
-        torch::tensor({1}, torch::dtype(torch::kInt32).device(torch::kCUDA));
     Tensor m_num_bounces = torch::tensor(
         {MAX_BOUNCES}, torch::dtype(torch::kInt32).device(torch::kCUDA));
 
-    void sample() {
+    void raytrace() {
+        bool grads_enabled = torch::GradMode::is_enabled();
+        m_grads_enabled.fill_(grads_enabled);
+
         m_num_hits_per_pixel.zero_();
         m_num_traversed_per_pixel.zero_();
         m_prev_hit_per_pixel.fill_(999999999);
@@ -1337,27 +1309,10 @@ struct Raytracer : torch::CustomClassHolder {
             m_height / TILE_SIZE,
             1));
 
-        m_iteration +=
-            1; // used to seed the random noise, need to increment every sample
-    }
-
-    void raytrace() {
-
-        bool grads_enabled = torch::GradMode::is_enabled();
-        m_grads_enabled.fill_(grads_enabled);
-        if (m_num_samples.item<int>() > 1) {
-            Tensor m_output = torch::zeros_like(m_output_rgb);
-            for (int i = 0; i < m_num_samples.item<int>(); i++) {
-                sample();
-                m_output += m_output_rgb;
-            }
-            m_output_rgb.copy_(m_output);
-        } else {
-            sample();
-        }
+        // used to seed the random noise, need to increment every sample
+        m_iteration += 1;
 
         if (!torch::GradMode::is_enabled() && m_denoise.item<bool>()) {
-
             OPTIX_CHECK(optixDenoiserInvoke(
                 m_denoiser,
                 nullptr, // CUDA stream
@@ -1440,7 +1395,6 @@ struct Raytracer : torch::CustomClassHolder {
             // Render settings
             .def_readonly("denoise", &Raytracer::m_denoise)
             .def_readonly("accumulate", &Raytracer::m_accumulate)
-            .def_readonly("num_samples", &Raytracer::m_num_samples)
             .def_readonly("num_bounces", &Raytracer::m_num_bounces)
             // Camera params
             .def_readonly(
