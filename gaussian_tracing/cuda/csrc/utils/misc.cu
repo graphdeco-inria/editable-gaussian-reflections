@@ -20,3 +20,10 @@ template <typename T> __device__ void fill_array(T *arr, uint32_t size, T val) {
         arr[i] = val;
     }
 }
+
+__device__ float3 sign(float3 v) {
+    return make_float3(
+        copysignf(1.0f, v.x), copysignf(1.0f, v.y), copysignf(1.0f, v.z));
+}
+
+__device__ float sign(float v) { return copysignf(1.0f, v); }

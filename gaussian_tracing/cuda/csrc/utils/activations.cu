@@ -24,11 +24,6 @@ __device__ float3 softplus_act(float3 x) {
     return {softplus_act(x.x), softplus_act(x.y), softplus_act(x.z)};
 }
 
-__device__ float abs_act(float x) { return abs(x); }
-__device__ float backward_abs_act(float dL_dy, float x) {
-    return dL_dy * (x < 0.0f ? -1.0f : 1.0f);
-}
-
 __device__ float backward_softplus_act(float dL_dy, float x, float y) {
     return dL_dy / (1.0f + exp(-x));
 }
@@ -99,4 +94,16 @@ __device__ float4 normalize_act(float4 x) {
 }
 __device__ float4 backward_normalize_act(float4 dL_dy, float4 x, float4 y) {
     return dot(dL_dy, x) * -x / powf(length(x), 3) + dL_dy / length(x);
+}
+
+// * Identity
+
+__device__ float identity_act(float x) { return x; }
+
+__device__ float3 identity_act(float3 x) { return {x.x, x.y, x.z}; }
+
+__device__ float backward_identity_act(float dL_dy, float y) { return dL_dy; }
+
+__device__ float3 backward_identity_act(float3 dL_dy, float3 y) {
+    return {dL_dy.x, dL_dy.y, dL_dy.z};
 }

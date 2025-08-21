@@ -7,21 +7,20 @@
 #include <optix_function_table_definition.h>
 #include <optix_stack_size.h>
 #include <optix_stubs.h>
-
 #include <string>
 #include <tuple>
 
 #include "cublas_v2.h"
 #include "headers/torch.h"
-#include "params.h"
 #include "utils/exception.h"
 
 #include "core/all.h"
 
 #include "optix/bvh_wrapper.h"
+#include "optix/denoiser_wrapper.h"
 #include "optix/pipeline_wrapper.h"
 
-using namespace at;
+#include "params.h"
 
 static void
 context_log_cb(uint32_t level, const char *tag, const char *message, void *) {
@@ -36,28 +35,6 @@ float GetEnvironmentVariableOrDefault(
         return default_value;
     }
     return std::stof(value);
-}
-
-// Create four channel float OptixImage2D with given dimension. Allocate memory
-// on device and Copy data from host memory given in hmem to device if hmem is
-// nonzero.
-static OptixImage2D createOptixImage2D(
-    unsigned int width, unsigned int height, CUdeviceptr tensor_data = 0) {
-    OptixImage2D oi;
-
-    if (tensor_data != 0) {
-        oi.data = tensor_data;
-    } else {
-        const uint64_t frame_byte_size = width * height * sizeof(float3);
-        CUDA_CHECK(
-            cudaMalloc(reinterpret_cast<void **>(&oi.data), frame_byte_size));
-    }
-    oi.width = width;
-    oi.height = height;
-    oi.rowStrideInBytes = width * sizeof(float3);
-    oi.pixelStrideInBytes = sizeof(float3);
-    oi.format = OPTIX_PIXEL_FORMAT_FLOAT3;
-    return oi;
 }
 
 struct Raytracer : torch::CustomClassHolder {
