@@ -133,7 +133,7 @@ __device__ void backward_pass(
             gaussvals[0] = params.all_gaussvals_for_backprop[hit_idx];
             distances[0] = params.all_distances_for_backprop[hit_idx];
 
-            // float3 gaussian_rgb = READ_RGB(gaussian_id);
+            // float3 gaussian_rgb = params.gaussian_rgb[gaussian_id];
             float3 gaussian_rgb_unactivated = params.gaussian_rgb[gaussian_id];
 
             float3 gaussian_rgb = relu_act(gaussian_rgb_unactivated);
@@ -146,18 +146,19 @@ __device__ void backward_pass(
                 gaussian_position =
                     ray_origin_world + distances[0] * ray_direction_world;
                 gaussian_normal = params.gaussian_normal[gaussian_id];
-                gaussian_f0 = READ_F0(gaussian_id);
-                gaussian_roughness = READ_ROUGHNESS(gaussian_id);
+                gaussian_f0 = clipped_relu_act(params.gaussian_f0[gaussian_id]);
+                gaussian_roughness =
+                    clipped_relu_act(params.gaussian_roughness[gaussian_id]);
             }
 
-            float opacity = READ_OPACITY(gaussian_id);
+            float opacity = sigmoid_act(params.gaussian_opacity[gaussian_id]);
             const float4 *world_to_local =
                 optixGetInstanceInverseTransformFromHandle(
                     optixGetInstanceTraversableFromIAS(
                         params.handle, gaussian_id));
             const float4 *local_to_world = optixGetInstanceTransformFromHandle(
                 optixGetInstanceTraversableFromIAS(params.handle, gaussian_id));
-            float3 scaling = READ_SCALE(gaussian_id);
+            float3 scaling = exp_act(params.gaussian_scales[gaussian_id]);
             float4 rotation_unnormalized =
                 params.gaussian_rotations[gaussian_id];
             float4 rotation = normalize_act(rotation_unnormalized);

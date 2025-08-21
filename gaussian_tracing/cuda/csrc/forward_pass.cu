@@ -135,12 +135,14 @@ __device__ void forward_pass(
                 uint32_t gaussian_id = params.all_gaussian_ids[idxes[i]];
                 float gaussval = params.all_gaussvals[idxes[i]];
                 float alpha = params.all_alphas[idxes[i]];
-                float3 gaussian_rgb = READ_RGB(gaussian_id);
+                float3 gaussian_rgb = params.gaussian_rgb[gaussian_id];
                 float3 gaussian_position =
                     params.gaussian_position[gaussian_id];
                 float3 gaussian_normal = params.gaussian_normal[gaussian_id];
-                float3 gaussian_f0 = READ_F0(gaussian_id);
-                float gaussian_roughness = READ_ROUGHNESS(gaussian_id);
+                float3 gaussian_f0 =
+                    clipped_relu_act(params.gaussian_f0[gaussian_id]);
+                float gaussian_roughness =
+                    clipped_relu_act(params.gaussian_roughness[gaussian_id]);
                 num_hits++; //! was incorrect for tiling, review
 
                 int c = 0;

@@ -3,11 +3,7 @@
 #include <iostream>
 #include <random>
 
-#include "utils/activations.cu"
-#include "utils/ggx_brdf.h"
-#include "utils/kernel.cu"
-#include "utils/misc.cu"
-#include "utils/random.h"
+#include "utils/common.h"
 
 __device__ float2 bilinear_sample_LUT(float2 uv) {
     uv = clamp(uv, make_float2(0.0f, 0.0f), make_float2(1.0f, 1.0f));
@@ -27,8 +23,6 @@ __device__ float2 bilinear_sample_LUT(float2 uv) {
 }
 
 extern "C" __global__ void __intersection__gaussian() {
-#define RETURN return;
-
     // * Intersect the ray with the gaussian's maximal value
     const uint32_t gaussian_id = optixGetInstanceIndex();
     float3 local_origin = optixGetObjectRayOrigin();
@@ -39,8 +33,8 @@ extern "C" __global__ void __intersection__gaussian() {
     uint32_t ray_id =
         (idx.y * TILE_SIZE) * params.image_width + idx.x * TILE_SIZE;
 
-    float opacity = READ_OPACITY(gaussian_id);
-    float3 scale = READ_SCALE(gaussian_id);
+    float opacity = sigmoid_act(params.gaussian_opacity[gaussian_id]);
+    float3 scale = exp_act(params.gaussian_scales[gaussian_id]);
     float norm = length(local_direction);
     local_direction /= norm;
     float local_hit_distance_along_ray = dot(-local_origin, local_direction);
@@ -56,11 +50,11 @@ extern "C" __global__ void __intersection__gaussian() {
     // capsules
     float sq_dist = dot(local_hit_unscaled, local_hit_unscaled);
     if (sq_dist > 1.0f) {
-        RETURN
+        return;
     }
 
     if (dot(optixGetObjectRayOrigin(), optixGetObjectRayDirection()) > 0.0) {
-        RETURN
+        return;
     }
 
     int step = optixGetPayload_2();
@@ -69,7 +63,7 @@ extern "C" __global__ void __intersection__gaussian() {
         if (length(gaussian_normal) >
                 SKIP_BACKFACING_REFLECTION_VALID_NORMAL_MIN_NORM &&
             dot(gaussian_normal, local_direction) > 0.0f) {
-            RETURN
+            return;
         }
     }
 
@@ -96,7 +90,7 @@ extern "C" __global__ void __intersection__gaussian() {
     params.all_prev_hits[hit_idx] = params.prev_hit_per_pixel[ray_id];
     params.prev_hit_per_pixel[ray_id] = hit_idx;
 
-    RETURN
+    return;
 }
 
 #include "backward_pass.cu"

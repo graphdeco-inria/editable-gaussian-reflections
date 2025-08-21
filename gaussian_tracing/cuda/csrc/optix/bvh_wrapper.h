@@ -1,3 +1,7 @@
+
+#include "../core/all.h"
+#include "../params.h"
+
 void populateBVH(
     OptixInstance *instances,
     OptixTraversableHandle gasHandle,

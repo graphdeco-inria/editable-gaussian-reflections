@@ -87,6 +87,18 @@ target_link_libraries(optix_program PRIVATE
     ${TORCH_LIBRARIES}  # TEMPORARY HACK
 )
 
+# === Custom: copy the .ptx next to the .so ===
+set(PTX_SOURCE "${CMAKE_CURRENT_BINARY_DIR}/CMakeFiles/optix_program.dir/csrc/shaders.ptx")
+set(PTX_DEST "${CMAKE_CURRENT_BINARY_DIR}/libgausstracer.ptx")
+add_custom_command(
+    OUTPUT ${PTX_DEST}
+    DEPENDS ${PTX_SOURCE}
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different "${PTX_SOURCE}" "${PTX_DEST}"
+    COMMENT "Copying PTX to gausstracer output directory"
+)
+add_custom_target(copy_optix_ptx ALL DEPENDS ${PTX_DEST})
+add_dependencies(copy_optix_ptx optix_program)
+
 # === Custom: Preprocessor Flags Dump ===
 add_custom_command(
     OUTPUT ${CMAKE_BINARY_DIR}/flags_output.txt

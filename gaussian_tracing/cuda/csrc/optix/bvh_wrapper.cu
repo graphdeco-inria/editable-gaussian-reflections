@@ -1,10 +1,10 @@
 #include <optix.h>
 #include <optix_stubs.h>
 
+#include "../core/all.h"
 #include "../flags.h"
 #include "../params.h"
-#include "../utils/activations.cu"
-#include "../utils/kernel.cu"
+#include "../utils/common.h"
 
 __device__ void create_transform_matrix(
     const float4 rotation,
