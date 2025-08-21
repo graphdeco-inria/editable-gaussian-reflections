@@ -1426,135 +1426,154 @@ struct Raytracer : torch::CustomClassHolder {
         m_camera_zfar.fill_((float)zfar);
         m_max_lod_size.fill_((float)max_lod_size);
     }
+
+    static void bind(torch::Library &m) {
+        m.class_<Raytracer>("Raytracer")
+            .def(torch::init<int64_t, int64_t, int64_t>())
+            .def("rebuild_bvh", &Raytracer::rebuild_bvh)
+            .def("update_bvh", &Raytracer::update_bvh)
+            .def("set_losses", &Raytracer::set_losses)
+            .def("raytrace", &Raytracer::raytrace)
+            .def("configure", &Raytracer::configure)
+            .def("set_camera", &Raytracer::set_camera)
+            .def("resize", &Raytracer::resize)
+            // Render settings
+            .def_readonly("denoise", &Raytracer::m_denoise)
+            .def_readonly("accumulate", &Raytracer::m_accumulate)
+            .def_readonly("num_samples", &Raytracer::m_num_samples)
+            .def_readonly("num_bounces", &Raytracer::m_num_bounces)
+            // Camera params
+            .def_readonly(
+                "camera_rotation_c2w", &Raytracer::m_camera_rotation_c2w)
+            .def_readonly(
+                "camera_rotation_w2c", &Raytracer::m_camera_rotation_w2c)
+            .def_readonly(
+                "camera_position_world", &Raytracer::m_camera_position_world)
+            .def_readonly(
+                "vertical_fov_radians", &Raytracer::m_vertical_fov_radians)
+            .def_readonly("init_blur_sigma", &Raytracer::m_init_blur_sigma)
+            // Gaussian params
+            .def_readonly(
+                "global_scale_factor", &Raytracer::m_global_scale_factor)
+            .def_readonly("gaussian_rgb", &Raytracer::m_gaussian_rgb)
+            .def_readonly("dL_drgb", &Raytracer::m_dL_drgb)
+            .def_readonly("gaussian_opacity", &Raytracer::m_gaussian_opacity)
+            .def_readonly("dL_dopacity", &Raytracer::m_dL_dopacity)
+            .def_readonly("gaussian_scales", &Raytracer::m_gaussian_scales)
+            .def_readonly("dL_dscales", &Raytracer::m_dL_dscales)
+            .def_readonly(
+                "gaussian_rotations", &Raytracer::m_gaussian_rotations)
+            .def_readonly("dL_drotations", &Raytracer::m_dL_drotations)
+            .def_readonly("gaussian_means", &Raytracer::m_gaussian_means)
+            .def_readonly("dL_dmeans", &Raytracer::m_dL_dmeans)
+            .def_readonly(
+                "gaussian_exp_power", &Raytracer::m_gaussian_exp_power)
+            .def_readonly("dL_dexp_powers", &Raytracer::m_dL_dexp_powers)
+            .def_readonly("gaussian_lod_mean", &Raytracer::m_gaussian_lod_mean)
+            .def_readonly(
+                "dL_dgaussian_lod_mean", &Raytracer::m_dL_dgaussian_lod_mean)
+            .def_readonly(
+                "gaussian_lod_scale", &Raytracer::m_gaussian_lod_scale)
+            .def_readonly(
+                "dL_dgaussian_lod_scale", &Raytracer::m_dL_dgaussian_lod_scale)
+            .def_readonly("gaussian_mask", &Raytracer::m_gaussian_mask)
+            .def_readonly("gaussian_position", &Raytracer::m_gaussian_position)
+            .def_readonly(
+                "dL_dgaussian_position", &Raytracer::m_dL_dgaussian_position)
+            .def_readonly("gaussian_normal", &Raytracer::m_gaussian_normal)
+            .def_readonly(
+                "dL_dgaussian_normal", &Raytracer::m_dL_dgaussian_normal)
+            .def_readonly("gaussian_f0", &Raytracer::m_gaussian_f0)
+            .def_readonly("dL_dgaussian_f0", &Raytracer::m_dL_dgaussian_f0)
+            .def_readonly(
+                "gaussian_roughness", &Raytracer::m_gaussian_roughness)
+            .def_readonly(
+                "dL_dgaussian_roughness", &Raytracer::m_dL_dgaussian_roughness)
+            .def_readonly(
+                "gaussian_total_weight", &Raytracer::m_gaussian_total_weight)
+            .def_readonly(
+                "densification_gradient_diffuse",
+                &Raytracer::m_densification_gradient_diffuse)
+            .def_readonly(
+                "densification_gradient_glossy",
+                &Raytracer::m_densification_gradient_glossy)
+            // Output buffers
+            .def_readonly("output_rgb", &Raytracer::m_output_rgb)
+            .def_readonly("accumulated_rgb", &Raytracer::m_accumulated_rgb)
+            .def_readonly(
+                "accumulated_normal", &Raytracer::m_accumulated_normal)
+            .def_readonly("accumulated_depth", &Raytracer::m_accumulated_depth)
+            .def_readonly("accumulated_f0", &Raytracer::m_accumulated_f0)
+            .def_readonly(
+                "accumulated_roughness", &Raytracer::m_accumulated_roughness)
+            .def_readonly(
+                "accumulated_sample_count",
+                &Raytracer::m_accumulated_sample_count)
+            .def_readonly("output_t", &Raytracer::m_output_t)
+            .def_readonly(
+                "output_incident_radiance",
+                &Raytracer::m_output_incident_radiance)
+            .def_readonly("output_position", &Raytracer::m_output_position)
+            .def_readonly("output_depth", &Raytracer::m_output_depth)
+            .def_readonly("output_normal", &Raytracer::m_output_normal)
+            .def_readonly("output_f0", &Raytracer::m_output_f0)
+            .def_readonly("output_roughness", &Raytracer::m_output_roughness)
+            .def_readonly("output_distortion", &Raytracer::m_output_distortion)
+            .def_readonly("output_brdf", &Raytracer::m_output_brdf)
+            .def_readonly(
+                "output_diffuse_irradiance",
+                &Raytracer::m_output_diffuse_irradiance)
+            .def_readonly(
+                "output_glossy_irradiance",
+                &Raytracer::m_output_glossy_irradiance)
+            // Debug output buffers
+            .def_readonly("output_ray_origin", &Raytracer::m_output_ray_origin)
+            .def_readonly(
+                "output_ray_direction", &Raytracer::m_output_ray_direction)
+            .def_readonly("output_lut_values", &Raytracer::m_output_lut_values)
+            .def_readonly("output_n_dot_v", &Raytracer::m_output_n_dot_v)
+            .def_readonly(
+                "output_effective_reflection_position",
+                &Raytracer::m_output_effective_reflection_position)
+            .def_readonly(
+                "output_effective_reflection_normal",
+                &Raytracer::m_output_effective_reflection_normal)
+            .def_readonly(
+                "output_effective_F0", &Raytracer::m_output_effective_F0)
+            .def_readonly(
+                "output_effective_roughness",
+                &Raytracer::m_output_effective_roughness)
+            .def_readonly(
+                "output_effective_normal",
+                &Raytracer::m_output_effective_normal)
+            .def_readonly("output_lod_mean", &Raytracer::m_output_lod_mean)
+            .def_readonly("output_lod_scale", &Raytracer::m_output_lod_scale)
+            .def_readonly("output_ray_lod", &Raytracer::m_output_ray_lod)
+            // Target buffers
+            .def_readonly("target_rgb", &Raytracer::m_target_rgb)
+            .def_readonly("target_diffuse", &Raytracer::m_target_diffuse)
+            .def_readonly("target_glossy", &Raytracer::m_target_glossy)
+            .def_readonly("target_position", &Raytracer::m_target_position)
+            .def_readonly("target_depth", &Raytracer::m_target_depth)
+            .def_readonly("target_normal", &Raytracer::m_target_normal)
+            .def_readonly("target_f0", &Raytracer::m_target_f0)
+            .def_readonly("target_roughness", &Raytracer::m_target_roughness)
+            .def_readonly("target_brdf", &Raytracer::m_target_brdf)
+            .def_readonly(
+                "target_diffuse_irradiance",
+                &Raytracer::m_target_diffuse_irradiance)
+            .def_readonly(
+                "target_glossy_irradiance",
+                &Raytracer::m_target_glossy_irradiance)
+            .def_readonly("loss_tensor", &Raytracer::m_loss_tensor)
+            // Other buffers
+            .def_readonly(
+                "num_hits_per_pixel", &Raytracer::m_num_hits_per_pixel)
+            .def_readonly(
+                "num_traversed_per_pixel",
+                &Raytracer::m_num_traversed_per_pixel)
+            .def_readonly("t_maxes", &Raytracer::m_t_maxes);
+    }
 };
 
-TORCH_LIBRARY(gausstracer, m) {
-    m.class_<Raytracer>("Raytracer")
-        .def(torch::init<int64_t, int64_t, int64_t>())
-        .def("rebuild_bvh", &Raytracer::rebuild_bvh)
-        .def("update_bvh", &Raytracer::update_bvh)
-        .def("set_losses", &Raytracer::set_losses)
-        .def("raytrace", &Raytracer::raytrace)
-        .def("configure", &Raytracer::configure)
-        .def("set_camera", &Raytracer::set_camera)
-        .def("resize", &Raytracer::resize)
-        // Render settings
-        .def_readonly("denoise", &Raytracer::m_denoise)
-        .def_readonly("accumulate", &Raytracer::m_accumulate)
-        .def_readonly("num_samples", &Raytracer::m_num_samples)
-        .def_readonly("num_bounces", &Raytracer::m_num_bounces)
-        // Camera params
-        .def_readonly("camera_rotation_c2w", &Raytracer::m_camera_rotation_c2w)
-        .def_readonly("camera_rotation_w2c", &Raytracer::m_camera_rotation_w2c)
-        .def_readonly(
-            "camera_position_world", &Raytracer::m_camera_position_world)
-        .def_readonly(
-            "vertical_fov_radians", &Raytracer::m_vertical_fov_radians)
-        .def_readonly("init_blur_sigma", &Raytracer::m_init_blur_sigma)
-        // Gaussian params
-        .def_readonly("global_scale_factor", &Raytracer::m_global_scale_factor)
-        .def_readonly("gaussian_rgb", &Raytracer::m_gaussian_rgb)
-        .def_readonly("dL_drgb", &Raytracer::m_dL_drgb)
-        .def_readonly("gaussian_opacity", &Raytracer::m_gaussian_opacity)
-        .def_readonly("dL_dopacity", &Raytracer::m_dL_dopacity)
-        .def_readonly("gaussian_scales", &Raytracer::m_gaussian_scales)
-        .def_readonly("dL_dscales", &Raytracer::m_dL_dscales)
-        .def_readonly("gaussian_rotations", &Raytracer::m_gaussian_rotations)
-        .def_readonly("dL_drotations", &Raytracer::m_dL_drotations)
-        .def_readonly("gaussian_means", &Raytracer::m_gaussian_means)
-        .def_readonly("dL_dmeans", &Raytracer::m_dL_dmeans)
-        .def_readonly("gaussian_exp_power", &Raytracer::m_gaussian_exp_power)
-        .def_readonly("dL_dexp_powers", &Raytracer::m_dL_dexp_powers)
-        .def_readonly("gaussian_lod_mean", &Raytracer::m_gaussian_lod_mean)
-        .def_readonly(
-            "dL_dgaussian_lod_mean", &Raytracer::m_dL_dgaussian_lod_mean)
-        .def_readonly("gaussian_lod_scale", &Raytracer::m_gaussian_lod_scale)
-        .def_readonly(
-            "dL_dgaussian_lod_scale", &Raytracer::m_dL_dgaussian_lod_scale)
-        .def_readonly("gaussian_mask", &Raytracer::m_gaussian_mask)
-        .def_readonly("gaussian_position", &Raytracer::m_gaussian_position)
-        .def_readonly(
-            "dL_dgaussian_position", &Raytracer::m_dL_dgaussian_position)
-        .def_readonly("gaussian_normal", &Raytracer::m_gaussian_normal)
-        .def_readonly("dL_dgaussian_normal", &Raytracer::m_dL_dgaussian_normal)
-        .def_readonly("gaussian_f0", &Raytracer::m_gaussian_f0)
-        .def_readonly("dL_dgaussian_f0", &Raytracer::m_dL_dgaussian_f0)
-        .def_readonly("gaussian_roughness", &Raytracer::m_gaussian_roughness)
-        .def_readonly(
-            "dL_dgaussian_roughness", &Raytracer::m_dL_dgaussian_roughness)
-        .def_readonly(
-            "gaussian_total_weight", &Raytracer::m_gaussian_total_weight)
-        .def_readonly(
-            "densification_gradient_diffuse",
-            &Raytracer::m_densification_gradient_diffuse)
-        .def_readonly(
-            "densification_gradient_glossy",
-            &Raytracer::m_densification_gradient_glossy)
-        // Output buffers
-        .def_readonly("output_rgb", &Raytracer::m_output_rgb)
-        .def_readonly("accumulated_rgb", &Raytracer::m_accumulated_rgb)
-        .def_readonly("accumulated_normal", &Raytracer::m_accumulated_normal)
-        .def_readonly("accumulated_depth", &Raytracer::m_accumulated_depth)
-        .def_readonly("accumulated_f0", &Raytracer::m_accumulated_f0)
-        .def_readonly(
-            "accumulated_roughness", &Raytracer::m_accumulated_roughness)
-        .def_readonly(
-            "accumulated_sample_count", &Raytracer::m_accumulated_sample_count)
-        .def_readonly("output_t", &Raytracer::m_output_t)
-        .def_readonly(
-            "output_incident_radiance", &Raytracer::m_output_incident_radiance)
-        .def_readonly("output_position", &Raytracer::m_output_position)
-        .def_readonly("output_depth", &Raytracer::m_output_depth)
-        .def_readonly("output_normal", &Raytracer::m_output_normal)
-        .def_readonly("output_f0", &Raytracer::m_output_f0)
-        .def_readonly("output_roughness", &Raytracer::m_output_roughness)
-        .def_readonly("output_distortion", &Raytracer::m_output_distortion)
-        .def_readonly("output_brdf", &Raytracer::m_output_brdf)
-        .def_readonly(
-            "output_diffuse_irradiance",
-            &Raytracer::m_output_diffuse_irradiance)
-        .def_readonly(
-            "output_glossy_irradiance", &Raytracer::m_output_glossy_irradiance)
-        // Debug output buffers
-        .def_readonly("output_ray_origin", &Raytracer::m_output_ray_origin)
-        .def_readonly(
-            "output_ray_direction", &Raytracer::m_output_ray_direction)
-        .def_readonly("output_lut_values", &Raytracer::m_output_lut_values)
-        .def_readonly("output_n_dot_v", &Raytracer::m_output_n_dot_v)
-        .def_readonly(
-            "output_effective_reflection_position",
-            &Raytracer::m_output_effective_reflection_position)
-        .def_readonly(
-            "output_effective_reflection_normal",
-            &Raytracer::m_output_effective_reflection_normal)
-        .def_readonly("output_effective_F0", &Raytracer::m_output_effective_F0)
-        .def_readonly(
-            "output_effective_roughness",
-            &Raytracer::m_output_effective_roughness)
-        .def_readonly(
-            "output_effective_normal", &Raytracer::m_output_effective_normal)
-        .def_readonly("output_lod_mean", &Raytracer::m_output_lod_mean)
-        .def_readonly("output_lod_scale", &Raytracer::m_output_lod_scale)
-        .def_readonly("output_ray_lod", &Raytracer::m_output_ray_lod)
-        // Target buffers
-        .def_readonly("target_rgb", &Raytracer::m_target_rgb)
-        .def_readonly("target_diffuse", &Raytracer::m_target_diffuse)
-        .def_readonly("target_glossy", &Raytracer::m_target_glossy)
-        .def_readonly("target_position", &Raytracer::m_target_position)
-        .def_readonly("target_depth", &Raytracer::m_target_depth)
-        .def_readonly("target_normal", &Raytracer::m_target_normal)
-        .def_readonly("target_f0", &Raytracer::m_target_f0)
-        .def_readonly("target_roughness", &Raytracer::m_target_roughness)
-        .def_readonly("target_brdf", &Raytracer::m_target_brdf)
-        .def_readonly(
-            "target_diffuse_irradiance",
-            &Raytracer::m_target_diffuse_irradiance)
-        .def_readonly(
-            "target_glossy_irradiance", &Raytracer::m_target_glossy_irradiance)
-        .def_readonly("loss_tensor", &Raytracer::m_loss_tensor)
-        // Other buffers
-        .def_readonly("num_hits_per_pixel", &Raytracer::m_num_hits_per_pixel)
-        .def_readonly(
-            "num_traversed_per_pixel", &Raytracer::m_num_traversed_per_pixel)
-        .def_readonly("t_maxes", &Raytracer::m_t_maxes);
-}
+TORCH_LIBRARY(gausstracer, m) { Raytracer::bind(m); }
