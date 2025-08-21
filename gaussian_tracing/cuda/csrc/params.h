@@ -192,12 +192,6 @@ struct MissData {
     float r, g, b;
 };
 
-template <typename T> struct SbtRecord {
-    __align__(
-        OPTIX_SBT_RECORD_ALIGNMENT) char header[OPTIX_SBT_RECORD_HEADER_SIZE];
-    T data;
-};
-
 extern "C" {
 __constant__ Params params;
 }
