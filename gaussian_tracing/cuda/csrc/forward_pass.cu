@@ -1,7 +1,7 @@
 #include <math_constants.h>
 
 #pragma inline
-__device__ void froward_pass(
+__device__ void forward_pass(
     const int step,
     //
     float initial_lod,
@@ -55,40 +55,34 @@ __device__ void froward_pass(
     fill_array(full_T_uint, TILE_SIZE * TILE_SIZE, __float_as_uint(1.0f));
 
     // * Traverse BVH
-    for (uint32_t i = 0; i < NUM_SLABS; i++) {
-        float slab_tmin = near_plane + (far_plane - near_plane) / NUM_SLABS * i;
-        float slab_tmax =
-            near_plane + (far_plane - near_plane) / NUM_SLABS * (i + 1);
-
-        if (output_t[0].y > params.transmittance_threshold) {
-            uint32_t uint_initial_lod = __float_as_uint(initial_lod);
-            uint32_t uint_lod_by_distance = __float_as_uint(lod_by_distance);
-            uint32_t step_uint = (uint32_t)step;
-            uint32_t reflected_origin_x = __float_as_uint(reflected_origin.x);
-            uint32_t reflected_origin_y = __float_as_uint(reflected_origin.y);
-            uint32_t reflected_origin_z = __float_as_uint(reflected_origin.z);
-            optixTraverse(
-                params.handle,
-                tile_origin,
-                tile_direction,
-                slab_tmin, // tmin
-                slab_tmax,
-                0.0f, // rayTime
-                OptixVisibilityMask(1),
-                OPTIX_RAY_FLAG_NONE,
-                0, // SBT offset
-                0, // SBT stride
-                0,
-                uint_initial_lod,
-                uint_lod_by_distance,
-                step_uint, // step, replaces slab idx
-                full_T_uint[0],
-                reflected_origin_x,
-                reflected_origin_y,
-                reflected_origin_z);
-            for (int k = 0; k < TILE_SIZE * TILE_SIZE; k++) {
-                output_t[k].y = __uint_as_float(full_T_uint[k]);
-            }
+    if (output_t[0].y > params.transmittance_threshold) {
+        uint32_t uint_initial_lod = __float_as_uint(initial_lod);
+        uint32_t uint_lod_by_distance = __float_as_uint(lod_by_distance);
+        uint32_t step_uint = (uint32_t)step;
+        uint32_t reflected_origin_x = __float_as_uint(reflected_origin.x);
+        uint32_t reflected_origin_y = __float_as_uint(reflected_origin.y);
+        uint32_t reflected_origin_z = __float_as_uint(reflected_origin.z);
+        optixTraverse(
+            params.handle,
+            tile_origin,
+            tile_direction,
+            near_plane, // tmin
+            far_plane,
+            0.0f, // rayTime
+            OptixVisibilityMask(1),
+            OPTIX_RAY_FLAG_NONE,
+            0, // SBT offset
+            0, // SBT stride
+            0,
+            uint_initial_lod,
+            uint_lod_by_distance,
+            step_uint, // step, replaces slab idx
+            full_T_uint[0],
+            reflected_origin_x,
+            reflected_origin_y,
+            reflected_origin_z);
+        for (int k = 0; k < TILE_SIZE * TILE_SIZE; k++) {
+            output_t[k].y = __uint_as_float(full_T_uint[k]);
         }
     }
 

@@ -1366,17 +1366,15 @@ struct Raytracer : torch::CustomClassHolder {
         m_prev_hit_per_pixel_for_backprop.fill_(999999999);
         m_total_hits_for_backprop.fill_(0);
 
-        for (int h = 0; h < NUM_CHUNKS * NUM_CHUNKS; h++) {
-            OPTIX_CHECK(optixLaunch(
-                m_pipeline,
-                nullptr,
-                m_d_params,
-                sizeof(Params),
-                &m_sbt,
-                m_width / TILE_SIZE / NUM_CHUNKS,
-                m_height / TILE_SIZE / NUM_CHUNKS,
-                1));
-        }
+        OPTIX_CHECK(optixLaunch(
+            m_pipeline,
+            nullptr,
+            m_d_params,
+            sizeof(Params),
+            &m_sbt,
+            m_width / TILE_SIZE,
+            m_height / TILE_SIZE,
+            1));
 
         m_iteration +=
             1; // used to seed the random noise, need to increment every sample
