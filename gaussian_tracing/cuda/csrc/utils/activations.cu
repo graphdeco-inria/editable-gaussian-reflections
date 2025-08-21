@@ -1,4 +1,6 @@
-#include "vec_math.h"
+#pragma once
+
+// * Sigmoid
 
 __device__ float sigmoid_act(float x) { return 1.0f / (1.0f + exp(-x)); }
 __device__ float3 sigmoid_act(float3 x) {
@@ -14,6 +16,8 @@ __device__ float3 backward_sigmoid_act(float3 dL_dy, float3 y) {
         backward_sigmoid_act(dL_dy.y, y.y),
         backward_sigmoid_act(dL_dy.z, y.z)};
 }
+
+// * Softplus
 
 __device__ float softplus_act(float x) { return log(1.0f + exp(x)); }
 __device__ float3 softplus_act(float3 x) {
@@ -35,7 +39,7 @@ __device__ float3 backward_softplus_act(float3 dL_dy, float3 x, float3 y) {
         backward_softplus_act(dL_dy.z, x.z, y.z)};
 }
 
-// RELU
+// * ReLU
 
 __device__ float relu_act(float x) { return max(0.0f, x); }
 
@@ -54,7 +58,7 @@ __device__ float3 backward_relu_act(float3 dL_dy, float3 y) {
         backward_relu_act(dL_dy.z, y.z)};
 }
 
-// CLIPPED RELU
+// * Clipped ReLU
 
 __device__ float clipped_relu_act(float x) { return min(max(0.0f, x), 1.0f); }
 
@@ -74,7 +78,7 @@ __device__ float3 backward_clipped_relu_act(float3 dL_dy, float3 y) {
         backward_clipped_relu_act(dL_dy.z, y.z)};
 }
 
-// EXP
+// * Exp
 
 __device__ float exp_act(float x) { return exp(x); }
 __device__ float3 exp_act(float3 x) {
@@ -96,19 +100,3 @@ __device__ float4 normalize_act(float4 x) {
 __device__ float4 backward_normalize_act(float4 dL_dy, float4 x, float4 y) {
     return dot(dL_dy, x) * -x / powf(length(x), 3) + dL_dy / length(x);
 }
-
-#define READ_RGB(gaussian_id) params.gaussian_rgb[gaussian_id]
-#define READ_OPACITY(gaussian_id)                                              \
-    sigmoid_act(params.gaussian_opacity[gaussian_id])
-#define READ_ROTATION(gaussian_id)                                             \
-    normalize_act(params.gaussian_rotations[gaussian_id])
-#define READ_SCALE(gaussian_id) exp_act(params.gaussian_scales[gaussian_id])
-#define READ_MEAN(gaussian_id) params.gaussian_means[gaussian_id]
-
-#define READ_LOD_MEAN(gaussian_id) params.gaussian_lod_mean[gaussian_id]
-#define READ_LOD_SCALE(gaussian_id)                                            \
-    exp_act(params.gaussian_lod_scale[gaussian_id])
-
-#define READ_ROUGHNESS(gaussian_id)                                            \
-    clipped_relu_act(params.gaussian_roughness[gaussian_id])
-#define READ_F0(gaussian_id) clipped_relu_act(params.gaussian_f0[gaussian_id])

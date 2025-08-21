@@ -1,24 +1,25 @@
-#include <torch/extension.h>
-
+#include <cstddef>
+#include <cuda_runtime.h>
 #include <fstream>
+#include <iomanip>
+#include <iostream>
 #include <optix.h>
 #include <optix_function_table_definition.h>
 #include <optix_stack_size.h>
 #include <optix_stubs.h>
+
+#include <string>
 #include <tuple>
 
 #include "cublas_v2.h"
-#include <cuda_runtime.h>
-
-#include <iomanip>
-#include <iostream>
-#include <string>
-
-#include "optix/bvh_wrapper.h"
+#include "headers/torch.h"
 #include "params.h"
 #include "utils/exception.h"
 
-#include <optix_denoiser_tiling.h>
+#include "core/all.h"
+
+#include "optix/bvh_wrapper.h"
+#include "optix/pipeline_wrapper.h"
 
 using namespace at;
 
@@ -26,23 +27,6 @@ static void
 context_log_cb(uint32_t level, const char *tag, const char *message, void *) {
     std::cerr << "[" << std::setw(2) << level << "][" << std::setw(12) << tag
               << "]: " << message << "\n";
-}
-
-static std::string loadPtxFile() {
-    // create a string from CMAKE_BINARY_DIR
-    std::string path = std::string(CMAKE_BINARY_DIR) +
-                       "/CMakeFiles/optix_program.dir/csrc/shaders.ptx";
-    std::ifstream file(path.c_str(), std::ios::binary);
-    if (file.good()) {
-        std::vector<unsigned char> buffer = std::vector<unsigned char>(
-            std::istreambuf_iterator<char>(file), {});
-        std::string str;
-        str.assign(buffer.begin(), buffer.end());
-        return str;
-    } else {
-        std::string error = "couldn't locate ptx file in path " + path;
-        throw std::runtime_error(error);
-    }
 }
 
 float GetEnvironmentVariableOrDefault(

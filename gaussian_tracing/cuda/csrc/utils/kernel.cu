@@ -1,13 +1,11 @@
-#include "vec_math.h"
+#pragma once
 
 __device__ __host__ float
 compute_scaling_factor(float opacity, float alpha_threshold, float exp_power) {
     float k = 2.0f * exp_power;
-    return max(
-        0.0f,
-        opacity <= alpha_threshold
-            ? 0.0
-            : powf(k * log(opacity / alpha_threshold), 1.0f / k));
+    return opacity <= alpha_threshold
+               ? 0.0
+               : powf(k * log(opacity / alpha_threshold), 1.0f / k);
 }
 
 __device__ float eval_gaussian(float3 local_hit, float exp_power) {

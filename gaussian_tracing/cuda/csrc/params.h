@@ -4,6 +4,8 @@
 #include <cuda.h>
 #include <optix.h>
 
+#include "core/all.h"
+
 struct Params {
     uint32_t image_width;
     uint32_t image_height;

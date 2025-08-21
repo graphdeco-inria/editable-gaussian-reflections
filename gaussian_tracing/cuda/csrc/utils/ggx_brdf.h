@@ -125,7 +125,6 @@ __device__ void fresnel_schlick_backward(
     // Scalar, same for all channels
     float dF_dF0_scalar = 1.0f - one_minus_cos5;
     dl_dF0 = dl_dF * dF_dF0_scalar;
-
     float3 dF_dcosTheta = make_float3(
         -5.0f * one_minus_F0.x * one_minus_cos4,
         -5.0f * one_minus_F0.y * one_minus_cos4,
