@@ -5,36 +5,27 @@
 
 #include "utils/common.h"
 
-__device__ float2 bilinear_sample_LUT(float2 uv) {
-    uv = clamp(uv, make_float2(0.0f, 0.0f), make_float2(1.0f, 1.0f));
-    float2 uv_scaled = uv * (LUT_SIZE - 1);
-    int x0 = floor(uv_scaled.x);
-    int y0 = floor(uv_scaled.y);
-    int x1 = min(x0 + 1, LUT_SIZE - 1);
-    int y1 = min(y0 + 1, LUT_SIZE - 1);
-    float2 uv_fract = uv_scaled - make_float2(x0, y0);
-    float2 value00 = params.lut[y0 * LUT_SIZE + x0];
-    float2 value01 = params.lut[y1 * LUT_SIZE + x0];
-    float2 value10 = params.lut[y0 * LUT_SIZE + x1];
-    float2 value11 = params.lut[y1 * LUT_SIZE + x1];
-    float2 value0 = value00 + uv_fract.y * (value01 - value00);
-    float2 value1 = value10 + uv_fract.y * (value11 - value10);
-    return value0 + uv_fract.x * (value1 - value0);
-}
-
 extern "C" __global__ void __intersection__gaussian() {
-    // * Intersect the ray with the gaussian's maximal value
-    const uint32_t gaussian_id = optixGetInstanceIndex();
+    // * Fetch config
+    float backfacing_max_dist = 0.1f;
+    float backfacing_invalid_normal_threshold = 0.9f;
+
+    // * Fetch ray data
     float3 local_origin = optixGetObjectRayOrigin();
     float3 local_direction = optixGetObjectRayDirection();
 
+    // * Load gaussian data
+    const uint32_t gaussian_id = optixGetInstanceIndex();
+    float opacity = sigmoid_act(params.gaussian_opacity[gaussian_id]);
+    float3 scale = exp_act(params.gaussian_scales[gaussian_id]);
+
+    // * Compute pixel index
     uint3 idx = optixGetLaunchIndex();
     uint3 dim = optixGetLaunchDimensions();
+
     uint32_t ray_id =
         (idx.y * TILE_SIZE) * params.image_width + idx.x * TILE_SIZE;
 
-    float opacity = sigmoid_act(params.gaussian_opacity[gaussian_id]);
-    float3 scale = exp_act(params.gaussian_scales[gaussian_id]);
     float norm = length(local_direction);
     local_direction /= norm;
     float local_hit_distance_along_ray = dot(-local_origin, local_direction);
@@ -58,10 +49,9 @@ extern "C" __global__ void __intersection__gaussian() {
     }
 
     int step = optixGetPayload_2();
-    if (step != 0 && sorting_distance < SKIP_BACKFACING_MAX_DIST) {
+    if (step != 0 && sorting_distance < backfacing_max_dist) {
         float3 gaussian_normal = params.gaussian_normal[gaussian_id];
-        if (length(gaussian_normal) >
-                SKIP_BACKFACING_REFLECTION_VALID_NORMAL_MIN_NORM &&
+        if (length(gaussian_normal) > backfacing_invalid_normal_threshold &&
             dot(gaussian_normal, local_direction) > 0.0f) {
             return;
         }
@@ -97,9 +87,14 @@ extern "C" __global__ void __intersection__gaussian() {
 #include "forward_pass.cu"
 
 extern "C" __global__ void __raygen__rg() {
+    // * Compute pixel index
     int num_pixels = params.image_width * params.image_height;
     uint3 idx = optixGetLaunchIndex();
     uint3 dim = optixGetLaunchDimensions();
+    float eps_ray_surface_offset = 0.01f;
+    float eps_min_roughness = 0.01f;
+    float reflection_invalid_normal_threshold = 0.7f;
+
     uint currrent_chunk_x = 0;
     uint currrent_chunk_y = 0; // todo
     uint32_t ray_id =
@@ -367,58 +362,56 @@ extern "C" __global__ void __raygen__rg() {
                         output_throughput[step - 1][prev_c][k];
                 }
 
-                float effective_roughness = output_roughness[step][c][k];
-                effective_roughness = max(effective_roughness, MIN_ROUGHNESS);
+                // * Post-process accumulated normal and roughness
                 float3 unnormalized_normal = output_normal[step][c][k];
                 float3 effective_normal = normalize(unnormalized_normal);
+                float effective_roughness =
+                    max(output_roughness[step][c][k],
+                        eps_min_roughness); // * For stability avoid exactly 0
+                                            // roughness
                 float3 effective_F0 = output_f0[step][c][k];
 
+                // * Terminate path if the accumulated normal is invalid
+                if (length(unnormalized_normal) <
+                    reflection_invalid_normal_threshold) {
+                    goto forward_pass_end;
+                }
+
                 // * Compute the BRDF for this step
-                {
-                    if (step > 0) {
-                        output_throughput[step][c][k] *=
-                            output_throughput[step - 1][c][k];
-                    }
+                if (step > 0) {
+                    output_throughput[step][c][k] *=
+                        output_throughput[step - 1][c][k];
                 }
 
                 // * Compute reflection ray for the following step
-                {
-                    float3 effective_position =
-                        origin[k] + output_depth[step][c][k] * direction[k];
-                    if (REFLECTION_VALID_NORMAL_MIN_NORM > 0.0f) {
-                        if (length(unnormalized_normal) <
-                            REFLECTION_VALID_NORMAL_MIN_NORM) {
-                            goto forward_pass_end;
-                        }
-                    }
+                float3 effective_position =
+                    origin[k] + output_depth[step][c][k] * direction[k];
+                float3 next_direction = sample_cook_torrance(
+                    effective_normal,
+                    -direction[k],
+                    effective_roughness,
+                    make_float2(rnd(seed), rnd(seed)));
+                output_throughput[step][c][k] *= cook_torrance_weight(
+                    effective_normal,
+                    -direction[k],
+                    next_direction,
+                    effective_roughness,
+                    effective_F0);
+                float3 next_origin = effective_position +
+                                     eps_ray_surface_offset * next_direction;
+                reflected_origin = next_origin;
+                // reflected_origin = effective_position - next_direction *
+                // length(effective_position - tile_origin);
 
-                    float3 next_direction = sample_cook_torrance(
-                        effective_normal,
-                        -direction[k],
-                        effective_roughness,
-                        make_float2(rnd(seed), rnd(seed)));
-                    output_throughput[step][c][k] *= cook_torrance_weight(
-                        effective_normal,
-                        -direction[k],
-                        next_direction,
-                        effective_roughness,
-                        effective_F0);
-                    float3 next_origin =
-                        effective_position + SURFACE_EPS * next_direction;
-                    reflected_origin = next_origin;
-                    // reflected_origin = effective_position - next_direction *
-                    // length(effective_position - tile_origin);
+                origin[k] = next_origin;
+                direction[k] = next_direction;
+                tile_origin = next_origin;       // tmp
+                tile_direction = next_direction; // tmp
 
-                    origin[k] = next_origin;
-                    direction[k] = next_direction;
-                    tile_origin = next_origin;       // tmp
-                    tile_direction = next_direction; // tmp
-
-                    params.output_ray_origin[pixel_id + num_pixels * step] =
-                        origin[k];
-                    params.output_ray_direction[pixel_id + num_pixels * step] =
-                        direction[k];
-                }
+                params.output_ray_origin[pixel_id + num_pixels * step] =
+                    origin[k];
+                params.output_ray_direction[pixel_id + num_pixels * step] =
+                    direction[k];
             }
 #endif
     }
@@ -643,14 +636,16 @@ forward_pass_end:
         if (num_hits[step] > 0) {
 
 #if ROUGHNESS_DOWNWEIGHT_GRAD == true
-            float roughness_weight = powf(
+            float roughness_downweighting = powf(
                 1.0f - output_roughness[max(step - 1, 0)][0][0],
                 ROUGHNESS_DOWNWEIGHT_GRAD_POWER);
 #else
-            float roughness_weight = 1.0f;
+            float roughness_downweighting = 1.0f;
 #endif
             float extra_bounce_weight =
                 powf(EXTRA_BOUNCE_WEIGHT, float(max(step - 1, 0)));
+            float loss_modulation =
+                roughness_downweighting * extra_bounce_weight;
 
             backward_pass(
                 step,
@@ -694,7 +689,7 @@ forward_pass_end:
                 target_f0,
                 target_roughness,
                 error,
-                roughness_weight * extra_bounce_weight,
+                loss_modulation,
                 step == 0 ? params.diffuse_loss_weight
                           : params.glossy_loss_weight,
                 dL_dray_origin_next_step,

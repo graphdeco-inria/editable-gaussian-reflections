@@ -11,6 +11,7 @@
 // in the roughness scene
 #define ROUGHNESS_DOWNWEIGHT_GRAD true
 #define ROUGHNESS_DOWNWEIGHT_GRAD_POWER 3.0f
+#define EXTRA_BOUNCE_WEIGHT 0.01f
 
 // * Performance flags, safe to ignore
 #define BUFFER_SIZE 16
@@ -28,14 +29,7 @@
 // -----------------------
 
 #define CLAMP_MAX_VALUE 9999999999.0f
-#define EXTRA_BOUNCE_WEIGHT 0.01f
-#define SKIP_BACKFACING_MAX_DIST 0.1f
-#define SKIP_BACKFACING_REFLECTION_VALID_NORMAL_MIN_NORM 0.9f
-#define SURFACE_EPS 0.01f
-#define MIN_ROUGHNESS 0.01f
-#define REFLECTION_VALID_NORMAL_MIN_NORM 0.7f
 #define DETACH_AFTER 9999
 #define TILE_SIZE 1
 #define EPS_SCALE_GRAD 1e-12f
-#define LUT_SIZE 512
 #define NUM_CLUSTERS 1
