@@ -223,17 +223,7 @@ struct Raytracer : torch::CustomClassHolder {
     float m_alpha_threshold = ALPHA_THRESHOLD;
     float m_transmittance_threshold = T_THRESHOLD;
 
-    OptixDenoiser m_denoiser = nullptr;
-    uint32_t m_scratch_size = 0;
-    CUdeviceptr m_intensity = 0;
-    CUdeviceptr m_avgColor = 0;
-    CUdeviceptr m_scratch = 0;
-    CUdeviceptr m_state = 0;
-    uint32_t m_state_size = 0;
-    unsigned int m_overlap = 0;
-    OptixDenoiserParams m_params_denoiser = {};
-    OptixDenoiserGuideLayer m_guideLayer = {};
-    std::vector<OptixDenoiserLayer> m_layers;
+    std::unique_ptr<DenoiserWrapper> denoiser_wrapper;
 
     Tensor m_num_hits_per_pixel;
     Tensor m_num_traversed_per_pixel;
@@ -679,89 +669,9 @@ struct Raytracer : torch::CustomClassHolder {
                 cudaMemcpyHostToDevice));
         }
 
-        init_denoiser();
+        denoiser_wrapper = std::make_unique<DenoiserWrapper>(
+            m_context, m_h_params, m_output_rgb, m_output_normal);
         cudaDeviceSynchronize();
-    }
-
-    void init_denoiser() {
-        {
-            OptixDenoiserOptions options = {};
-            options.guideNormal = 1; // data.normal ? 1 : 0;
-            options.denoiseAlpha = (OptixDenoiserAlphaMode)0; // alphaMode;
-
-            OptixDenoiserModelKind modelKind;
-            modelKind = OPTIX_DENOISER_MODEL_KIND_HDR;
-            OPTIX_CHECK(optixDenoiserCreate(
-                m_context, modelKind, &options, &m_denoiser));
-        }
-
-        //
-        // Allocate device memory for denoiser
-        //
-        {
-            OptixDenoiserSizes denoiser_sizes;
-
-            OPTIX_CHECK(optixDenoiserComputeMemoryResources(
-                m_denoiser,
-                m_width,
-                m_height,
-                // m_tileWidth,
-                // m_tileHeight,
-                &denoiser_sizes));
-
-            m_scratch_size = static_cast<uint32_t>(
-                denoiser_sizes.withoutOverlapScratchSizeInBytes);
-            m_overlap = 0;
-            CUDA_CHECK(cudaMalloc(
-                reinterpret_cast<void **>(&m_avgColor), 3 * sizeof(float)));
-
-            CUDA_CHECK(cudaMalloc(
-                reinterpret_cast<void **>(&m_scratch), m_scratch_size));
-
-            CUDA_CHECK(cudaMalloc(
-                reinterpret_cast<void **>(&m_state),
-                denoiser_sizes.stateSizeInBytes));
-
-            m_state_size =
-                static_cast<uint32_t>(denoiser_sizes.stateSizeInBytes);
-
-            OptixDenoiserLayer layer = {};
-            layer.input = createOptixImage2D(
-                m_width,
-                m_height,
-                reinterpret_cast<CUdeviceptr>(
-                    m_output_rgb.index({MAX_BOUNCES + 1}).data_ptr()));
-            layer.output = createOptixImage2D(
-                m_width,
-                m_height,
-                reinterpret_cast<CUdeviceptr>(
-                    m_output_rgb.index({MAX_BOUNCES + 1}).data_ptr()));
-
-            m_layers.push_back(layer);
-        }
-
-        m_guideLayer.normal = createOptixImage2D(
-            m_width,
-            m_height,
-            reinterpret_cast<CUdeviceptr>(
-                m_output_normal.index({0}).data_ptr()));
-
-        {
-            OPTIX_CHECK(optixDenoiserSetup(
-                m_denoiser,
-                nullptr,  // CUDA stream
-                m_width,  // m_tileWidth + 2 * m_overlap,
-                m_height, // m_tileHeight + 2 * m_overlap,
-                m_state,
-                m_state_size,
-                m_scratch,
-                m_scratch_size));
-
-            m_params_denoiser.hdrIntensity = m_intensity;
-            m_params_denoiser.hdrAverageColor = m_avgColor;
-            m_params_denoiser.blendFactor = 0.0f;
-            m_params_denoiser.temporalModeUsePreviousLayers = 0;
-        }
     }
 
     OptixBuildInput m_blas_input = {};
@@ -1095,19 +1005,7 @@ struct Raytracer : torch::CustomClassHolder {
         m_iteration += 1;
 
         if (!torch::GradMode::is_enabled() && m_denoise.item<bool>()) {
-            OPTIX_CHECK(optixDenoiserInvoke(
-                m_denoiser,
-                nullptr, // CUDA stream
-                &m_params_denoiser,
-                m_state,
-                m_state_size,
-                &m_guideLayer,
-                m_layers.data(),
-                static_cast<unsigned int>(m_layers.size()),
-                0, // input offset X
-                0, // input offset y
-                m_scratch,
-                m_scratch_size));
+            denoiser_wrapper->run();
         }
 
         if (!m_accumulate.item<bool>()) {
