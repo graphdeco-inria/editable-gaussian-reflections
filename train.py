@@ -69,8 +69,6 @@ def training_report(
     cfg: TyroConfig,
     scene,
     raytracer,
-    pipe_params,
-    bg,
     tb_writer,
     iteration,
 ):
@@ -101,7 +99,7 @@ def training_report(
                 diffuse_psnr_test = 0.0
 
                 for idx, viewpoint in enumerate(config["cameras"]):
-                    package = render(viewpoint, raytracer, pipe_params, bg)
+                    package = render(viewpoint, raytracer)
 
                     os.makedirs(
                         tb_writer.log_dir + "/" + f"{config['name']}_view",
@@ -382,7 +380,6 @@ def training_report(
 def main(cfg: TyroConfig):
     model_params = cfg.model_params
     opt_params = cfg.opt_params
-    pipe_params = cfg.pipe_params
 
     # Initialize system state (RNG)
     safe_state(cfg.quiet)
@@ -400,9 +397,6 @@ def main(cfg: TyroConfig):
         )  #!!! Cant release like this, security risk
         gaussians.restore(capture_data, opt_params)
     first_iter += 1
-
-    bg_color = [1, 1, 1] if model_params.white_background else [0, 0, 0]
-    background = torch.tensor(bg_color, dtype=torch.float32, device="cuda")
 
     iter_start = torch.cuda.Event(enable_timing=True)
     iter_end = torch.cuda.Event(enable_timing=True)
@@ -462,14 +456,8 @@ def main(cfg: TyroConfig):
         if "KEYVIEW" in os.environ and random.random() < 0.5:
             viewpoint_cam = keyview
 
-        bg = (
-            torch.rand((3), device="cuda")
-            if opt_params.random_background
-            else background
-        )
-
         torch.cuda.synchronize()  # todo may be needed or not, idk, occasional crash. double check after deadline
-        _ = render(viewpoint_cam, raytracer, pipe_params, bg)
+        _ = render(viewpoint_cam, raytracer)
 
         if opt_params.opacity_reg > 0:
             gaussians._opacity.grad += torch.autograd.grad(
@@ -507,9 +495,7 @@ def main(cfg: TyroConfig):
             # Log and save
             NOW = time.time()
 
-            training_report(
-                cfg, scene, raytracer, pipe_params, bg, tb_writer, iteration
-            )
+            training_report(cfg, scene, raytracer, tb_writer, iteration)
             torch.cuda.synchronize()  # not sure if needed
 
             if iteration % 1000 == 0 or iteration == 1:

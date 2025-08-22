@@ -13,7 +13,6 @@ from types import SimpleNamespace
 
 import torch
 
-from gaussian_tracing.arguments import PipelineParams
 from gaussian_tracing.renderer.gaussian_raytracer import GaussianRaytracer
 from gaussian_tracing.scene.cameras import Camera
 
@@ -22,8 +21,6 @@ from gaussian_tracing.scene.cameras import Camera
 def render(
     camera: Camera,
     raytracer: GaussianRaytracer,
-    pipe_params: PipelineParams,
-    bg_color: torch.Tensor,
     iteration=None,
     edits=None,
     targets_available=True,
@@ -65,8 +62,6 @@ def render(
     with torch.set_grad_enabled(do_backprop):
         raytracer(
             camera,
-            pipe_params,
-            bg_color,
             target=_target,
             target_diffuse=_target_diffuse,
             target_glossy=_target_glossy,

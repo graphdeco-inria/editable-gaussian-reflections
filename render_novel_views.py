@@ -33,12 +33,9 @@ from gaussian_tracing.utils.tonemapping import tonemap
 def render_set(
     cfg,
     cameras,
-    background,
     raytracer,
     save_dir,
 ):
-    pipe_params = cfg.pipe_params
-
     for idx, camera in enumerate(tqdm(cameras, desc="Rendering progress")):
         raytracer.cuda_module.denoise.copy_(not cfg.skip_denoiser)
 
@@ -48,9 +45,9 @@ def render_set(
             raytracer.cuda_module.accumulated_normal.zero_()
             raytracer.cuda_module.accumulated_sample_count.zero_()
             for i in range(cfg.spp):
-                package = render(camera, raytracer, pipe_params, background)
+                package = render(camera, raytracer)
         else:
-            package = render(camera, raytracer, pipe_params, background)
+            package = render(camera, raytracer)
 
         if cfg.supersampling > 1:
             for key, value in package.__dict__.items():
@@ -104,7 +101,6 @@ def main(cfg: TyroConfig):
     gaussians = GaussianModel(cfg)
     scene = Scene(cfg, gaussians, load_iteration=cfg.iteration, shuffle=False)
     views = scene.getTrainCameras()
-    background = torch.tensor([0, 0, 0], dtype=torch.float32, device="cuda")
 
     raytracer = GaussianRaytracer(
         gaussians, views[0].image_width, views[0].image_height
@@ -139,12 +135,13 @@ def main(cfg: TyroConfig):
         camera.T = w2c[:3, 3]
         camera.update()
         cameras.append(camera)
+    if cfg.max_images is not None:
+        cameras = cameras[: cfg.max_images]
 
     save_dir = os.path.join(cfg.model_path, "novel_views", f"ours_{scene.loaded_iter}")
     render_set(
         cfg,
         cameras,
-        background,
         raytracer,
         save_dir,
     )
