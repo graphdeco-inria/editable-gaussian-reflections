@@ -37,27 +37,23 @@ def render_set(
     save_dir,
 ):
     for idx, camera in enumerate(tqdm(cameras, desc="Rendering progress")):
-        raytracer.cuda_module.denoise.copy_(not cfg.skip_denoiser)
-
         if cfg.spp > 1:
             raytracer.cuda_module.accumulate.copy_(True)
             raytracer.cuda_module.accumulated_rgb.zero_()
             raytracer.cuda_module.accumulated_normal.zero_()
             raytracer.cuda_module.accumulated_sample_count.zero_()
             for i in range(cfg.spp):
-                package = render(camera, raytracer)
-        else:
-            package = render(camera, raytracer)
-
-        if cfg.supersampling > 1:
-            for key, value in package.__dict__.items():
-                batched = value.ndim == 4
-                resized = torch.nn.functional.interpolate(
-                    value[None] if not batched else value,
-                    scale_factor=1.0 / cfg.supersampling,
-                    mode="area",
+                package = render(
+                    camera,
+                    raytracer,
+                    denoise=cfg.denoise,
                 )
-                setattr(package, key, resized[0] if not batched else resized)
+        else:
+            package = render(
+                camera,
+                raytracer,
+                denoise=cfg.denoise,
+            )
 
         diffuse_image = tonemap(package.rgb[0]).clamp(0, 1)
         glossy_image = tonemap(package.rgb[1:-1].sum(dim=0)).clamp(0, 1)
@@ -105,8 +101,6 @@ def main(cfg: TyroConfig):
     raytracer = GaussianRaytracer(
         gaussians, views[0].image_width, views[0].image_height
     )
-    if cfg.spp > 1:
-        raytracer.cuda_module.denoise.fill_(False)
 
     # Create spiral path from EnvGS
     camtoworlds_all = []
@@ -149,8 +143,4 @@ def main(cfg: TyroConfig):
 
 if __name__ == "__main__":
     cfg = tyro.cli(TyroConfig)
-
-    # TODO: Remove this custom config modification.
-    cfg.resolution *= cfg.supersampling
-
     main(cfg)

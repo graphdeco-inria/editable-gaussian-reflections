@@ -110,6 +110,8 @@ class GaussianRaytracer:
         """
 
         # *** time lost due to copies: 30s for 30000k iterations (~260k gaussians)
+        if denoise:
+            self.cuda_module.denoise.copy_(denoise)
 
         with torch.no_grad():
             R = (
@@ -171,9 +173,6 @@ class GaussianRaytracer:
         if torch.is_grad_enabled() or force_update_bvh:
             self.cuda_module.update_bvh()
         self.cuda_module.raytrace()
-
-        if denoise:
-            raise NotImplementedError
 
         if torch.is_grad_enabled():
             self._import_param_gradients()

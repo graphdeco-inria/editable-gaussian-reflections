@@ -238,8 +238,6 @@ def render_set(
                 else:
                     blur_sigma = blur_sigma
 
-                raytracer.cuda_module.denoise.copy_(not cfg.skip_denoiser)
-
                 if cfg.max_bounces > -1:
                     raytracer.cuda_module.num_bounces.copy_(cfg.max_bounces)
 
@@ -255,19 +253,14 @@ def render_set(
                         package = render(
                             view,
                             raytracer,
+                            denoise=cfg.denoise,
                         )
                 else:
-                    package = render(view, raytracer)
-
-                if cfg.supersampling > 1:
-                    for key, value in package.__dict__.items():
-                        batched = value.ndim == 4
-                        resized = torch.nn.functional.interpolate(
-                            value[None] if not batched else value,
-                            scale_factor=1.0 / cfg.supersampling,
-                            mode="area",
-                        )
-                        setattr(package, key, resized[0] if not batched else resized)
+                    package = render(
+                        view,
+                        raytracer,
+                        denoise=cfg.denoise,
+                    )
 
                 diffuse_gt_image = tonemap(view.diffuse_image).clamp(0.0, 1.0)
                 glossy_gt_image = tonemap(view.glossy_image).clamp(0.0, 1.0)
@@ -276,43 +269,6 @@ def render_set(
                 roughness_gt_image = view.roughness_image
                 depth_gt_image = view.depth_image.unsqueeze(0)
                 F0_gt_image = view.F0_image
-
-                if cfg.supersampling > 1:
-                    diffuse_gt_image = torch.nn.functional.interpolate(
-                        diffuse_gt_image[None],
-                        scale_factor=1.0 / cfg.supersampling,
-                        mode="area",
-                    )[0]
-                    glossy_gt_image = torch.nn.functional.interpolate(
-                        glossy_gt_image[None],
-                        scale_factor=1.0 / cfg.supersampling,
-                        mode="area",
-                    )[0]
-                    gt_image = torch.nn.functional.interpolate(
-                        gt_image[None],
-                        scale_factor=1.0 / cfg.supersampling,
-                        mode="area",
-                    )[0]
-                    depth_gt_image = torch.nn.functional.interpolate(
-                        depth_gt_image[None],
-                        scale_factor=1.0 / cfg.supersampling,
-                        mode="area",
-                    )[0]
-                    normal_gt_image = torch.nn.functional.interpolate(
-                        normal_gt_image[None],
-                        scale_factor=1.0 / cfg.supersampling,
-                        mode="area",
-                    )[0]
-                    roughness_gt_image = torch.nn.functional.interpolate(
-                        roughness_gt_image[None],
-                        scale_factor=1.0 / cfg.supersampling,
-                        mode="area",
-                    )[0]
-                    F0_gt_image = torch.nn.functional.interpolate(
-                        F0_gt_image[None],
-                        scale_factor=1.0 / cfg.supersampling,
-                        mode="area",
-                    )[0]
 
                 diffuse_image = tonemap(package.rgb[0]).clamp(0, 1)
                 glossy_image = tonemap(package.rgb[1:-1].sum(dim=0)).clamp(0, 1)
@@ -667,9 +623,6 @@ def main(cfg: TyroConfig):
     if "MAKE_MIRROR" in os.environ:
         gaussians._roughness.zero_()
 
-    if cfg.spp > 1:
-        raytracer.cuda_module.denoise.fill_(False)
-
     if cfg.train_views:
         render_set(
             cfg,
@@ -692,8 +645,4 @@ def main(cfg: TyroConfig):
 
 if __name__ == "__main__":
     cfg = tyro.cli(TyroConfig)
-
-    # TODO: Remove this custom config modification.
-    cfg.resolution *= cfg.supersampling
-
     main(cfg)

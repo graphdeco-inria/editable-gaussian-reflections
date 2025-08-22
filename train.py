@@ -99,7 +99,11 @@ def training_report(
                 diffuse_psnr_test = 0.0
 
                 for idx, viewpoint in enumerate(config["cameras"]):
-                    package = render(viewpoint, raytracer)
+                    package = render(
+                        viewpoint,
+                        raytracer,
+                        denoise=cfg.denoise,
+                    )
 
                     os.makedirs(
                         tb_writer.log_dir + "/" + f"{config['name']}_view",
@@ -457,7 +461,11 @@ def main(cfg: TyroConfig):
             viewpoint_cam = keyview
 
         torch.cuda.synchronize()  # todo may be needed or not, idk, occasional crash. double check after deadline
-        _ = render(viewpoint_cam, raytracer)
+        _ = render(
+            viewpoint_cam,
+            raytracer,
+            denoise=cfg.denoise,
+        )
 
         if opt_params.opacity_reg > 0:
             gaussians._opacity.grad += torch.autograd.grad(

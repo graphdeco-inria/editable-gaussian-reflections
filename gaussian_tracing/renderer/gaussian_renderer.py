@@ -21,8 +21,6 @@ from gaussian_tracing.scene.cameras import Camera
 def render(
     camera: Camera,
     raytracer: GaussianRaytracer,
-    iteration=None,
-    edits=None,
     targets_available=True,
     force_update_bvh=False,
     denoise=False,

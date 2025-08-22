@@ -1069,7 +1069,7 @@ struct Raytracer : torch::CustomClassHolder {
     }
 
     Tensor m_denoise =
-        torch::tensor({true}, torch::dtype(torch::kBool).device(torch::kCUDA));
+        torch::tensor({false}, torch::dtype(torch::kBool).device(torch::kCUDA));
     Tensor m_accumulate =
         torch::tensor({false}, torch::dtype(torch::kBool).device(torch::kCUDA));
     Tensor m_denoise_glossy =
