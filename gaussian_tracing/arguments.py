@@ -247,12 +247,10 @@ class TyroConfig:
     max_bounces: int = 2
     # Samples per pixel
     spp: int = 128
-    # Supersampling
-    supersampling: int = 1
     # Use train views
     train_views: bool = False
-    # Skip denoiser
-    skip_denoiser: bool = False
+    # Denoise
+    denoise: bool = True
     # Rendering modes
     modes: list[str] = field(
         default_factory=lambda: ["regular", "env_rot_1", "env_move_1", "env_move_2"]

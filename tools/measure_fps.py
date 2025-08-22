@@ -1,6 +1,7 @@
 import os
-import tyro
+
 import torch
+import tyro
 from tqdm import tqdm
 
 from gaussian_tracing.arguments import (
@@ -13,7 +14,7 @@ from gaussian_tracing.utils.general_utils import safe_state
 
 @torch.no_grad()
 def render_set(
-    model_path,
+    cfg,
     views,
     raytracer,
 ):
@@ -22,16 +23,22 @@ def render_set(
 
     start_event.record()
     for view in tqdm(views, desc="Rendering progress"):
-        _ = render(view, raytracer, force_update_bvh=False, targets_available=False)
+        _ = render(
+            view,
+            raytracer,
+            force_update_bvh=False,
+            targets_available=False,
+            denoise=cfg.denoise,
+        )
     end_event.record()
-    
+
     torch.cuda.synchronize()
     elapsed_ms = start_event.elapsed_time(end_event)
     elapsed_sec = elapsed_ms / 1000.0
     fps = len(views) / elapsed_sec
     print(f"{fps:.2f} FPS")
 
-    with open(os.path.join(model_path, "fps.txt"), "w") as f:
+    with open(os.path.join(cfg.model_path, "fps.txt"), "w") as f:
         f.write(f"{fps:.2f}\n")
 
 
@@ -50,10 +57,11 @@ def main(cfg: TyroConfig):
     # Run twice. First run is always slow.
     for _ in range(2):
         render_set(
-            cfg.model_path,
+            cfg,
             views,
             raytracer,
         )
+
 
 if __name__ == "__main__":
     cfg = tyro.cli(TyroConfig)

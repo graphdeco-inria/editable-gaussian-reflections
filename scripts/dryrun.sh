@@ -11,29 +11,29 @@ OUTPUT_DIR="output/dryrun"
 
 for SCENE in $SCENE_LIST;
 do
-    # python train.py \
-    #     --source_path $SCENE_DIR/$SCENE \
-    #     --model_path $OUTPUT_DIR/$SCENE \
-    #     --resolution $RESOLUTION \
-    #     --eval \
-    #     --max_images 2 \
-    #     --save_iterations 50 \
-    #     --test_iterations 50 \
-    #     --iterations 100
+    python train.py \
+        --source_path $SCENE_DIR/$SCENE \
+        --model_path $OUTPUT_DIR/$SCENE \
+        --resolution $RESOLUTION \
+        --eval \
+        --max_images 2 \
+        --save_iterations 50 \
+        --test_iterations 50 \
+        --iterations 100
 
-    # python render.py \
-    #     --source_path $SCENE_DIR/$SCENE \
-    #     --model_path $OUTPUT_DIR/$SCENE \
-    #     --resolution $RESOLUTION \
-    #     --eval \
-    #     --max_images 2
+    python render.py \
+        --source_path $SCENE_DIR/$SCENE \
+        --model_path $OUTPUT_DIR/$SCENE \
+        --resolution $RESOLUTION \
+        --eval \
+        --max_images 2
 
-    # python render_novel_views.py \
-    #     --source_path $SCENE_DIR/$SCENE \
-    #     --model_path $OUTPUT_DIR/$SCENE \
-    #     --resolution $RESOLUTION \
-    #     --eval \
-    #     --max_images 2
+    python render_novel_views.py \
+        --source_path $SCENE_DIR/$SCENE \
+        --model_path $OUTPUT_DIR/$SCENE \
+        --resolution $RESOLUTION \
+        --eval \
+        --max_images 2
 
     python tools/measure_fps.py \
         --source_path $SCENE_DIR/$SCENE \
