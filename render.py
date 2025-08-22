@@ -38,12 +38,9 @@ def render_set(
     split,
     iteration,
     views,
-    gaussians,
-    background,
     raytracer,
 ):
     model_path = cfg.model_path
-    pipe_params = cfg.pipe_params
 
     for mode in cfg.modes:
         for blur_sigma in cfg.blur_sigmas:
@@ -258,11 +255,9 @@ def render_set(
                         package = render(
                             view,
                             raytracer,
-                            pipe_params,
-                            background,
                         )
                 else:
-                    package = render(view, raytracer, pipe_params, background)
+                    package = render(view, raytracer)
 
                 if cfg.supersampling > 1:
                     for key, value in package.__dict__.items():
@@ -664,8 +659,6 @@ def main(cfg: TyroConfig):
         )
         gaussians._features_dc[mask] = torch.tensor([1.0, 0.0, 0.0], device="cuda")
 
-    background = torch.tensor([0, 0, 0], dtype=torch.float32, device="cuda")
-
     viewpoint_stack = scene.getTrainCameras().copy()
     raytracer = GaussianRaytracer(
         gaussians, viewpoint_stack[0].image_width, viewpoint_stack[0].image_height
@@ -684,8 +677,6 @@ def main(cfg: TyroConfig):
             "train",
             scene.loaded_iter,
             scene.getTrainCameras(),
-            gaussians,
-            background,
             raytracer,
         )
     else:
@@ -695,8 +686,6 @@ def main(cfg: TyroConfig):
             "test",
             scene.loaded_iter,
             scene.getTestCameras(),
-            gaussians,
-            background,
             raytracer,
         )
 

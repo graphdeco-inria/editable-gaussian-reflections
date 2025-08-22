@@ -15,7 +15,6 @@ import numpy as np
 import torch
 
 from gaussian_tracing import make_raytracer
-from gaussian_tracing.arguments import PipelineParams
 from gaussian_tracing.scene.gaussian_model import GaussianModel
 
 LOADED = False
@@ -96,8 +95,6 @@ class GaussianRaytracer:
     def __call__(
         self,
         viewpoint_camera,
-        pipe_params: PipelineParams,
-        bg_color: torch.Tensor,
         target=None,
         target_diffuse=None,
         target_glossy=None,

@@ -9,7 +9,7 @@ from viewer.widgets.image import TorchImage
 from viewer.widgets.cameras.fps import FPSCamera
 from viewer.widgets.monitor import PerformanceMonitor
 from viewer.widgets.ellipsoid_viewer import EllipsoidViewer
-from gaussian_tracing.scene.tonemapping import *
+from gaussian_tracing.utils.tonemapping import tonemap, untonemap
 import json 
 from argparse import ArgumentParser, Namespace
 from imgui_bundle import imgui_ctx, imgui, imguizmo
@@ -20,6 +20,7 @@ from dataclasses import dataclass
 import dataclasses
 from scipy.spatial.transform import Rotation
 import numpy as np 
+
 
 gizmo = imguizmo.im_guizmo
 Matrix3 = gizmo.Matrix3
@@ -106,8 +107,8 @@ class GaussianViewer(Viewer):
         global GaussianModel
         from scene import GaussianModel
 
-        global PipelineParams, ModelParams
-        from gaussian_tracing.arguments import PipelineParams, ModelParams
+        global ModelParams
+        from gaussian_tracing.arguments import ModelParams
 
         global MiniCam
         from gaussian_tracing.scene.cameras import MiniCam
@@ -128,15 +129,8 @@ class GaussianViewer(Viewer):
             model_params = eval(f.read())
        
         dataset = Dummy()
-        dataset.white_background = False # params["white_background"] == "True"
         dataset.sh_degree = 0
         #dataset.train_test_exp = params["train_test_exp"] == "True"
-
-        pipe = Dummy()
-        pipe.debug = "debug" in model_params
-        pipe.antialiasing = "antialiasing" in model_params
-        pipe.compute_cov3D_python = "compute_cov3D_python" in model_params
-        pipe.convert_SHs_python = "convert_SHs_python" in model_params
         
         gaussians = EditableGaussianModel(model_params)
         ply_path = os.path.join(model_path, "point_cloud", f"iteration_{iter}", "point_cloud.ply")
@@ -149,11 +143,6 @@ class GaussianViewer(Viewer):
         viewer.separate_sh = False
         viewer.gaussians = gaussians
         viewer.dataset = dataset
-        viewer.pipe = pipe
-        
-        bg_color = [1, 1, 1] if dataset.white_background else [0, 0, 0]
-        background = torch.tensor(bg_color, dtype=torch.float32, device="cuda")
-        viewer.background = background
 
         viewer.load_metadata(model_params)
         return viewer
@@ -177,13 +166,11 @@ class GaussianViewer(Viewer):
             self.gaussians.make_editable(self.edits, self.bounding_boxes, model_params.model_path)
 
     @classmethod
-    def from_gaussians(cls, raytracer, dataset, pipe, gaussians, separate_sh, mode: ViewerMode):
+    def from_gaussians(cls, raytracer, dataset, gaussians, separate_sh, mode: ViewerMode):
         viewer = cls(mode, raytracer)
         viewer.dataset = dataset
-        viewer.pipe = pipe
         viewer.gaussians = gaussians
         viewer.separate_sh = separate_sh
-        viewer.background = torch.tensor([0,0,0], dtype=torch.float32, device="cuda")
 
         viewer.load_metadata(gaussians.model_params)
         return viewer
@@ -297,7 +284,7 @@ class GaussianViewer(Viewer):
                                 rgb = self.gaussians._diffuse
                                 rgb *= 0 
                                 rgb[self.gaussians.selections[obj_name].squeeze(1)] += 1
-                                package = render(camera, self.raytracer, self.pipe, self.background, blur_sigma=None, targets_available=False)
+                                package = render(camera, self.raytracer, targets_available=False)
                                 mask_render = package.rgb[0].mean(dim=0).cpu().numpy()
                                 self.selection_masks[obj_name] = mask_render
                                 self.gaussians._diffuse.copy_(rgb_backup)
@@ -328,7 +315,7 @@ class GaussianViewer(Viewer):
                     self.raytracer.cuda_module.denoise.copy_(self.denoise)
                     self.raytracer.cuda_module.num_bounces.copy_(self.max_bounces)
                     self.raytracer.cuda_module.global_scale_factor.copy_(self.scaling_modifier)
-                    package = render(camera, self.raytracer, self.pipe, self.background, blur_sigma=None, targets_available=False, force_update_bvh=self.gaussians.is_dirty)
+                    package = render(camera, self.raytracer, targets_available=False, force_update_bvh=self.gaussians.is_dirty)
                     self.raytracer.cuda_module.accumulate.copy_(bkp_accumulate)
                     self.raytracer.cuda_module.denoise.copy_(bkp_denoise)
                     self.raytracer.cuda_module.num_bounces.copy_(bkp_num_bounces)

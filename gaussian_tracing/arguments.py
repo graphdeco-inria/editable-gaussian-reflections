@@ -115,14 +115,6 @@ class ModelParams:
         self.skip_n_images = 0
 
 
-class PipelineParams:
-    def __init__(self):
-        self.convert_SHs_python = False
-        self.compute_cov3D_python = False
-        self.debug = False
-        self.depth_ratio = 0.0
-
-
 class OptimizationParams:
     def __init__(self):
         self.position_lr_max_steps = 32_000
@@ -204,8 +196,6 @@ class TyroConfig:
     model_params: ModelParams = field(default_factory=lambda: ModelParams())
     # Optimization params
     opt_params: OptimizationParams = field(default_factory=lambda: OptimizationParams())
-    # Pipeline params
-    pipe_params: PipelineParams = field(default_factory=lambda: PipelineParams())
 
     # IP address
     ip: str = "127.0.0.1"
