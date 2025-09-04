@@ -28,14 +28,75 @@ class EditableGaussianModel(GaussianModel):
                 if os.path.exists(saved_selection_path):
                     self.selections[key] = torch.load(saved_selection_path)
                 else:
+
+                    def compute_bbox_mask(bounding_box):
+                        if "cyl" in bounding_box:
+                            min_bound = torch.tensor(bounding_box["min"], device="cuda")
+                            max_bound = torch.tensor(bounding_box["max"], device="cuda")
+
+                            center_xy = 0.5 * (min_bound[[0, 1]] + max_bound[[0, 1]])
+                            half_extent_xy = 0.5 * (
+                                max_bound[[0, 1]] - min_bound[[0, 1]]
+                            )
+                            z_min, z_max = min_bound[2], max_bound[2]
+
+                            xy = self._xyz[:, [0, 1]]
+                            z = self._xyz[:, 2]
+
+                            normalized = (xy - center_xy) / half_extent_xy
+                            inside_ellipse = (normalized**2).sum(dim=-1) <= 1.0
+                            inside_z = (z >= z_min) & (z <= z_max)
+
+                            return inside_ellipse & inside_z
+                        else:
+                            dist1 = self._xyz - (
+                                torch.tensor(bounding_box["min"], device="cuda")
+                            )
+                            dist2 = self._xyz - (
+                                torch.tensor(bounding_box["max"], device="cuda")
+                            )
+                            return (dist1 >= 0).all(dim=-1) & (dist2 <= 0).all(dim=-1)
+
                     bounding_box = self.bounding_boxes[key]
-                    dist1 = self._xyz - (
-                        torch.tensor(bounding_box["min"], device="cuda")
-                    )
-                    dist2 = self._xyz - (
-                        torch.tensor(bounding_box["max"], device="cuda")
-                    )
-                    within_bbox = (dist1 >= 0).all(dim=-1) & (dist2 <= 0).all(dim=-1)
+                    within_bbox = compute_bbox_mask(bounding_box)
+
+                    for prop in ["f0", "roughness", "metalness", "diffuse"]:
+                        if prop in bounding_box:
+                            if "zrange" in bounding_box:
+                                low = torch.tensor(bounding_box["min"], device="cuda")
+                                high = torch.tensor(bounding_box["max"], device="cuda")
+                                dist1 = self._xyz - (
+                                    torch.tensor(
+                                        low + (high - low) * bounding_box["zrange"],
+                                        device="cuda",
+                                    )
+                                )
+                                dist2 = self._xyz - (torch.tensor(high, device="cuda"))
+                                mask = (dist1 >= 0).all(dim=-1) & (dist2 <= 0).all(
+                                    dim=-1
+                                )
+                                within_bbox &= (
+                                    getattr(self, "_" + prop).mean(dim=-1)
+                                    >= bounding_box[prop][0]
+                                ) | mask
+                                within_bbox &= (
+                                    getattr(self, "_" + prop).mean(dim=-1)
+                                    <= bounding_box[prop][1]
+                                ) | mask
+                            else:
+                                within_bbox &= (
+                                    getattr(self, "_" + prop).mean(dim=-1)
+                                    >= bounding_box[prop][0]
+                                )  # | ~mask # being in the mask
+                                within_bbox &= (
+                                    getattr(self, "_" + prop).mean(dim=-1)
+                                    <= bounding_box[prop][1]
+                                )  # | ~mask
+                    if "exclude" in bounding_box:
+                        for exclusion in bounding_box["exclude"]:
+                            within_bbox &= compute_bbox_mask(
+                                self.bounding_boxes[exclusion]
+                            ).logical_not()
                     self.selections[key] = within_bbox.unsqueeze(1)
             self.selections["everything"] = torch.ones(
                 self._xyz.shape[0], 1, device="cuda", dtype=torch.bool
