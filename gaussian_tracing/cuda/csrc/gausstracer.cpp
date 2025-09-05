@@ -33,18 +33,6 @@ float GetEnvironmentVariableOrDefault(
 struct Raytracer : torch::CustomClassHolder {
     float *m_output_transmittances;
 
-    OptixDeviceContext m_context;
-
-    OptixBuildInput m_aabb_input = {};
-
-    CUdeviceptr m_d_aabb_buffer;
-    CUdeviceptr m_unit_bbox;
-
-    uint32_t m_aabb_input_flags[2] = {OPTIX_GEOMETRY_FLAG_NONE};
-    unsigned int m_build_flags =
-        OPTIX_BUILD_FLAG_PREFER_FAST_TRACE |
-        OPTIX_BUILD_FLAG_ALLOW_UPDATE; // OPTIX_BUILD_FLAG_ALLOW_COMPACTION
-
     int m_width;
     int m_height;
 
@@ -223,12 +211,12 @@ struct Raytracer : torch::CustomClassHolder {
     float m_alpha_threshold = ALPHA_THRESHOLD;
     float m_transmittance_threshold = T_THRESHOLD;
 
-    std::unique_ptr<DenoiserWrapper> denoiser_wrapper;
-
     Tensor m_num_hits_per_pixel;
     Tensor m_num_traversed_per_pixel;
 
     std::unique_ptr<PipelineWrapper> pipeline_wrapper;
+    std::unique_ptr<BVHWrapper> bvh_wrapper;
+    std::unique_ptr<DenoiserWrapper> denoiser_wrapper;
 
     Raytracer(
         int64_t image_width, int64_t image_height, int64_t num_gaussians) {
@@ -239,9 +227,6 @@ struct Raytracer : torch::CustomClassHolder {
 
         m_width = image_width;
         m_height = image_height;
-
-        pipeline_wrapper = std::make_unique<PipelineWrapper>();
-        m_context = pipeline_wrapper->context;
 
         // Inititalize gaussian parameters
         m_gaussian_rgb = torch::zeros(
@@ -436,11 +421,6 @@ struct Raytracer : torch::CustomClassHolder {
             {m_height, m_width},
             torch::dtype(torch::kInt32).device(torch::kCUDA));
         m_prev_hit_per_pixel_for_backprop.fill_(999999999);
-
-        // TODO: Use bvh_wrapper
-        build_blas();
-        build_tlas();
-        cudaDeviceSynchronize();
 
         { // Create params object
             m_h_params.image_width = m_width;
@@ -657,39 +637,37 @@ struct Raytracer : torch::CustomClassHolder {
                 reinterpret_cast<int *>(m_num_hits_per_pixel.data_ptr());
             m_h_params.num_traversed_per_pixel =
                 reinterpret_cast<int *>(m_num_traversed_per_pixel.data_ptr());
-
-            // Set TLAS and copy
-            m_h_params.handle = m_tlas_handle;
-            CUDA_CHECK(cudaMalloc(
-                reinterpret_cast<void **>(&m_d_params), sizeof(Params)));
-            CUDA_CHECK(cudaMemcpy(
-                reinterpret_cast<void *>(m_d_params),
-                &m_h_params,
-                sizeof(Params),
-                cudaMemcpyHostToDevice));
         }
 
+        pipeline_wrapper = std::make_unique<PipelineWrapper>();
+        bvh_wrapper = std::make_unique<BVHWrapper>(
+            pipeline_wrapper->context,
+            m_camera_position_world,
+            m_gaussian_means,
+            m_gaussian_scales,
+            m_gaussian_rotations,
+            m_gaussian_opacity,
+            m_gaussian_mask,
+            m_global_scale_factor,
+            m_alpha_threshold,
+            m_exp_power);
         denoiser_wrapper = std::make_unique<DenoiserWrapper>(
-            m_context, m_h_params, m_output_rgb, m_output_normal);
+            pipeline_wrapper->context,
+            m_h_params,
+            m_output_rgb,
+            m_output_normal);
         cudaDeviceSynchronize();
+
+        // Set TLAS and copy
+        m_h_params.handle = bvh_wrapper->tlas_handle;
+        CUDA_CHECK(
+            cudaMalloc(reinterpret_cast<void **>(&m_d_params), sizeof(Params)));
+        CUDA_CHECK(cudaMemcpy(
+            reinterpret_cast<void *>(m_d_params),
+            &m_h_params,
+            sizeof(Params),
+            cudaMemcpyHostToDevice));
     }
-
-    OptixBuildInput m_blas_input = {};
-    OptixBuildInput m_tlas_input = {};
-    OptixTraversableHandle m_blas_handle;
-    OptixTraversableHandle m_tlas_handle;
-
-    Tensor unit_bbox_tensor = torch::tensor(
-        {-1.0, -1.0, -1.0, 1.0, 1.0, 1.0}, torch::device(torch::kCUDA));
-
-    CUdeviceptr m_vert_buffer_ptr;
-    CUdeviceptr m_face_buffer_ptr;
-    CUdeviceptr m_d_tlas_output_buffer;
-    CUdeviceptr m_d_temp_tlas_buffer_sizes;
-    CUdeviceptr m_d_blas_output_buffer;
-    CUdeviceptr m_d_instances;
-
-    OptixAccelBufferSizes m_tlas_buffer_sizes;
 
     void set_global_scale_factor(float scale_factor) {
         m_global_scale_factor[0] = scale_factor;
@@ -814,168 +792,36 @@ struct Raytracer : torch::CustomClassHolder {
     }
 
     void rebuild_bvh() {
-        CUDA_CHECK(cudaFree(reinterpret_cast<void *>(m_d_instances)));
-        CUDA_CHECK(
-            cudaFree(reinterpret_cast<void *>(m_d_temp_tlas_buffer_sizes)));
-        CUDA_CHECK(cudaFree(reinterpret_cast<void *>(m_d_tlas_output_buffer)));
-
-        build_tlas();
-
-        m_h_params.handle = m_tlas_handle;
+        bvh_wrapper->rebuild(
+            m_camera_position_world,
+            m_gaussian_means,
+            m_gaussian_scales,
+            m_gaussian_rotations,
+            m_gaussian_opacity,
+            m_gaussian_mask,
+            m_global_scale_factor,
+            m_alpha_threshold,
+            m_exp_power);
+        m_h_params.handle = bvh_wrapper->tlas_handle;
 
         CUDA_CHECK(cudaMemcpy(
             reinterpret_cast<void *>(m_d_params),
             &m_h_params,
             sizeof(Params),
             cudaMemcpyHostToDevice));
-
-        cudaDeviceSynchronize();
-    }
-
-    void build_blas() {
-        OptixAccelBuildOptions accel_options_blas = {};
-        accel_options_blas.buildFlags = m_build_flags;
-        accel_options_blas.operation = OPTIX_BUILD_OPERATION_BUILD;
-
-        m_d_aabb_buffer =
-            reinterpret_cast<CUdeviceptr>(unit_bbox_tensor.data_ptr());
-        m_blas_input.type = OPTIX_BUILD_INPUT_TYPE_CUSTOM_PRIMITIVES;
-        m_blas_input.customPrimitiveArray.aabbBuffers = &m_d_aabb_buffer;
-        m_blas_input.customPrimitiveArray.numPrimitives = 1;
-        m_blas_input.customPrimitiveArray.flags = m_aabb_input_flags;
-        m_blas_input.customPrimitiveArray.numSbtRecords = 1;
-
-        OptixAccelBufferSizes blas_buffer_sizes;
-        OPTIX_CHECK(optixAccelComputeMemoryUsage(
-            m_context,
-            &accel_options_blas,
-            &m_blas_input,
-            1,
-            &blas_buffer_sizes));
-
-        CUdeviceptr d_temp_blas_buffer_sizes;
-        CUDA_CHECK(cudaMalloc(
-            reinterpret_cast<void **>(&d_temp_blas_buffer_sizes),
-            blas_buffer_sizes.tempSizeInBytes));
-        CUDA_CHECK(cudaMalloc(
-            reinterpret_cast<void **>(&m_d_blas_output_buffer),
-            blas_buffer_sizes.outputSizeInBytes));
-
-        OPTIX_CHECK(optixAccelBuild(
-            m_context,
-            0,
-            &accel_options_blas,
-            &m_blas_input,
-            1,
-            d_temp_blas_buffer_sizes,
-            blas_buffer_sizes.tempSizeInBytes,
-            m_d_blas_output_buffer,
-            blas_buffer_sizes.outputSizeInBytes,
-            &m_blas_handle,
-            nullptr,
-            0));
-
-        CUDA_CHECK(
-            cudaFree(reinterpret_cast<void *>(d_temp_blas_buffer_sizes)));
-    }
-
-    void build_tlas() {
-        auto num_gaussians = m_gaussian_means.sizes()[0];
-
-        CUDA_CHECK(cudaMalloc(
-            reinterpret_cast<void **>(&m_d_instances),
-            sizeof(OptixInstance) * num_gaussians));
-        populateBVH(
-            reinterpret_cast<OptixInstance *>(m_d_instances),
-            m_blas_handle,
-            num_gaussians,
-            reinterpret_cast<float3 *>(m_camera_position_world.data_ptr()),
-            reinterpret_cast<float3 *>(m_gaussian_scales.data_ptr()),
-            reinterpret_cast<float4 *>(m_gaussian_rotations.data_ptr()),
-            reinterpret_cast<float3 *>(m_gaussian_means.data_ptr()),
-            reinterpret_cast<float *>(m_gaussian_opacity.data_ptr()),
-            reinterpret_cast<float *>(m_gaussian_lod_mean.data_ptr()),
-            reinterpret_cast<float *>(m_gaussian_lod_scale.data_ptr()),
-            reinterpret_cast<bool *>(m_gaussian_mask.data_ptr()),
-            m_global_scale_factor[0].item<float>(),
-            m_alpha_threshold,
-            m_exp_power);
-
-        OptixAccelBuildOptions accel_options_tlas = {};
-        accel_options_tlas.buildFlags =
-            m_build_flags | OPTIX_BUILD_FLAG_ALLOW_RANDOM_INSTANCE_ACCESS;
-        accel_options_tlas.operation = OPTIX_BUILD_OPERATION_BUILD;
-
-        m_tlas_input.type = OPTIX_BUILD_INPUT_TYPE_INSTANCES;
-        m_tlas_input.instanceArray.instances = m_d_instances;
-        m_tlas_input.instanceArray.numInstances = num_gaussians;
-
-        OPTIX_CHECK(optixAccelComputeMemoryUsage(
-            m_context,
-            &accel_options_tlas,
-            &m_tlas_input,
-            1,
-            &m_tlas_buffer_sizes));
-
-        CUDA_CHECK(cudaMalloc(
-            reinterpret_cast<void **>(&m_d_temp_tlas_buffer_sizes),
-            m_tlas_buffer_sizes.tempSizeInBytes));
-        CUDA_CHECK(cudaMalloc(
-            reinterpret_cast<void **>(&m_d_tlas_output_buffer),
-            m_tlas_buffer_sizes.outputSizeInBytes));
-
-        OPTIX_CHECK(optixAccelBuild(
-            m_context,
-            0,
-            &accel_options_tlas,
-            &m_tlas_input,
-            1,
-            m_d_temp_tlas_buffer_sizes,
-            m_tlas_buffer_sizes.tempSizeInBytes,
-            m_d_tlas_output_buffer,
-            m_tlas_buffer_sizes.outputSizeInBytes,
-            &m_tlas_handle,
-            nullptr,
-            0));
     }
 
     void update_bvh() {
-        // Update XForms
-        auto num_gaussians = m_gaussian_means.sizes()[0];
-        populateBVH(
-            reinterpret_cast<OptixInstance *>(m_d_instances),
-            m_blas_handle,
-            num_gaussians,
-            reinterpret_cast<float3 *>(m_camera_position_world.data_ptr()),
-            reinterpret_cast<float3 *>(m_gaussian_scales.data_ptr()),
-            reinterpret_cast<float4 *>(m_gaussian_rotations.data_ptr()),
-            reinterpret_cast<float3 *>(m_gaussian_means.data_ptr()),
-            reinterpret_cast<float *>(m_gaussian_opacity.data_ptr()),
-            reinterpret_cast<float *>(m_gaussian_lod_mean.data_ptr()),
-            reinterpret_cast<float *>(m_gaussian_lod_scale.data_ptr()),
-            reinterpret_cast<bool *>(m_gaussian_mask.data_ptr()),
-            m_global_scale_factor[0].item<float>(),
+        bvh_wrapper->update(
+            m_camera_position_world,
+            m_gaussian_means,
+            m_gaussian_scales,
+            m_gaussian_rotations,
+            m_gaussian_opacity,
+            m_gaussian_mask,
+            m_global_scale_factor,
             m_alpha_threshold,
             m_exp_power);
-
-        // Update TLAS
-        OptixAccelBuildOptions accel_options_tlas = {};
-        accel_options_tlas.buildFlags =
-            m_build_flags | OPTIX_BUILD_FLAG_ALLOW_RANDOM_INSTANCE_ACCESS;
-        accel_options_tlas.operation = OPTIX_BUILD_OPERATION_UPDATE;
-        OPTIX_CHECK(optixAccelBuild(
-            m_context,
-            0,
-            &accel_options_tlas,
-            &m_tlas_input,
-            1,
-            m_d_temp_tlas_buffer_sizes,
-            m_tlas_buffer_sizes.tempSizeInBytes,
-            m_d_tlas_output_buffer,
-            m_tlas_buffer_sizes.outputSizeInBytes,
-            &m_tlas_handle,
-            nullptr,
-            0));
     }
 
     Tensor m_denoise =
