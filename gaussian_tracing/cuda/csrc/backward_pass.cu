@@ -1,4 +1,6 @@
 
+#include "buffer_definition.h"
+
 #pragma inline
 __device__ void backward_pass(
     const int step,
@@ -52,6 +54,7 @@ __device__ void backward_pass(
     // * Preload config parameters
     const float alpha_threshold = *params.config.alpha_threshold;
     const float exp_power = *params.config.exp_power;
+    const float eps_scale_grad = *params.config.eps_scale_grad;
 
     float3 backward_prev_gaussian_rgb[TILE_SIZE * TILE_SIZE];
     fill_array(
@@ -352,11 +355,11 @@ __device__ void backward_pass(
 
                 // * Scaling gradient
                 float3 rot_0 = make_float3(local_to_world[0]) /
-                               (scaling * scaling_factor + EPS_SCALE_GRAD);
+                               (scaling * scaling_factor + eps_scale_grad);
                 float3 rot_1 = make_float3(local_to_world[1]) /
-                               (scaling * scaling_factor + EPS_SCALE_GRAD);
+                               (scaling * scaling_factor + eps_scale_grad);
                 float3 rot_2 = make_float3(local_to_world[2]) /
-                               (scaling * scaling_factor + EPS_SCALE_GRAD);
+                               (scaling * scaling_factor + eps_scale_grad);
                 float3 dL_dscale =
                     dL_dl2w_0 * rot_0 + dL_dl2w_1 * rot_1 + dL_dl2w_2 * rot_2;
 

@@ -1,8 +1,12 @@
 #pragma once
 
+#include "buffer_definition.h"
 #include "flags.h"
+
 #include <cuda.h>
+#include <iostream>
 #include <optix.h>
+#include <random>
 
 #include "core/all.h"
 
@@ -11,6 +15,9 @@ struct Params {
     uint32_t image_height;
 
     Config config;
+
+    // PerPixelLinkedList ppll_forward;
+    // PerPixelLinkedList ppll_backward;
 
     OptixTraversableHandle bvh_handle;
 
@@ -191,5 +198,3 @@ struct MissData {
 extern "C" {
 __constant__ Params params;
 }
-
-#define NULL_GAUSSIAN_ID 1U << 30

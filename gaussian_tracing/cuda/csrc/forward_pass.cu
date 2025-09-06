@@ -1,4 +1,3 @@
-#include <math_constants.h>
 
 #pragma inline
 __device__ void forward_pass(
@@ -40,17 +39,14 @@ __device__ void forward_pass(
     float (&remaining_ray_lod)[NUM_CLUSTERS][TILE_SIZE * TILE_SIZE],
     //
     int &num_hits) {
-    float near_plane = *params.camera_znear; // like 0.5 in kitchen scene
-    float far_plane = *params.camera_zfar;   // like 2.5 in kitchen scene
-    // float near_plane = 0.0f;
-    // float far_plane = 999.9f;
+    bool grads_enabled = *params.grads_enabled;
+    float near_plane = *params.camera_znear;
     if (step != 0) {
         near_plane = 0.0f;
     }
+    float far_plane = *params.camera_zfar;
 
     float tmin = near_plane;
-    // float endpoint = -1.0f;
-
     uint32_t full_T_uint[TILE_SIZE * TILE_SIZE];
     fill_array(full_T_uint, TILE_SIZE * TILE_SIZE, __float_as_uint(1.0f));
 
@@ -58,9 +54,15 @@ __device__ void forward_pass(
     uint32_t step_uint = (uint32_t)step;
     uint32_t uint_initial_lod = __float_as_uint(initial_lod);
     uint32_t uint_lod_by_distance = __float_as_uint(lod_by_distance);
+    uint32_t grads_enabled_uint = *params.grads_enabled;
     uint32_t alpha_threshold_uint =
         __float_as_uint(*params.config.alpha_threshold);
     uint32_t exp_power_uint = __float_as_uint(*params.config.exp_power);
+    uint32_t backfacing_max_dist_uint =
+        __float_as_uint(*params.config.backfacing_max_dist);
+    uint32_t backfacing_invalid_normal_threshold_uint =
+        __float_as_uint(*params.config.backfacing_invalid_normal_threshold);
+    uint32_t num_traversed_per_pixel = 0;
     optixTraverse(
         params.bvh_handle,
         tile_origin,
@@ -73,12 +75,14 @@ __device__ void forward_pass(
         0, // SBTOffset
         0, // SBTStride
         0, // missSBTIndex
-        uint_initial_lod,
-        uint_lod_by_distance,
         step_uint,
         full_T_uint[0],
+        grads_enabled_uint,
         alpha_threshold_uint,
-        exp_power_uint);
+        exp_power_uint,
+        backfacing_max_dist_uint,
+        backfacing_invalid_normal_threshold_uint,
+        num_traversed_per_pixel);
     for (int k = 0; k < TILE_SIZE * TILE_SIZE; k++) {
         output_t[k].y = __uint_as_float(full_T_uint[k]);
     }
@@ -107,7 +111,7 @@ __device__ void forward_pass(
 #pragma unroll
             for (int i = BUFFER_SIZE - 1; i > 0; i--) {
                 if (distances[i] < distances[i - 1]) {
-                    // swap i with i-1
+                    // * Swap i with i-1
                     float tmp_dist = distances[i];
                     int tmp_idx = idxes[i];
                     distances[i] = distances[i - 1];
@@ -163,7 +167,7 @@ __device__ void forward_pass(
                     cluster_weights[c][k] += weight;
 
                     // * Store data required for the backward pass
-                    if (*params.grads_enabled) {
+                    if (grads_enabled) {
                         if (k == 0) {
                             new_idx =
                                 atomicAdd(params.total_hits_for_backprop, 1);
@@ -203,7 +207,8 @@ finished_integration:
     params.prev_hit_per_pixel[ray_id] = 999999999u;
 
     for (int k = 0; k < TILE_SIZE * TILE_SIZE; k++) {
-        float normalization = max((1.0f - output_t[k].x), 1e-12);
+        float normalization = max(
+            (1.0f - output_t[k].x), *params.config.eps_forward_normalization);
 
         remaining_rgb[k][0] = output_rgb[k] / normalization;
         remaining_position[k][0] = output_position[k][0] / normalization;
