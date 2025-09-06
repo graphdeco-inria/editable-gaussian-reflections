@@ -62,7 +62,7 @@ __device__ void forward_pass(
         __float_as_uint(*params.config.alpha_threshold);
     uint32_t exp_power_uint = __float_as_uint(*params.config.exp_power);
     optixTraverse(
-        params.handle,
+        params.bvh_handle,
         tile_origin,
         tile_direction,
         near_plane, // tmin
@@ -122,6 +122,7 @@ __device__ void forward_pass(
         // * Integrate the values
         tmin = max(tmin, distances[0]);
 
+// * Integrate the batch of gaussians
 #pragma unroll
         for (int i = 0; i < BUFFER_SIZE; i++) {
             float distance = distances[i];
@@ -130,11 +131,7 @@ __device__ void forward_pass(
 
             if (distance < 99.9f) {
                 uint32_t gaussian_id = params.all_gaussian_ids[idxes[i]];
-                // float gaussval = params.all_gaussvals[idxes[i]];
-                // float alpha = params.all_alphas[idxes[i]];
                 float3 gaussian_rgb = params.gaussian_rgb[gaussian_id];
-                // float3 gaussian_position =
-                //     params.gaussian_position[gaussian_id];
                 float3 gaussian_normal = params.gaussian_normal[gaussian_id];
                 float3 gaussian_f0 =
                     clipped_relu_act(params.gaussian_f0[gaussian_id]);

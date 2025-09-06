@@ -105,7 +105,7 @@ class GaussianViewer(Viewer):
         import torch
 
         global GaussianModel
-        from scene import GaussianModel
+        from gaussian_tracing.scene import GaussianModel
 
         global ModelParams
         from gaussian_tracing.arguments import ModelParams
@@ -114,15 +114,15 @@ class GaussianViewer(Viewer):
         from gaussian_tracing.scene.cameras import MiniCam
 
         global render
-        from gaussian_renderer import render
+        from gaussian_tracing.renderer.gaussian_renderer import render
         
         global GaussianRaytracer
-        from gaussian_renderer import GaussianRaytracer
+        from gaussian_tracing.renderer.gaussian_renderer import GaussianRaytracer
 
     @classmethod
     def from_ply(cls, model_path, iter, mode: ViewerMode):
-        from scene import EditableGaussianModel
-        from gaussian_renderer import GaussianRaytracer
+        from gaussian_tracing.scene import EditableGaussianModel
+        from gaussian_tracing.renderer.gaussian_renderer import GaussianRaytracer
 
         # Read configuration
         with open(os.path.join(model_path, "model_params")) as f:
@@ -148,7 +148,7 @@ class GaussianViewer(Viewer):
         return viewer
     
     def load_metadata(self, model_params):
-        from scene import EditableGaussianModel
+        from gaussian_tracing.scene import EditableGaussianModel
 
         source_path = model_params.source_path
         
@@ -236,7 +236,7 @@ class GaussianViewer(Viewer):
         self.update_active_edit()
 
     def step(self):
-        from scene import EditableGaussianModel
+        from gaussian_tracing.scene import EditableGaussianModel
 
         world_to_view = torch.from_numpy(self.camera.to_camera).cuda().transpose(0, 1)
         full_proj_transform = torch.from_numpy(self.camera.full_projection).cuda().transpose(0, 1)

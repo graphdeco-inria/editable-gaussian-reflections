@@ -12,6 +12,8 @@ struct Params {
 
     Config config;
 
+    OptixTraversableHandle bvh_handle;
+
     float *vertical_fov_radians;
     float *camera_znear;
     float *camera_zfar;
@@ -172,8 +174,6 @@ struct Params {
 
     // per-pixel record of the last hit
     uint32_t *__restrict__ prev_hit_per_pixel_for_backprop;
-
-    OptixTraversableHandle handle;
 };
 
 struct HitData {

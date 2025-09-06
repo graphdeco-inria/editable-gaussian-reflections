@@ -81,6 +81,10 @@ class ModelParams:
             self.loss_weight_f0 = 0.0
             self.loss_weight_roughness = 0.0
 
+        self.transmittance_threshold = 0.01
+        self.alpha_threshold = 0.005
+        self.exp_power = 3
+
         # level of detail args below
         self.lod_prob_blur_targets = 1.0
         self.lod_init_scale = 0.005

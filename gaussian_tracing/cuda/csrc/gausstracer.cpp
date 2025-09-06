@@ -31,16 +31,14 @@ float GetEnvironmentVariableOrDefault(
 }
 
 struct Raytracer : torch::CustomClassHolder {
-    float *m_output_transmittances;
+    int width;
+    int height;
 
-    int m_width;
-    int m_height;
+    Params params_on_host;
+    CUdeviceptr params_on_device;
 
     // * Intrusive points are required to expose data to Python
     c10::intrusive_ptr<ConfigDataHolder> config_data;
-
-    Params m_h_params;
-    CUdeviceptr m_d_params;
 
     Tensor m_iteration;
 
@@ -213,18 +211,13 @@ struct Raytracer : torch::CustomClassHolder {
     std::unique_ptr<BVHWrapper> bvh_wrapper;
     std::unique_ptr<DenoiserWrapper> denoiser_wrapper;
 
-    Raytracer(
-        int64_t image_width, int64_t image_height, int64_t num_gaussians) {
+    Raytracer(int64_t width_, int64_t height_, int64_t num_gaussians)
+        : width(width_), height(height_),
+          config_data(c10::make_intrusive<ConfigDataHolder>()) {
         if (num_gaussians <= 0) {
             num_gaussians =
                 1; // default to 1 gaussian to avoid degenerate tensor shapes
         }
-
-        m_width = image_width;
-        m_height = image_height;
-
-        config_data = c10::make_intrusive<ConfigDataHolder>();
-
         // Inititalize gaussian parameters
         m_gaussian_rgb = torch::zeros(
             {num_gaussians, 3},
@@ -306,81 +299,81 @@ struct Raytracer : torch::CustomClassHolder {
 
         // Create output and target buffers
         m_output_rgb = torch::zeros(
-            {MAX_BOUNCES + 2, image_height, image_width, 3},
+            {MAX_BOUNCES + 2, height, width, 3},
             torch::dtype(torch::kFloat32)
                 .device(
                     torch::kCUDA)); // last pass is the sum of all light bounces
         m_accumulated_rgb = torch::zeros(
-            {MAX_BOUNCES + 1, image_height, image_width, 3},
+            {MAX_BOUNCES + 1, height, width, 3},
             torch::dtype(torch::kFloat32).device(torch::kCUDA));
         m_accumulated_normal = torch::zeros(
-            {MAX_BOUNCES + 1, image_height, image_width, 3},
+            {MAX_BOUNCES + 1, height, width, 3},
             torch::dtype(torch::kFloat32).device(torch::kCUDA));
         m_accumulated_depth = torch::zeros(
-            {MAX_BOUNCES + 1, image_height, image_width, 3},
+            {MAX_BOUNCES + 1, height, width, 3},
             torch::dtype(torch::kFloat32).device(torch::kCUDA));
         m_accumulated_f0 = torch::zeros(
-            {MAX_BOUNCES + 1, image_height, image_width, 3},
+            {MAX_BOUNCES + 1, height, width, 3},
             torch::dtype(torch::kFloat32).device(torch::kCUDA));
         m_accumulated_roughness = torch::zeros(
-            {MAX_BOUNCES + 1, image_height, image_width, 3},
+            {MAX_BOUNCES + 1, height, width, 3},
             torch::dtype(torch::kFloat32).device(torch::kCUDA));
 
         m_accumulated_sample_count =
             torch::zeros({1}, torch::dtype(torch::kInt32).device(torch::kCUDA));
         m_target_rgb = torch::zeros(
-            {image_height, image_width, 3},
+            {height, width, 3},
             torch::dtype(torch::kFloat32).device(torch::kCUDA));
         m_output_t = torch::zeros(
-            {MAX_BOUNCES + 1, image_height, image_width, 2},
+            {MAX_BOUNCES + 1, height, width, 2},
             torch::dtype(torch::kFloat32).device(torch::kCUDA));
         m_target_diffuse = torch::zeros(
-            {image_height, image_width, 3},
+            {height, width, 3},
             torch::dtype(torch::kFloat32).device(torch::kCUDA));
         m_target_glossy = torch::zeros(
-            {image_height, image_width, 3},
+            {height, width, 3},
             torch::dtype(torch::kFloat32).device(torch::kCUDA));
         m_output_ray_origin = torch::zeros(
-            {MAX_BOUNCES + 1, image_height, image_width, 3},
+            {MAX_BOUNCES + 1, height, width, 3},
             torch::dtype(torch::kFloat32).device(torch::kCUDA));
         m_output_ray_direction = torch::zeros(
-            {MAX_BOUNCES + 1, image_height, image_width, 3},
+            {MAX_BOUNCES + 1, height, width, 3},
             torch::dtype(torch::kFloat32).device(torch::kCUDA));
         m_output_position = torch::zeros(
-            {MAX_BOUNCES + 1, image_height, image_width, 3},
+            {MAX_BOUNCES + 1, height, width, 3},
             torch::dtype(torch::kFloat32).device(torch::kCUDA));
         m_target_position = torch::zeros(
-            {image_height, image_width, 3},
+            {height, width, 3},
             torch::dtype(torch::kFloat32).device(torch::kCUDA));
         m_output_depth = torch::zeros(
-            {MAX_BOUNCES + 1, image_height, image_width, 1},
+            {MAX_BOUNCES + 1, height, width, 1},
             torch::dtype(torch::kFloat32).device(torch::kCUDA));
         m_target_depth = torch::zeros(
-            {image_height, image_width, 1},
+            {height, width, 1},
             torch::dtype(torch::kFloat32).device(torch::kCUDA));
         m_output_normal = torch::zeros(
-            {MAX_BOUNCES + 1, image_height, image_width, 3},
+            {MAX_BOUNCES + 1, height, width, 3},
             torch::dtype(torch::kFloat32).device(torch::kCUDA));
         m_target_normal = torch::zeros(
-            {image_height, image_width, 3},
+            {height, width, 3},
             torch::dtype(torch::kFloat32).device(torch::kCUDA));
         m_output_f0 = torch::zeros(
-            {MAX_BOUNCES + 1, image_height, image_width, 3},
+            {MAX_BOUNCES + 1, height, width, 3},
             torch::dtype(torch::kFloat32).device(torch::kCUDA));
         m_target_f0 = torch::zeros(
-            {image_height, image_width, 3},
+            {height, width, 3},
             torch::dtype(torch::kFloat32).device(torch::kCUDA));
         m_output_roughness = torch::zeros(
-            {MAX_BOUNCES + 1, image_height, image_width, 1},
+            {MAX_BOUNCES + 1, height, width, 1},
             torch::dtype(torch::kFloat32).device(torch::kCUDA));
         m_target_roughness = torch::zeros(
-            {image_height, image_width, 1},
+            {height, width, 1},
             torch::dtype(torch::kFloat32).device(torch::kCUDA));
         m_output_brdf = torch::zeros(
-            {MAX_BOUNCES + 1, image_height, image_width, 3},
+            {MAX_BOUNCES + 1, height, width, 3},
             torch::dtype(torch::kFloat32).device(torch::kCUDA));
         m_output_incident_radiance = torch::zeros(
-            {MAX_BOUNCES + 1, image_height, image_width, 3},
+            {MAX_BOUNCES + 1, height, width, 3},
             torch::dtype(torch::kFloat32).device(torch::kCUDA));
 
         m_iteration =
@@ -388,246 +381,239 @@ struct Raytracer : torch::CustomClassHolder {
         m_random_seeds = torch::randint(
             0,
             1000000000,
-            {image_height, image_width, 1},
+            {height, width, 1},
             torch::dtype(torch::kInt32).device(torch::kCUDA));
 
         m_t_maxes = torch::zeros(
-            {m_height, m_width},
+            {height, width},
             torch::dtype(torch::kFloat32).device(torch::kCUDA));
         m_t_maxes.fill_(100000.0);
 
         m_t_mins = torch::zeros(
-            {m_height, m_width},
+            {height, width},
             torch::dtype(torch::kFloat32).device(torch::kCUDA));
         m_t_mins.fill_(0.0);
 
         m_num_hits_per_pixel = torch::zeros(
-            {m_height, m_width},
-            torch::dtype(torch::kInt32).device(torch::kCUDA));
+            {height, width}, torch::dtype(torch::kInt32).device(torch::kCUDA));
         m_num_traversed_per_pixel = torch::zeros(
-            {m_height, m_width},
-            torch::dtype(torch::kInt32).device(torch::kCUDA));
+            {height, width}, torch::dtype(torch::kInt32).device(torch::kCUDA));
         m_prev_hit_per_pixel = torch::zeros(
-            {m_height, m_width},
-            torch::dtype(torch::kInt32).device(torch::kCUDA));
+            {height, width}, torch::dtype(torch::kInt32).device(torch::kCUDA));
         m_prev_hit_per_pixel.fill_(999999999);
         m_prev_hit_per_pixel_for_backprop = torch::zeros(
-            {m_height, m_width},
-            torch::dtype(torch::kInt32).device(torch::kCUDA));
+            {height, width}, torch::dtype(torch::kInt32).device(torch::kCUDA));
         m_prev_hit_per_pixel_for_backprop.fill_(999999999);
 
-        { // Create params object
-            m_h_params.image_width = m_width;
-            m_h_params.image_height = m_height;
+        // Create params object
+        params_on_host.image_width = width;
+        params_on_host.image_height = height;
+        params_on_host.config = config_data->reify();
+        set_losses(false);
 
-            // Render settings
-            m_h_params.denoise = reinterpret_cast<bool *>(m_denoise.data_ptr());
-            m_h_params.num_bounces =
-                reinterpret_cast<int *>(m_num_bounces.data_ptr());
+        // Render settings
+        params_on_host.denoise = reinterpret_cast<bool *>(m_denoise.data_ptr());
+        params_on_host.num_bounces =
+            reinterpret_cast<int *>(m_num_bounces.data_ptr());
 
-            // Configuration
-            m_h_params.config = config_data->reify();
-            set_losses(false);
+        // Camera buffers
+        params_on_host.vertical_fov_radians =
+            reinterpret_cast<float *>(m_vertical_fov_radians.data_ptr());
+        params_on_host.camera_znear =
+            reinterpret_cast<float *>(m_camera_znear.data_ptr());
+        params_on_host.camera_zfar =
+            reinterpret_cast<float *>(m_camera_zfar.data_ptr());
+        params_on_host.max_lod_size =
+            reinterpret_cast<float *>(m_max_lod_size.data_ptr());
 
-            // Camera buffers
-            m_h_params.vertical_fov_radians =
-                reinterpret_cast<float *>(m_vertical_fov_radians.data_ptr());
-            m_h_params.camera_znear =
-                reinterpret_cast<float *>(m_camera_znear.data_ptr());
-            m_h_params.camera_zfar =
-                reinterpret_cast<float *>(m_camera_zfar.data_ptr());
-            m_h_params.max_lod_size =
-                reinterpret_cast<float *>(m_max_lod_size.data_ptr());
+        params_on_host.init_blur_sigma =
+            reinterpret_cast<float *>(m_init_blur_sigma.data_ptr());
+        params_on_host.camera_rotation_c2w =
+            reinterpret_cast<float3 *>(m_camera_rotation_c2w.data_ptr());
+        params_on_host.camera_rotation_w2c =
+            reinterpret_cast<float3 *>(m_camera_rotation_w2c.data_ptr());
+        params_on_host.camera_position_world =
+            reinterpret_cast<float3 *>(m_camera_position_world.data_ptr());
 
-            m_h_params.init_blur_sigma =
-                reinterpret_cast<float *>(m_init_blur_sigma.data_ptr());
-            m_h_params.camera_rotation_c2w =
-                reinterpret_cast<float3 *>(m_camera_rotation_c2w.data_ptr());
-            m_h_params.camera_rotation_w2c =
-                reinterpret_cast<float3 *>(m_camera_rotation_w2c.data_ptr());
-            m_h_params.camera_position_world =
-                reinterpret_cast<float3 *>(m_camera_position_world.data_ptr());
+        params_on_host.all_gaussian_ids =
+            reinterpret_cast<uint32_t *>(m_all_gaussian_ids.data_ptr());
+        params_on_host.all_distances =
+            reinterpret_cast<float *>(m_all_distances.data_ptr());
+        // params_on_host.all_half_chord_lengths =
+        // reinterpret_cast<float*>(m_all_half_chord_lengths.data_ptr());
 
-            m_h_params.all_gaussian_ids =
-                reinterpret_cast<uint32_t *>(m_all_gaussian_ids.data_ptr());
-            m_h_params.all_distances =
-                reinterpret_cast<float *>(m_all_distances.data_ptr());
-            // m_h_params.all_half_chord_lengths =
-            // reinterpret_cast<float*>(m_all_half_chord_lengths.data_ptr());
+        params_on_host.all_alphas =
+            reinterpret_cast<float *>(m_all_alphas.data_ptr());
+        params_on_host.all_gaussvals =
+            reinterpret_cast<float *>(m_all_gaussvals.data_ptr());
+        params_on_host.all_local_hits =
+            reinterpret_cast<float3 *>(m_all_local_hits.data_ptr());
 
-            m_h_params.all_alphas =
-                reinterpret_cast<float *>(m_all_alphas.data_ptr());
-            m_h_params.all_gaussvals =
-                reinterpret_cast<float *>(m_all_gaussvals.data_ptr());
-            m_h_params.all_local_hits =
-                reinterpret_cast<float3 *>(m_all_local_hits.data_ptr());
+        params_on_host.all_prev_hits =
+            reinterpret_cast<uint32_t *>(m_all_prev_hits.data_ptr());
+        params_on_host.prev_hit_per_pixel =
+            reinterpret_cast<uint32_t *>(m_prev_hit_per_pixel.data_ptr());
+        params_on_host.total_hits =
+            reinterpret_cast<uint32_t *>(m_total_hits.data_ptr());
 
-            m_h_params.all_prev_hits =
-                reinterpret_cast<uint32_t *>(m_all_prev_hits.data_ptr());
-            m_h_params.prev_hit_per_pixel =
-                reinterpret_cast<uint32_t *>(m_prev_hit_per_pixel.data_ptr());
-            m_h_params.total_hits =
-                reinterpret_cast<uint32_t *>(m_total_hits.data_ptr());
+        params_on_host.all_gaussian_ids_for_backprop =
+            reinterpret_cast<uint32_t *>(
+                m_all_gaussian_ids_for_backprop.data_ptr());
+        params_on_host.all_alphas_for_backprop =
+            reinterpret_cast<float *>(m_all_alphas_for_backprop.data_ptr());
+        params_on_host.all_local_hits_for_backprop = reinterpret_cast<float3 *>(
+            m_all_local_hits_for_backprop.data_ptr());
+        params_on_host.all_Ts_for_backprop =
+            reinterpret_cast<float *>(m_all_Ts_for_backprop.data_ptr());
+        params_on_host.all_distances_for_backprop =
+            reinterpret_cast<float *>(m_all_distances_for_backprop.data_ptr());
+        params_on_host.all_gaussvals_for_backprop =
+            reinterpret_cast<float *>(m_all_gaussvals_for_backprop.data_ptr());
+        params_on_host.all_prev_hits_for_backprop =
+            reinterpret_cast<uint32_t *>(
+                m_all_prev_hits_for_backprop.data_ptr());
+        params_on_host.prev_hit_per_pixel_for_backprop =
+            reinterpret_cast<uint32_t *>(
+                m_prev_hit_per_pixel_for_backprop.data_ptr());
+        params_on_host.total_hits_for_backprop =
+            reinterpret_cast<uint32_t *>(m_total_hits_for_backprop.data_ptr());
 
-            m_h_params.all_gaussian_ids_for_backprop =
-                reinterpret_cast<uint32_t *>(
-                    m_all_gaussian_ids_for_backprop.data_ptr());
-            m_h_params.all_alphas_for_backprop =
-                reinterpret_cast<float *>(m_all_alphas_for_backprop.data_ptr());
-            m_h_params.all_local_hits_for_backprop = reinterpret_cast<float3 *>(
-                m_all_local_hits_for_backprop.data_ptr());
-            m_h_params.all_Ts_for_backprop =
-                reinterpret_cast<float *>(m_all_Ts_for_backprop.data_ptr());
-            m_h_params.all_distances_for_backprop = reinterpret_cast<float *>(
-                m_all_distances_for_backprop.data_ptr());
-            m_h_params.all_gaussvals_for_backprop = reinterpret_cast<float *>(
-                m_all_gaussvals_for_backprop.data_ptr());
-            m_h_params.all_prev_hits_for_backprop =
-                reinterpret_cast<uint32_t *>(
-                    m_all_prev_hits_for_backprop.data_ptr());
-            m_h_params.prev_hit_per_pixel_for_backprop =
-                reinterpret_cast<uint32_t *>(
-                    m_prev_hit_per_pixel_for_backprop.data_ptr());
-            m_h_params.total_hits_for_backprop = reinterpret_cast<uint32_t *>(
-                m_total_hits_for_backprop.data_ptr());
+        m_gaussian_rgb.mutable_grad() = m_dL_drgb;
+        m_gaussian_opacity.mutable_grad() = m_dL_dopacity;
+        m_gaussian_scales.mutable_grad() = m_dL_dscales;
+        m_gaussian_rotations.mutable_grad() = m_dL_drotations;
+        m_gaussian_means.mutable_grad() = m_dL_dmeans;
+        m_gaussian_lod_mean.mutable_grad() = m_dL_dgaussian_lod_mean;
+        m_gaussian_lod_scale.mutable_grad() = m_dL_dgaussian_lod_scale;
+        m_gaussian_position.mutable_grad() = m_dL_dgaussian_position;
+        m_gaussian_normal.mutable_grad() = m_dL_dgaussian_normal;
+        m_gaussian_f0.mutable_grad() = m_dL_dgaussian_f0;
+        m_gaussian_roughness.mutable_grad() = m_dL_dgaussian_roughness;
 
-            m_gaussian_rgb.mutable_grad() = m_dL_drgb;
-            m_gaussian_opacity.mutable_grad() = m_dL_dopacity;
-            m_gaussian_scales.mutable_grad() = m_dL_dscales;
-            m_gaussian_rotations.mutable_grad() = m_dL_drotations;
-            m_gaussian_means.mutable_grad() = m_dL_dmeans;
-            m_gaussian_lod_mean.mutable_grad() = m_dL_dgaussian_lod_mean;
-            m_gaussian_lod_scale.mutable_grad() = m_dL_dgaussian_lod_scale;
-            m_gaussian_position.mutable_grad() = m_dL_dgaussian_position;
-            m_gaussian_normal.mutable_grad() = m_dL_dgaussian_normal;
-            m_gaussian_f0.mutable_grad() = m_dL_dgaussian_f0;
-            m_gaussian_roughness.mutable_grad() = m_dL_dgaussian_roughness;
+        // Gaussian parameters
+        params_on_host.gaussian_rgb =
+            reinterpret_cast<float3 *>(m_gaussian_rgb.data_ptr());
+        params_on_host.dL_drgb =
+            reinterpret_cast<float3 *>(m_dL_drgb.data_ptr());
+        params_on_host.gaussian_opacity =
+            reinterpret_cast<float *>(m_gaussian_opacity.data_ptr());
+        params_on_host.dL_dopacity =
+            reinterpret_cast<float *>(m_dL_dopacity.data_ptr());
+        params_on_host.gaussian_rotations =
+            reinterpret_cast<float4 *>(m_gaussian_rotations.data_ptr());
+        params_on_host.dL_drotations =
+            reinterpret_cast<float4 *>(m_dL_drotations.data_ptr());
+        params_on_host.gaussian_scales =
+            reinterpret_cast<float3 *>(m_gaussian_scales.data_ptr());
+        params_on_host.dL_dscales =
+            reinterpret_cast<float3 *>(m_dL_dscales.data_ptr());
+        params_on_host.gaussian_means =
+            reinterpret_cast<float3 *>(m_gaussian_means.data_ptr());
+        params_on_host.dL_dmeans =
+            reinterpret_cast<float3 *>(m_dL_dmeans.data_ptr());
+        params_on_host.gaussian_lod_mean =
+            reinterpret_cast<float *>(m_gaussian_lod_mean.data_ptr());
+        params_on_host.dL_dgaussian_lod_mean =
+            reinterpret_cast<float *>(m_dL_dgaussian_lod_mean.data_ptr());
+        params_on_host.gaussian_lod_scale =
+            reinterpret_cast<float *>(m_gaussian_lod_scale.data_ptr());
+        params_on_host.dL_dgaussian_lod_scale =
+            reinterpret_cast<float *>(m_dL_dgaussian_lod_scale.data_ptr());
+        params_on_host.gaussian_position =
+            reinterpret_cast<float3 *>(m_gaussian_position.data_ptr());
+        params_on_host.dL_dgaussian_position =
+            reinterpret_cast<float3 *>(m_dL_dgaussian_position.data_ptr());
+        params_on_host.gaussian_normal =
+            reinterpret_cast<float3 *>(m_gaussian_normal.data_ptr());
+        params_on_host.dL_dgaussian_normal =
+            reinterpret_cast<float3 *>(m_dL_dgaussian_normal.data_ptr());
+        params_on_host.gaussian_f0 =
+            reinterpret_cast<float3 *>(m_gaussian_f0.data_ptr());
+        params_on_host.dL_dgaussian_f0 =
+            reinterpret_cast<float3 *>(m_dL_dgaussian_f0.data_ptr());
+        params_on_host.gaussian_roughness =
+            reinterpret_cast<float *>(m_gaussian_roughness.data_ptr());
+        params_on_host.dL_dgaussian_roughness =
+            reinterpret_cast<float *>(m_dL_dgaussian_roughness.data_ptr());
 
-            // Gaussian parameters
-            m_h_params.gaussian_rgb =
-                reinterpret_cast<float3 *>(m_gaussian_rgb.data_ptr());
-            m_h_params.dL_drgb =
-                reinterpret_cast<float3 *>(m_dL_drgb.data_ptr());
-            m_h_params.gaussian_opacity =
-                reinterpret_cast<float *>(m_gaussian_opacity.data_ptr());
-            m_h_params.dL_dopacity =
-                reinterpret_cast<float *>(m_dL_dopacity.data_ptr());
-            m_h_params.gaussian_rotations =
-                reinterpret_cast<float4 *>(m_gaussian_rotations.data_ptr());
-            m_h_params.dL_drotations =
-                reinterpret_cast<float4 *>(m_dL_drotations.data_ptr());
-            m_h_params.gaussian_scales =
-                reinterpret_cast<float3 *>(m_gaussian_scales.data_ptr());
-            m_h_params.dL_dscales =
-                reinterpret_cast<float3 *>(m_dL_dscales.data_ptr());
-            m_h_params.gaussian_means =
-                reinterpret_cast<float3 *>(m_gaussian_means.data_ptr());
-            m_h_params.dL_dmeans =
-                reinterpret_cast<float3 *>(m_dL_dmeans.data_ptr());
-            m_h_params.gaussian_lod_mean =
-                reinterpret_cast<float *>(m_gaussian_lod_mean.data_ptr());
-            m_h_params.dL_dgaussian_lod_mean =
-                reinterpret_cast<float *>(m_dL_dgaussian_lod_mean.data_ptr());
-            m_h_params.gaussian_lod_scale =
-                reinterpret_cast<float *>(m_gaussian_lod_scale.data_ptr());
-            m_h_params.dL_dgaussian_lod_scale =
-                reinterpret_cast<float *>(m_dL_dgaussian_lod_scale.data_ptr());
-            m_h_params.gaussian_position =
-                reinterpret_cast<float3 *>(m_gaussian_position.data_ptr());
-            m_h_params.dL_dgaussian_position =
-                reinterpret_cast<float3 *>(m_dL_dgaussian_position.data_ptr());
-            m_h_params.gaussian_normal =
-                reinterpret_cast<float3 *>(m_gaussian_normal.data_ptr());
-            m_h_params.dL_dgaussian_normal =
-                reinterpret_cast<float3 *>(m_dL_dgaussian_normal.data_ptr());
-            m_h_params.gaussian_f0 =
-                reinterpret_cast<float3 *>(m_gaussian_f0.data_ptr());
-            m_h_params.dL_dgaussian_f0 =
-                reinterpret_cast<float3 *>(m_dL_dgaussian_f0.data_ptr());
-            m_h_params.gaussian_roughness =
-                reinterpret_cast<float *>(m_gaussian_roughness.data_ptr());
-            m_h_params.dL_dgaussian_roughness =
-                reinterpret_cast<float *>(m_dL_dgaussian_roughness.data_ptr());
+        params_on_host.gaussian_total_weight =
+            reinterpret_cast<float *>(m_gaussian_total_weight.data_ptr());
+        params_on_host.densification_gradient_diffuse =
+            reinterpret_cast<float3 *>(
+                m_densification_gradient_diffuse.data_ptr());
+        params_on_host.densification_gradient_glossy =
+            reinterpret_cast<float3 *>(
+                m_densification_gradient_glossy.data_ptr());
 
-            m_h_params.gaussian_total_weight =
-                reinterpret_cast<float *>(m_gaussian_total_weight.data_ptr());
-            m_h_params.densification_gradient_diffuse =
-                reinterpret_cast<float3 *>(
-                    m_densification_gradient_diffuse.data_ptr());
-            m_h_params.densification_gradient_glossy =
-                reinterpret_cast<float3 *>(
-                    m_densification_gradient_glossy.data_ptr());
+        // Output and target buffers
+        params_on_host.output_rgb =
+            reinterpret_cast<float3 *>(m_output_rgb.data_ptr());
+        params_on_host.accumulated_rgb =
+            reinterpret_cast<float3 *>(m_accumulated_rgb.data_ptr());
+        params_on_host.accumulated_normal =
+            reinterpret_cast<float3 *>(m_accumulated_normal.data_ptr());
+        params_on_host.accumulated_depth =
+            reinterpret_cast<float *>(m_accumulated_depth.data_ptr());
+        params_on_host.accumulated_f0 =
+            reinterpret_cast<float3 *>(m_accumulated_f0.data_ptr());
+        params_on_host.accumulated_roughness =
+            reinterpret_cast<float *>(m_accumulated_roughness.data_ptr());
 
-            // Output and target buffers
-            m_h_params.output_rgb =
-                reinterpret_cast<float3 *>(m_output_rgb.data_ptr());
-            m_h_params.accumulated_rgb =
-                reinterpret_cast<float3 *>(m_accumulated_rgb.data_ptr());
-            m_h_params.accumulated_normal =
-                reinterpret_cast<float3 *>(m_accumulated_normal.data_ptr());
-            m_h_params.accumulated_depth =
-                reinterpret_cast<float *>(m_accumulated_depth.data_ptr());
-            m_h_params.accumulated_f0 =
-                reinterpret_cast<float3 *>(m_accumulated_f0.data_ptr());
-            m_h_params.accumulated_roughness =
-                reinterpret_cast<float *>(m_accumulated_roughness.data_ptr());
+        params_on_host.accumulated_sample_count =
+            reinterpret_cast<int *>(m_accumulated_sample_count.data_ptr());
+        params_on_host.target_rgb =
+            reinterpret_cast<float3 *>(m_target_rgb.data_ptr());
+        params_on_host.output_t =
+            reinterpret_cast<float2 *>(m_output_t.data_ptr());
+        params_on_host.target_diffuse =
+            reinterpret_cast<float3 *>(m_target_diffuse.data_ptr());
+        params_on_host.target_glossy =
+            reinterpret_cast<float3 *>(m_target_glossy.data_ptr());
+        params_on_host.output_ray_origin =
+            reinterpret_cast<float3 *>(m_output_ray_origin.data_ptr());
+        params_on_host.output_ray_direction =
+            reinterpret_cast<float3 *>(m_output_ray_direction.data_ptr());
+        params_on_host.output_incident_radiance =
+            reinterpret_cast<float3 *>(m_output_incident_radiance.data_ptr());
+        params_on_host.output_position =
+            reinterpret_cast<float3 *>(m_output_position.data_ptr());
+        params_on_host.target_position =
+            reinterpret_cast<float3 *>(m_target_position.data_ptr());
+        params_on_host.output_depth =
+            reinterpret_cast<float *>(m_output_depth.data_ptr());
+        params_on_host.target_depth =
+            reinterpret_cast<float *>(m_target_depth.data_ptr());
+        params_on_host.output_normal =
+            reinterpret_cast<float3 *>(m_output_normal.data_ptr());
+        params_on_host.target_normal =
+            reinterpret_cast<float3 *>(m_target_normal.data_ptr());
+        params_on_host.output_f0 =
+            reinterpret_cast<float3 *>(m_output_f0.data_ptr());
+        params_on_host.target_f0 =
+            reinterpret_cast<float3 *>(m_target_f0.data_ptr());
+        params_on_host.output_roughness =
+            reinterpret_cast<float *>(m_output_roughness.data_ptr());
+        params_on_host.target_roughness =
+            reinterpret_cast<float *>(m_target_roughness.data_ptr());
+        params_on_host.output_brdf =
+            reinterpret_cast<float3 *>(m_output_brdf.data_ptr());
 
-            m_h_params.accumulated_sample_count =
-                reinterpret_cast<int *>(m_accumulated_sample_count.data_ptr());
-            m_h_params.target_rgb =
-                reinterpret_cast<float3 *>(m_target_rgb.data_ptr());
-            m_h_params.output_t =
-                reinterpret_cast<float2 *>(m_output_t.data_ptr());
-            m_h_params.target_diffuse =
-                reinterpret_cast<float3 *>(m_target_diffuse.data_ptr());
-            m_h_params.target_glossy =
-                reinterpret_cast<float3 *>(m_target_glossy.data_ptr());
-            m_h_params.output_ray_origin =
-                reinterpret_cast<float3 *>(m_output_ray_origin.data_ptr());
-            m_h_params.output_ray_direction =
-                reinterpret_cast<float3 *>(m_output_ray_direction.data_ptr());
-            m_h_params.output_incident_radiance = reinterpret_cast<float3 *>(
-                m_output_incident_radiance.data_ptr());
-            m_h_params.output_position =
-                reinterpret_cast<float3 *>(m_output_position.data_ptr());
-            m_h_params.target_position =
-                reinterpret_cast<float3 *>(m_target_position.data_ptr());
-            m_h_params.output_depth =
-                reinterpret_cast<float *>(m_output_depth.data_ptr());
-            m_h_params.target_depth =
-                reinterpret_cast<float *>(m_target_depth.data_ptr());
-            m_h_params.output_normal =
-                reinterpret_cast<float3 *>(m_output_normal.data_ptr());
-            m_h_params.target_normal =
-                reinterpret_cast<float3 *>(m_target_normal.data_ptr());
-            m_h_params.output_f0 =
-                reinterpret_cast<float3 *>(m_output_f0.data_ptr());
-            m_h_params.target_f0 =
-                reinterpret_cast<float3 *>(m_target_f0.data_ptr());
-            m_h_params.output_roughness =
-                reinterpret_cast<float *>(m_output_roughness.data_ptr());
-            m_h_params.target_roughness =
-                reinterpret_cast<float *>(m_target_roughness.data_ptr());
-            m_h_params.output_brdf =
-                reinterpret_cast<float3 *>(m_output_brdf.data_ptr());
-
-            // Other buffers
-            m_h_params.t_maxes =
-                reinterpret_cast<float *>(m_t_maxes.data_ptr());
-            m_h_params.t_mins = reinterpret_cast<float *>(m_t_mins.data_ptr());
-            m_h_params.random_seeds =
-                reinterpret_cast<uint32_t *>(m_random_seeds.data_ptr());
-            m_h_params.iteration =
-                reinterpret_cast<int *>(m_iteration.data_ptr());
-            m_h_params.grads_enabled =
-                reinterpret_cast<bool *>(m_grads_enabled.data_ptr());
-            m_h_params.cheap_approx =
-                reinterpret_cast<bool *>(m_cheap_approx.data_ptr());
-            m_h_params.num_hits_per_pixel =
-                reinterpret_cast<int *>(m_num_hits_per_pixel.data_ptr());
-            m_h_params.num_traversed_per_pixel =
-                reinterpret_cast<int *>(m_num_traversed_per_pixel.data_ptr());
-        }
+        // Other buffers
+        params_on_host.t_maxes =
+            reinterpret_cast<float *>(m_t_maxes.data_ptr());
+        params_on_host.t_mins = reinterpret_cast<float *>(m_t_mins.data_ptr());
+        params_on_host.random_seeds =
+            reinterpret_cast<uint32_t *>(m_random_seeds.data_ptr());
+        params_on_host.iteration =
+            reinterpret_cast<int *>(m_iteration.data_ptr());
+        params_on_host.grads_enabled =
+            reinterpret_cast<bool *>(m_grads_enabled.data_ptr());
+        params_on_host.cheap_approx =
+            reinterpret_cast<bool *>(m_cheap_approx.data_ptr());
+        params_on_host.num_hits_per_pixel =
+            reinterpret_cast<int *>(m_num_hits_per_pixel.data_ptr());
+        params_on_host.num_traversed_per_pixel =
+            reinterpret_cast<int *>(m_num_traversed_per_pixel.data_ptr());
 
         pipeline_wrapper = std::make_unique<PipelineWrapper>();
         bvh_wrapper = std::make_unique<BVHWrapper>(
@@ -639,169 +625,21 @@ struct Raytracer : torch::CustomClassHolder {
             *config_data);
         denoiser_wrapper = std::make_unique<DenoiserWrapper>(
             pipeline_wrapper->context,
-            m_h_params,
+            params_on_host,
             m_output_rgb,
             m_output_normal);
         cudaDeviceSynchronize();
 
-        // Set TLAS and copy
-        m_h_params.handle = bvh_wrapper->tlas_handle;
-        CUDA_CHECK(
-            cudaMalloc(reinterpret_cast<void **>(&m_d_params), sizeof(Params)));
+        // * Transfer params to device
+        params_on_host.bvh_handle = bvh_wrapper->tlas_handle;
+        CUDA_CHECK(cudaMalloc(
+            reinterpret_cast<void **>(&params_on_device), sizeof(Params)));
         CUDA_CHECK(cudaMemcpy(
-            reinterpret_cast<void *>(m_d_params),
-            &m_h_params,
+            reinterpret_cast<void *>(params_on_device),
+            &params_on_host,
             sizeof(Params),
             cudaMemcpyHostToDevice));
     }
-
-    void set_losses(bool updateParams = true) {
-        m_h_params.diffuse_loss_weight =
-            GetEnvironmentVariableOrDefault("DIFFUSE_LOSS_WEIGHT", 1.0f);
-        m_h_params.glossy_loss_weight =
-            GetEnvironmentVariableOrDefault("GLOSSY_LOSS_WEIGHT", 1.0f);
-        m_h_params.normal_loss_weight =
-            GetEnvironmentVariableOrDefault("NORMAL_LOSS_WEIGHT", 1.0f);
-        m_h_params.position_loss_weight =
-            GetEnvironmentVariableOrDefault("POSITION_LOSS_WEIGHT", 1.0f);
-        m_h_params.f0_loss_weight =
-            GetEnvironmentVariableOrDefault("F0_LOSS_WEIGHT", 1.0f);
-        m_h_params.roughness_loss_weight =
-            GetEnvironmentVariableOrDefault("ROUGHNESS_LOSS_WEIGHT", 1.0f);
-
-        printf("diffuse_loss_weight: %f\n", m_h_params.diffuse_loss_weight);
-        printf("glossy_loss_weight: %f\n", m_h_params.glossy_loss_weight);
-        printf("normal_loss_weight: %f\n", m_h_params.normal_loss_weight);
-        printf("position_loss_weight: %f\n", m_h_params.position_loss_weight);
-        printf("f0_loss_weight: %f\n", m_h_params.f0_loss_weight);
-        printf("roughness_loss_weight: %f\n", m_h_params.roughness_loss_weight);
-
-        if (updateParams) {
-            CUDA_CHECK(cudaMemcpy(
-                reinterpret_cast<void *>(m_d_params),
-                &m_h_params,
-                sizeof(Params),
-                cudaMemcpyHostToDevice));
-        }
-    }
-
-    void resize(int64_t num_new_gaussians) {
-        printf("Resizing to %ld\n", num_new_gaussians);
-        m_gaussian_rgb.resize_({num_new_gaussians, 3});
-        m_dL_drgb.resize_({num_new_gaussians, 3});
-        m_h_params.gaussian_rgb =
-            reinterpret_cast<float3 *>(m_gaussian_rgb.data_ptr());
-        m_h_params.dL_drgb = reinterpret_cast<float3 *>(m_dL_drgb.data_ptr());
-        //
-        m_gaussian_opacity.resize_({num_new_gaussians, 1});
-        m_dL_dopacity.resize_({num_new_gaussians, 1});
-        m_h_params.gaussian_opacity =
-            reinterpret_cast<float *>(m_gaussian_opacity.data_ptr());
-        m_h_params.dL_dopacity =
-            reinterpret_cast<float *>(m_dL_dopacity.data_ptr());
-        //
-        m_gaussian_rotations.resize_({num_new_gaussians, 4});
-        m_dL_drotations.resize_({num_new_gaussians, 4});
-        m_h_params.gaussian_rotations =
-            reinterpret_cast<float4 *>(m_gaussian_rotations.data_ptr());
-        m_h_params.dL_drotations =
-            reinterpret_cast<float4 *>(m_dL_drotations.data_ptr());
-        //
-        m_gaussian_scales.resize_({num_new_gaussians, 3});
-        m_dL_dscales.resize_({num_new_gaussians, 3});
-        m_h_params.gaussian_scales =
-            reinterpret_cast<float3 *>(m_gaussian_scales.data_ptr());
-        m_h_params.dL_dscales =
-            reinterpret_cast<float3 *>(m_dL_dscales.data_ptr());
-        //
-        m_gaussian_means.resize_({num_new_gaussians, 3});
-        m_dL_dmeans.resize_({num_new_gaussians, 3});
-        m_h_params.gaussian_means =
-            reinterpret_cast<float3 *>(m_gaussian_means.data_ptr());
-        m_h_params.dL_dmeans =
-            reinterpret_cast<float3 *>(m_dL_dmeans.data_ptr());
-        //
-        m_gaussian_total_weight.resize_({num_new_gaussians, 1});
-        m_h_params.gaussian_total_weight =
-            reinterpret_cast<float *>(m_gaussian_total_weight.data_ptr());
-        m_densification_gradient_diffuse.resize_({num_new_gaussians, 3});
-        m_h_params.densification_gradient_diffuse = reinterpret_cast<float3 *>(
-            m_densification_gradient_diffuse.data_ptr());
-        m_densification_gradient_glossy.resize_({num_new_gaussians, 3});
-        m_h_params.densification_gradient_glossy = reinterpret_cast<float3 *>(
-            m_densification_gradient_glossy.data_ptr());
-        m_gaussian_lod_mean.resize_({num_new_gaussians, 1});
-        m_dL_dgaussian_lod_mean.resize_({num_new_gaussians, 1});
-        m_h_params.gaussian_lod_mean =
-            reinterpret_cast<float *>(m_gaussian_lod_mean.data_ptr());
-        m_h_params.dL_dgaussian_lod_mean =
-            reinterpret_cast<float *>(m_dL_dgaussian_lod_mean.data_ptr());
-        m_gaussian_lod_scale.resize_({num_new_gaussians, 1});
-        m_dL_dgaussian_lod_scale.resize_({num_new_gaussians, 1});
-        m_h_params.gaussian_lod_scale =
-            reinterpret_cast<float *>(m_gaussian_lod_scale.data_ptr());
-        m_h_params.dL_dgaussian_lod_scale =
-            reinterpret_cast<float *>(m_dL_dgaussian_lod_scale.data_ptr());
-        //
-        m_gaussian_position.resize_({num_new_gaussians, 3});
-        m_dL_dgaussian_position.resize_({num_new_gaussians, 3});
-        m_h_params.gaussian_position =
-            reinterpret_cast<float3 *>(m_gaussian_position.data_ptr());
-        m_h_params.dL_dgaussian_position =
-            reinterpret_cast<float3 *>(m_dL_dgaussian_position.data_ptr());
-        m_gaussian_normal.resize_({num_new_gaussians, 3});
-        m_dL_dgaussian_normal.resize_({num_new_gaussians, 3});
-        m_h_params.gaussian_normal =
-            reinterpret_cast<float3 *>(m_gaussian_normal.data_ptr());
-        m_h_params.dL_dgaussian_normal =
-            reinterpret_cast<float3 *>(m_dL_dgaussian_normal.data_ptr());
-        m_gaussian_f0.resize_({num_new_gaussians, 3});
-        m_dL_dgaussian_f0.resize_({num_new_gaussians, 3});
-        m_h_params.gaussian_f0 =
-            reinterpret_cast<float3 *>(m_gaussian_f0.data_ptr());
-        m_h_params.dL_dgaussian_f0 =
-            reinterpret_cast<float3 *>(m_dL_dgaussian_f0.data_ptr());
-        m_gaussian_roughness.resize_({num_new_gaussians, 1});
-        m_dL_dgaussian_roughness.resize_({num_new_gaussians, 1});
-        m_h_params.gaussian_roughness =
-            reinterpret_cast<float *>(m_gaussian_roughness.data_ptr());
-        m_h_params.dL_dgaussian_roughness =
-            reinterpret_cast<float *>(m_dL_dgaussian_roughness.data_ptr());
-
-        cudaDeviceSynchronize();
-    }
-
-    void rebuild_bvh() {
-        bvh_wrapper->rebuild(
-            m_gaussian_means,
-            m_gaussian_scales,
-            m_gaussian_rotations,
-            m_gaussian_opacity);
-        m_h_params.handle = bvh_wrapper->tlas_handle;
-
-        CUDA_CHECK(cudaMemcpy(
-            reinterpret_cast<void *>(m_d_params),
-            &m_h_params,
-            sizeof(Params),
-            cudaMemcpyHostToDevice));
-    }
-
-    void update_bvh() {
-        bvh_wrapper->update(
-            m_gaussian_means,
-            m_gaussian_scales,
-            m_gaussian_rotations,
-            m_gaussian_opacity);
-    }
-
-    Tensor m_denoise =
-        torch::tensor({false}, torch::dtype(torch::kBool).device(torch::kCUDA));
-    Tensor m_accumulate =
-        torch::tensor({false}, torch::dtype(torch::kBool).device(torch::kCUDA));
-    Tensor m_denoise_glossy =
-        torch::tensor({false}, torch::dtype(torch::kBool).device(torch::kCUDA));
-    Tensor m_num_bounces = torch::tensor(
-        {MAX_BOUNCES}, torch::dtype(torch::kInt32).device(torch::kCUDA));
 
     void raytrace() {
         bool grads_enabled = torch::GradMode::is_enabled();
@@ -814,8 +652,8 @@ struct Raytracer : torch::CustomClassHolder {
         m_prev_hit_per_pixel_for_backprop.fill_(999999999);
         m_total_hits_for_backprop.fill_(0);
 
-        assert(m_d_params != 0);
-        pipeline_wrapper->launch(m_width, m_height, m_d_params);
+        assert(params_on_device != 0);
+        pipeline_wrapper->launch(width, height, params_on_device);
 
         // used to seed the random noise, need to increment every sample
         m_iteration += 1;
@@ -835,6 +673,160 @@ struct Raytracer : torch::CustomClassHolder {
             m_accumulated_sample_count[0] += 1;
         }
     }
+
+    void set_losses(bool updateParams = true) {
+        params_on_host.diffuse_loss_weight =
+            GetEnvironmentVariableOrDefault("DIFFUSE_LOSS_WEIGHT", 1.0f);
+        params_on_host.glossy_loss_weight =
+            GetEnvironmentVariableOrDefault("GLOSSY_LOSS_WEIGHT", 1.0f);
+        params_on_host.normal_loss_weight =
+            GetEnvironmentVariableOrDefault("NORMAL_LOSS_WEIGHT", 1.0f);
+        params_on_host.position_loss_weight =
+            GetEnvironmentVariableOrDefault("POSITION_LOSS_WEIGHT", 1.0f);
+        params_on_host.f0_loss_weight =
+            GetEnvironmentVariableOrDefault("F0_LOSS_WEIGHT", 1.0f);
+        params_on_host.roughness_loss_weight =
+            GetEnvironmentVariableOrDefault("ROUGHNESS_LOSS_WEIGHT", 1.0f);
+
+        printf("diffuse_loss_weight: %f\n", params_on_host.diffuse_loss_weight);
+        printf("glossy_loss_weight: %f\n", params_on_host.glossy_loss_weight);
+        printf("normal_loss_weight: %f\n", params_on_host.normal_loss_weight);
+        printf(
+            "position_loss_weight: %f\n", params_on_host.position_loss_weight);
+        printf("f0_loss_weight: %f\n", params_on_host.f0_loss_weight);
+        printf(
+            "roughness_loss_weight: %f\n",
+            params_on_host.roughness_loss_weight);
+
+        if (updateParams) {
+            CUDA_CHECK(cudaMemcpy(
+                reinterpret_cast<void *>(params_on_device),
+                &params_on_host,
+                sizeof(Params),
+                cudaMemcpyHostToDevice));
+        }
+    }
+
+    void rebuild_bvh() {
+        bvh_wrapper->rebuild(
+            m_gaussian_means,
+            m_gaussian_scales,
+            m_gaussian_rotations,
+            m_gaussian_opacity);
+        params_on_host.bvh_handle = bvh_wrapper->tlas_handle;
+
+        CUDA_CHECK(cudaMemcpy(
+            reinterpret_cast<void *>(params_on_device),
+            &params_on_host,
+            sizeof(Params),
+            cudaMemcpyHostToDevice));
+    }
+
+    void update_bvh() {
+        bvh_wrapper->update(
+            m_gaussian_means,
+            m_gaussian_scales,
+            m_gaussian_rotations,
+            m_gaussian_opacity);
+    }
+
+    void resize(int64_t num_new_gaussians) {
+        printf("Resizing to %ld\n", num_new_gaussians);
+        m_gaussian_rgb.resize_({num_new_gaussians, 3});
+        m_dL_drgb.resize_({num_new_gaussians, 3});
+        params_on_host.gaussian_rgb =
+            reinterpret_cast<float3 *>(m_gaussian_rgb.data_ptr());
+        params_on_host.dL_drgb =
+            reinterpret_cast<float3 *>(m_dL_drgb.data_ptr());
+        //
+        m_gaussian_opacity.resize_({num_new_gaussians, 1});
+        m_dL_dopacity.resize_({num_new_gaussians, 1});
+        params_on_host.gaussian_opacity =
+            reinterpret_cast<float *>(m_gaussian_opacity.data_ptr());
+        params_on_host.dL_dopacity =
+            reinterpret_cast<float *>(m_dL_dopacity.data_ptr());
+        //
+        m_gaussian_rotations.resize_({num_new_gaussians, 4});
+        m_dL_drotations.resize_({num_new_gaussians, 4});
+        params_on_host.gaussian_rotations =
+            reinterpret_cast<float4 *>(m_gaussian_rotations.data_ptr());
+        params_on_host.dL_drotations =
+            reinterpret_cast<float4 *>(m_dL_drotations.data_ptr());
+        //
+        m_gaussian_scales.resize_({num_new_gaussians, 3});
+        m_dL_dscales.resize_({num_new_gaussians, 3});
+        params_on_host.gaussian_scales =
+            reinterpret_cast<float3 *>(m_gaussian_scales.data_ptr());
+        params_on_host.dL_dscales =
+            reinterpret_cast<float3 *>(m_dL_dscales.data_ptr());
+        //
+        m_gaussian_means.resize_({num_new_gaussians, 3});
+        m_dL_dmeans.resize_({num_new_gaussians, 3});
+        params_on_host.gaussian_means =
+            reinterpret_cast<float3 *>(m_gaussian_means.data_ptr());
+        params_on_host.dL_dmeans =
+            reinterpret_cast<float3 *>(m_dL_dmeans.data_ptr());
+        //
+        m_gaussian_total_weight.resize_({num_new_gaussians, 1});
+        params_on_host.gaussian_total_weight =
+            reinterpret_cast<float *>(m_gaussian_total_weight.data_ptr());
+        m_densification_gradient_diffuse.resize_({num_new_gaussians, 3});
+        params_on_host.densification_gradient_diffuse =
+            reinterpret_cast<float3 *>(
+                m_densification_gradient_diffuse.data_ptr());
+        m_densification_gradient_glossy.resize_({num_new_gaussians, 3});
+        params_on_host.densification_gradient_glossy =
+            reinterpret_cast<float3 *>(
+                m_densification_gradient_glossy.data_ptr());
+        m_gaussian_lod_mean.resize_({num_new_gaussians, 1});
+        m_dL_dgaussian_lod_mean.resize_({num_new_gaussians, 1});
+        params_on_host.gaussian_lod_mean =
+            reinterpret_cast<float *>(m_gaussian_lod_mean.data_ptr());
+        params_on_host.dL_dgaussian_lod_mean =
+            reinterpret_cast<float *>(m_dL_dgaussian_lod_mean.data_ptr());
+        m_gaussian_lod_scale.resize_({num_new_gaussians, 1});
+        m_dL_dgaussian_lod_scale.resize_({num_new_gaussians, 1});
+        params_on_host.gaussian_lod_scale =
+            reinterpret_cast<float *>(m_gaussian_lod_scale.data_ptr());
+        params_on_host.dL_dgaussian_lod_scale =
+            reinterpret_cast<float *>(m_dL_dgaussian_lod_scale.data_ptr());
+        //
+        m_gaussian_position.resize_({num_new_gaussians, 3});
+        m_dL_dgaussian_position.resize_({num_new_gaussians, 3});
+        params_on_host.gaussian_position =
+            reinterpret_cast<float3 *>(m_gaussian_position.data_ptr());
+        params_on_host.dL_dgaussian_position =
+            reinterpret_cast<float3 *>(m_dL_dgaussian_position.data_ptr());
+        m_gaussian_normal.resize_({num_new_gaussians, 3});
+        m_dL_dgaussian_normal.resize_({num_new_gaussians, 3});
+        params_on_host.gaussian_normal =
+            reinterpret_cast<float3 *>(m_gaussian_normal.data_ptr());
+        params_on_host.dL_dgaussian_normal =
+            reinterpret_cast<float3 *>(m_dL_dgaussian_normal.data_ptr());
+        m_gaussian_f0.resize_({num_new_gaussians, 3});
+        m_dL_dgaussian_f0.resize_({num_new_gaussians, 3});
+        params_on_host.gaussian_f0 =
+            reinterpret_cast<float3 *>(m_gaussian_f0.data_ptr());
+        params_on_host.dL_dgaussian_f0 =
+            reinterpret_cast<float3 *>(m_dL_dgaussian_f0.data_ptr());
+        m_gaussian_roughness.resize_({num_new_gaussians, 1});
+        m_dL_dgaussian_roughness.resize_({num_new_gaussians, 1});
+        params_on_host.gaussian_roughness =
+            reinterpret_cast<float *>(m_gaussian_roughness.data_ptr());
+        params_on_host.dL_dgaussian_roughness =
+            reinterpret_cast<float *>(m_dL_dgaussian_roughness.data_ptr());
+
+        cudaDeviceSynchronize();
+    }
+
+    Tensor m_denoise =
+        torch::tensor({false}, torch::dtype(torch::kBool).device(torch::kCUDA));
+    Tensor m_accumulate =
+        torch::tensor({false}, torch::dtype(torch::kBool).device(torch::kCUDA));
+    Tensor m_denoise_glossy =
+        torch::tensor({false}, torch::dtype(torch::kBool).device(torch::kCUDA));
+    Tensor m_num_bounces = torch::tensor(
+        {MAX_BOUNCES}, torch::dtype(torch::kInt32).device(torch::kCUDA));
 
     void set_camera(
         const torch::Tensor
@@ -857,12 +849,17 @@ struct Raytracer : torch::CustomClassHolder {
     static void bind(torch::Library &m) {
         m.class_<Raytracer>("Raytracer")
             .def(torch::init<int64_t, int64_t, int64_t>())
-            .def("rebuild_bvh", &Raytracer::rebuild_bvh)
-            .def("update_bvh", &Raytracer::update_bvh)
-            .def("set_losses", &Raytracer::set_losses)
             .def("raytrace", &Raytracer::raytrace)
-            .def("set_camera", &Raytracer::set_camera)
+            .def("update_bvh", &Raytracer::update_bvh)
+            .def("rebuild_bvh", &Raytracer::rebuild_bvh)
             .def("resize", &Raytracer::resize)
+            .def("set_losses", &Raytracer::set_losses)
+            .def("set_camera", &Raytracer::set_camera)
+            .def(
+                "get_config",
+                [](const c10::intrusive_ptr<Raytracer> &self) {
+                    return self->config_data;
+                })
             // Render settings
             .def_readonly("denoise", &Raytracer::m_denoise)
             .def_readonly("accumulate", &Raytracer::m_accumulate)
@@ -998,4 +995,8 @@ struct Raytracer : torch::CustomClassHolder {
     }
 };
 
-TORCH_LIBRARY(gausstracer, m) { Raytracer::bind(m); }
+TORCH_LIBRARY(gausstracer, m) {
+    ConfigDataHolder::bind(m);
+
+    Raytracer::bind(m);
+}

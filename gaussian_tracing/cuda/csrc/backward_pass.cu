@@ -150,9 +150,10 @@ __device__ void backward_pass(
             const float4 *world_to_local =
                 optixGetInstanceInverseTransformFromHandle(
                     optixGetInstanceTraversableFromIAS(
-                        params.handle, gaussian_id));
+                        params.bvh_handle, gaussian_id));
             const float4 *local_to_world = optixGetInstanceTransformFromHandle(
-                optixGetInstanceTraversableFromIAS(params.handle, gaussian_id));
+                optixGetInstanceTraversableFromIAS(
+                    params.bvh_handle, gaussian_id));
             float3 scaling = exp_act(params.gaussian_scales[gaussian_id]);
             float4 rotation_unnormalized =
                 params.gaussian_rotations[gaussian_id];
