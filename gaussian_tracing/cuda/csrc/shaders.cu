@@ -7,6 +7,10 @@
 
 extern "C" __global__ void __intersection__gaussian() {
     // * Fetch config
+    int step = optixGetPayload_2();
+    float full_T = __uint_as_float(optixGetPayload_3());
+    float alpha_threshold = __uint_as_float(optixGetPayload_4());
+    float exp_power = __uint_as_float(optixGetPayload_5());
     float backfacing_max_dist = 0.1f;
     float backfacing_invalid_normal_threshold = 0.9f;
 
@@ -35,7 +39,7 @@ extern "C" __global__ void __intersection__gaussian() {
     float3 local_hit_unscaled =
         (local_origin + local_hit_distance_along_ray * local_direction);
 
-    // * Clip the gaussian at params.alpha_threshold, taking bounding box scale
+    // * Clip the gaussian at alpha_threshold, taking bounding box scale
     // into account todo: if end up implementing tiling, it is possible to
     // optimize further considering the worse ray of the tile, or by using
     // capsules
@@ -48,7 +52,6 @@ extern "C" __global__ void __intersection__gaussian() {
         return;
     }
 
-    int step = optixGetPayload_2();
     if (step != 0 && sorting_distance < backfacing_max_dist) {
         float3 gaussian_normal = params.gaussian_normal[gaussian_id];
         if (length(gaussian_normal) > backfacing_invalid_normal_threshold &&
@@ -57,15 +60,14 @@ extern "C" __global__ void __intersection__gaussian() {
         }
     }
 
-    float p = params.exp_power;
+    // * Compute alpha value
     float3 local_hit =
         local_hit_unscaled *
-        compute_scaling_factor(opacity, params.alpha_threshold, p);
-    float gaussval = eval_gaussian(local_hit, p);
-    float alpha = compute_alpha(gaussval, opacity, params.alpha_threshold);
+        compute_scaling_factor(opacity, alpha_threshold, exp_power);
+    float gaussval = eval_gaussian(local_hit, exp_power);
+    float alpha = compute_alpha(gaussval, opacity, alpha_threshold);
 
     // * Compute the total transmittance for the ray accurately
-    float full_T = __uint_as_float(optixGetPayload_3());
     full_T *= 1.0 - alpha;
     optixSetPayload_3(__float_as_uint(full_T));
 
@@ -344,7 +346,7 @@ extern "C" __global__ void __raygen__rg() {
             remaining_used_lod[step],
             num_hits[step]);
 
-        float max_weight = 0.0f;
+        // float max_weight = 0.0f;
 
 #if MAX_BOUNCES > 0
         for (int ki = 0; ki < TILE_SIZE; ki++)
@@ -626,7 +628,7 @@ forward_pass_end:
             }
 
             // todo debug optimizing from 0 init in a separate file
-            float3 unnormalized_normal = output_normal[step][0][k];
+            // float3 unnormalized_normal = output_normal[step][0][k];
         }
 
         // Reset to 0 since backward pass increments these

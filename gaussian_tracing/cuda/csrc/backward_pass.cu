@@ -49,6 +49,9 @@ __device__ void backward_pass(
 
     float3 &dL_dray_origin_out,
     float3 &dL_dray_direction_out) {
+    // * Preload config parameters
+    const float alpha_threshold = *params.config.alpha_threshold;
+    const float exp_power = *params.config.exp_power;
 
     float3 backward_prev_gaussian_rgb[TILE_SIZE * TILE_SIZE];
     fill_array(
@@ -311,8 +314,6 @@ __device__ void backward_pass(
                 // * Transform gradient
                 float dL_dgaussval =
                     MAX_ALPHA * dL_dalpha * opacity * windowing;
-
-                float exp_power = params.exp_power;
                 float sq_norm = dot(local_hit, local_hit);
 
                 // * Local hit point gradient
@@ -320,8 +321,8 @@ __device__ void backward_pass(
                 float3 dL_dx_local = -local_hit * dL_dsq_norm * dL_dgaussval;
 
                 // * World hit point gradient
-                float scaling_factor = compute_scaling_factor(
-                    opacity, params.alpha_threshold, exp_power);
+                float scaling_factor =
+                    compute_scaling_factor(opacity, alpha_threshold, exp_power);
                 float3 dL_dx_world = make_float3(
                                          dot(make_float3(
                                                  world_to_local[0].x,

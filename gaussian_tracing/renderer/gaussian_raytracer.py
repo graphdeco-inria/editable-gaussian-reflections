@@ -35,7 +35,6 @@ class GaussianRaytracer:
         os.environ["F0_LOSS_WEIGHT"] = str(pc.model_params.loss_weight_f0)
         os.environ["ROUGHNESS_LOSS_WEIGHT"] = str(pc.model_params.loss_weight_roughness)
 
-        # self.cuda_module.configure(pc.model_params.t_thresh, pc.model_params.a_thresh, pc.model_params.exp_power)
         self.cuda_module.set_losses(True)
 
         self.pc = pc
