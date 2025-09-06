@@ -36,6 +36,9 @@ struct Raytracer : torch::CustomClassHolder {
     int m_width;
     int m_height;
 
+    // * Intrusive points are required to expose data to Python
+    c10::intrusive_ptr<ConfigDataHolder> config_data;
+
     Params m_h_params;
     CUdeviceptr m_d_params;
 
@@ -111,7 +114,6 @@ struct Raytracer : torch::CustomClassHolder {
     Tensor m_dL_dgaussian_lod_mean;
     Tensor m_gaussian_lod_scale;
     Tensor m_dL_dgaussian_lod_scale;
-    Tensor m_gaussian_mask;
     // Attached attributes
     Tensor m_gaussian_position;
     Tensor m_dL_dgaussian_position;
@@ -195,8 +197,6 @@ struct Raytracer : torch::CustomClassHolder {
     Tensor m_random_seeds;
     Tensor m_t_maxes;
     Tensor m_t_mins;
-    Tensor m_global_scale_factor =
-        torch::ones({1}, torch::dtype(torch::kFloat32).device(torch::kCUDA));
 
     Tensor m_gaussian_total_weight;
     Tensor m_densification_gradient_diffuse;
@@ -205,11 +205,6 @@ struct Raytracer : torch::CustomClassHolder {
     Tensor m_lut;
     Tensor m_cheap_approx =
         torch::zeros({1}, torch::dtype(torch::kBool).device(torch::kCUDA));
-
-    // Config
-    float m_exp_power = EXP_POWER;
-    float m_alpha_threshold = ALPHA_THRESHOLD;
-    float m_transmittance_threshold = T_THRESHOLD;
 
     Tensor m_num_hits_per_pixel;
     Tensor m_num_traversed_per_pixel;
@@ -227,6 +222,8 @@ struct Raytracer : torch::CustomClassHolder {
 
         m_width = image_width;
         m_height = image_height;
+
+        config_data = c10::make_intrusive<ConfigDataHolder>();
 
         // Inititalize gaussian parameters
         m_gaussian_rgb = torch::zeros(
@@ -281,9 +278,6 @@ struct Raytracer : torch::CustomClassHolder {
         m_dL_dgaussian_lod_scale = torch::zeros(
             {num_gaussians, 1},
             torch::dtype(torch::kFloat32).device(torch::kCUDA));
-        m_gaussian_mask = torch::zeros(
-            {num_gaussians, 1},
-            torch::dtype(torch::kInt32).device(torch::kCUDA));
         //
         m_gaussian_position = torch::zeros(
             {num_gaussians, 3},
@@ -432,9 +426,7 @@ struct Raytracer : torch::CustomClassHolder {
                 reinterpret_cast<int *>(m_num_bounces.data_ptr());
 
             // Configuration
-            m_h_params.exp_power = m_exp_power;
-            m_h_params.alpha_threshold = m_alpha_threshold;
-            m_h_params.transmittance_threshold = m_transmittance_threshold;
+            m_h_params.config = config_data->reify();
             set_losses(false);
 
             // Camera buffers
@@ -627,8 +619,6 @@ struct Raytracer : torch::CustomClassHolder {
                 reinterpret_cast<uint32_t *>(m_random_seeds.data_ptr());
             m_h_params.iteration =
                 reinterpret_cast<int *>(m_iteration.data_ptr());
-            m_h_params.global_scale_factor =
-                reinterpret_cast<float *>(m_global_scale_factor.data_ptr());
             m_h_params.grads_enabled =
                 reinterpret_cast<bool *>(m_grads_enabled.data_ptr());
             m_h_params.cheap_approx =
@@ -642,15 +632,11 @@ struct Raytracer : torch::CustomClassHolder {
         pipeline_wrapper = std::make_unique<PipelineWrapper>();
         bvh_wrapper = std::make_unique<BVHWrapper>(
             pipeline_wrapper->context,
-            m_camera_position_world,
             m_gaussian_means,
             m_gaussian_scales,
             m_gaussian_rotations,
             m_gaussian_opacity,
-            m_gaussian_mask,
-            m_global_scale_factor,
-            m_alpha_threshold,
-            m_exp_power);
+            *config_data);
         denoiser_wrapper = std::make_unique<DenoiserWrapper>(
             pipeline_wrapper->context,
             m_h_params,
@@ -667,10 +653,6 @@ struct Raytracer : torch::CustomClassHolder {
             &m_h_params,
             sizeof(Params),
             cudaMemcpyHostToDevice));
-    }
-
-    void set_global_scale_factor(float scale_factor) {
-        m_global_scale_factor[0] = scale_factor;
     }
 
     void set_losses(bool updateParams = true) {
@@ -785,23 +767,16 @@ struct Raytracer : torch::CustomClassHolder {
             reinterpret_cast<float *>(m_gaussian_roughness.data_ptr());
         m_h_params.dL_dgaussian_roughness =
             reinterpret_cast<float *>(m_dL_dgaussian_roughness.data_ptr());
-        //
-        m_gaussian_mask.resize_({num_new_gaussians, 1});
 
         cudaDeviceSynchronize();
     }
 
     void rebuild_bvh() {
         bvh_wrapper->rebuild(
-            m_camera_position_world,
             m_gaussian_means,
             m_gaussian_scales,
             m_gaussian_rotations,
-            m_gaussian_opacity,
-            m_gaussian_mask,
-            m_global_scale_factor,
-            m_alpha_threshold,
-            m_exp_power);
+            m_gaussian_opacity);
         m_h_params.handle = bvh_wrapper->tlas_handle;
 
         CUDA_CHECK(cudaMemcpy(
@@ -813,15 +788,10 @@ struct Raytracer : torch::CustomClassHolder {
 
     void update_bvh() {
         bvh_wrapper->update(
-            m_camera_position_world,
             m_gaussian_means,
             m_gaussian_scales,
             m_gaussian_rotations,
-            m_gaussian_opacity,
-            m_gaussian_mask,
-            m_global_scale_factor,
-            m_alpha_threshold,
-            m_exp_power);
+            m_gaussian_opacity);
     }
 
     Tensor m_denoise =
@@ -866,30 +836,6 @@ struct Raytracer : torch::CustomClassHolder {
         }
     }
 
-    void configure(
-        double transmittance_threshold = -1,
-        double alpha_threshold = -1,
-        double exp_power = -1) {
-        if (alpha_threshold != -1) {
-            m_alpha_threshold = (float)alpha_threshold;
-            m_h_params.alpha_threshold = m_alpha_threshold;
-        }
-        if (transmittance_threshold != -1) {
-            m_transmittance_threshold = (float)transmittance_threshold;
-            m_h_params.transmittance_threshold = m_transmittance_threshold;
-        }
-        if (exp_power != -1) {
-            m_exp_power = (float)exp_power;
-            m_h_params.exp_power = m_exp_power;
-        }
-
-        CUDA_CHECK(cudaMemcpy(
-            reinterpret_cast<void *>(m_d_params),
-            &m_h_params,
-            sizeof(Params),
-            cudaMemcpyHostToDevice));
-    }
-
     void set_camera(
         const torch::Tensor
             &camera_rotation_c2w, // 3x3 matrix, blender convention (not colmap)
@@ -915,7 +861,6 @@ struct Raytracer : torch::CustomClassHolder {
             .def("update_bvh", &Raytracer::update_bvh)
             .def("set_losses", &Raytracer::set_losses)
             .def("raytrace", &Raytracer::raytrace)
-            .def("configure", &Raytracer::configure)
             .def("set_camera", &Raytracer::set_camera)
             .def("resize", &Raytracer::resize)
             // Render settings
@@ -933,8 +878,6 @@ struct Raytracer : torch::CustomClassHolder {
                 "vertical_fov_radians", &Raytracer::m_vertical_fov_radians)
             .def_readonly("init_blur_sigma", &Raytracer::m_init_blur_sigma)
             // Gaussian params
-            .def_readonly(
-                "global_scale_factor", &Raytracer::m_global_scale_factor)
             .def_readonly("gaussian_rgb", &Raytracer::m_gaussian_rgb)
             .def_readonly("dL_drgb", &Raytracer::m_dL_drgb)
             .def_readonly("gaussian_opacity", &Raytracer::m_gaussian_opacity)
@@ -956,7 +899,6 @@ struct Raytracer : torch::CustomClassHolder {
                 "gaussian_lod_scale", &Raytracer::m_gaussian_lod_scale)
             .def_readonly(
                 "dL_dgaussian_lod_scale", &Raytracer::m_dL_dgaussian_lod_scale)
-            .def_readonly("gaussian_mask", &Raytracer::m_gaussian_mask)
             .def_readonly("gaussian_position", &Raytracer::m_gaussian_position)
             .def_readonly(
                 "dL_dgaussian_position", &Raytracer::m_dL_dgaussian_position)

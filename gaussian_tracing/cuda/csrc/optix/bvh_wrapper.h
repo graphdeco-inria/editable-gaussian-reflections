@@ -6,12 +6,10 @@ void populateBVH(
     OptixInstance *instances,
     OptixTraversableHandle gasHandle,
     int num_gaussians,
-    float3 *camera_position_world,
     float3 *scales,
     float4 *rotations,
     float3 *means,
     float *opacity,
-    bool *mask,
     float global_scale_factor,
     float alpha_threshold,
     float exp_power);
@@ -22,40 +20,26 @@ struct BVHWrapper {
 
     BVHWrapper(
         OptixDeviceContext context_,
-        Tensor m_camera_position_world,
         Tensor m_gaussian_means,
         Tensor m_gaussian_scales,
         Tensor m_gaussian_rotations,
         Tensor m_gaussian_opacity,
-        Tensor m_gaussian_mask,
-        Tensor m_global_scale_factor,
-        float m_alpha_threshold,
-        float m_exp_power)
-        : context(context_) {
+        const ConfigDataHolder &config_)
+        : context(context_), config(config_) {
         build_blas();
         build_tlas(
-            m_camera_position_world,
             m_gaussian_means,
             m_gaussian_scales,
             m_gaussian_rotations,
-            m_gaussian_opacity,
-            m_gaussian_mask,
-            m_global_scale_factor,
-            m_alpha_threshold,
-            m_exp_power);
+            m_gaussian_opacity);
         cudaDeviceSynchronize();
     }
 
     void rebuild(
-        Tensor m_camera_position_world,
         Tensor m_gaussian_means,
         Tensor m_gaussian_scales,
         Tensor m_gaussian_rotations,
-        Tensor m_gaussian_opacity,
-        Tensor m_gaussian_mask,
-        Tensor m_global_scale_factor,
-        float m_alpha_threshold,
-        float m_exp_power) {
+        Tensor m_gaussian_opacity) {
         CUDA_CHECK(cudaFree(reinterpret_cast<void *>(device_instances)));
         CUDA_CHECK(
             cudaFree(reinterpret_cast<void *>(device_temp_tlas_buffer_sizes)));
@@ -63,46 +47,34 @@ struct BVHWrapper {
             cudaFree(reinterpret_cast<void *>(device_tlas_output_buffer)));
 
         build_tlas(
-            m_camera_position_world,
             m_gaussian_means,
             m_gaussian_scales,
             m_gaussian_rotations,
-            m_gaussian_opacity,
-            m_gaussian_mask,
-            m_global_scale_factor,
-            m_alpha_threshold,
-            m_exp_power);
+            m_gaussian_opacity);
 
         cudaDeviceSynchronize();
     }
 
     void update(
-        Tensor m_camera_position_world,
         Tensor m_gaussian_means,
         Tensor m_gaussian_scales,
         Tensor m_gaussian_rotations,
-        Tensor m_gaussian_opacity,
-        Tensor m_gaussian_mask,
-        Tensor m_global_scale_factor,
-        float m_alpha_threshold,
-        float m_exp_power) {
-        // Update XForms
+        Tensor m_gaussian_opacity) {
+        // * Update Transforms
         auto num_gaussians = m_gaussian_means.sizes()[0];
         populateBVH(
             reinterpret_cast<OptixInstance *>(device_instances),
             blas_handle,
             num_gaussians,
-            reinterpret_cast<float3 *>(m_camera_position_world.data_ptr()),
             reinterpret_cast<float3 *>(m_gaussian_scales.data_ptr()),
             reinterpret_cast<float4 *>(m_gaussian_rotations.data_ptr()),
             reinterpret_cast<float3 *>(m_gaussian_means.data_ptr()),
             reinterpret_cast<float *>(m_gaussian_opacity.data_ptr()),
-            reinterpret_cast<bool *>(m_gaussian_mask.data_ptr()),
-            m_global_scale_factor[0].item<float>(),
-            m_alpha_threshold,
-            m_exp_power);
+            config.global_scale_factor.item<float>(),
+            config.alpha_threshold.item<float>(),
+            config.exp_power.item<float>());
 
-        // Update TLAS
+        // * Update TLAS
         OptixAccelBuildOptions accel_options_tlas = {};
         accel_options_tlas.buildFlags =
             build_flags | OPTIX_BUILD_FLAG_ALLOW_RANDOM_INSTANCE_ACCESS;
@@ -125,6 +97,7 @@ struct BVHWrapper {
   private:
     // * Input fields
     OptixDeviceContext context;
+    const ConfigDataHolder &config;
 
     // * Optix stuff
     uint32_t aabb_input_flags[2] = {OPTIX_GEOMETRY_FLAG_NONE};
@@ -186,15 +159,10 @@ struct BVHWrapper {
     }
 
     void build_tlas(
-        Tensor m_camera_position_world,
         Tensor m_gaussian_means,
         Tensor m_gaussian_scales,
         Tensor m_gaussian_rotations,
-        Tensor m_gaussian_opacity,
-        Tensor m_gaussian_mask,
-        Tensor m_global_scale_factor,
-        float m_alpha_threshold,
-        float m_exp_power) {
+        Tensor m_gaussian_opacity) {
         auto num_gaussians = m_gaussian_means.sizes()[0];
 
         CUDA_CHECK(cudaMalloc(
@@ -204,15 +172,13 @@ struct BVHWrapper {
             reinterpret_cast<OptixInstance *>(device_instances),
             blas_handle,
             num_gaussians,
-            reinterpret_cast<float3 *>(m_camera_position_world.data_ptr()),
             reinterpret_cast<float3 *>(m_gaussian_scales.data_ptr()),
             reinterpret_cast<float4 *>(m_gaussian_rotations.data_ptr()),
             reinterpret_cast<float3 *>(m_gaussian_means.data_ptr()),
             reinterpret_cast<float *>(m_gaussian_opacity.data_ptr()),
-            reinterpret_cast<bool *>(m_gaussian_mask.data_ptr()),
-            m_global_scale_factor[0].item<float>(),
-            m_alpha_threshold,
-            m_exp_power);
+            config.global_scale_factor.item<float>(),
+            config.alpha_threshold.item<float>(),
+            config.exp_power.item<float>());
 
         OptixAccelBuildOptions accel_options_tlas = {};
         accel_options_tlas.buildFlags =

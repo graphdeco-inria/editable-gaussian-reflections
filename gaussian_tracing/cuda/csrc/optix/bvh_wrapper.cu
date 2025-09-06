@@ -45,12 +45,10 @@ __global__ void _populateBVH(
     OptixInstance *instances,
     OptixTraversableHandle gasHandle,
     int num_gaussians,
-    float3 *camera_position_world,
     float3 *scales,
     float4 *rotations,
     float3 *means,
     float *opacities,
-    bool *mask,
     float global_scaling_factor,
     float alpha_threshold,
     float exp_power) {
@@ -72,12 +70,8 @@ __global__ void _populateBVH(
             compute_scaling_factor(opacity, alpha_threshold, p);
         sizes = sizes * scaling_factor * global_scaling_factor;
         instances[i].visibilityMask =
-            scaling_factor >
-            0.0f; // & mask[i]; // todo & product of scales also > 0
-
-        if (sizes.x < 0.0f || sizes.y < 0.0f || sizes.z < 0.0f) {
-            instances[i].visibilityMask = 0;
-        }
+            scaling_factor > 0.0f &&
+            (sizes.x > 0.0f || sizes.y > 0.0f || sizes.z > 0.0f);
 
         create_transform_matrix(
             rotations[i],
@@ -91,12 +85,10 @@ void populateBVH(
     OptixInstance *instances,
     OptixTraversableHandle gasHandle,
     int num_gaussians,
-    float3 *camera_position_world,
     float3 *scales,
     float4 *rotations,
     float3 *means,
     float *opacities,
-    bool *mask,
     float global_scaling_factor,
     float alpha_threshold,
     float exp_power) {
@@ -104,12 +96,10 @@ void populateBVH(
         instances,
         gasHandle,
         num_gaussians,
-        camera_position_world,
         scales,
         rotations,
         means,
         opacities,
-        mask,
         global_scaling_factor,
         alpha_threshold,
         exp_power);
@@ -123,12 +113,10 @@ __global__ void _populateTensor(
     float *output_verts,
     int *output_faces,
     int num_gaussians,
-    float3 *camera_position_world,
     float3 *scales,
     float4 *rotations,
     float3 *means,
     float *opacities,
-    bool *mask,
     float global_scaling_factor,
     float alpha_threshold,
     float exp_power) {

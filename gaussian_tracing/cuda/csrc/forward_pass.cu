@@ -49,41 +49,38 @@ __device__ void forward_pass(
     }
 
     float tmin = near_plane;
-    float endpoint = -1.0f;
+    // float endpoint = -1.0f;
 
     uint32_t full_T_uint[TILE_SIZE * TILE_SIZE];
     fill_array(full_T_uint, TILE_SIZE * TILE_SIZE, __float_as_uint(1.0f));
 
     // * Traverse BVH
-    if (output_t[0].y > params.transmittance_threshold) {
-        uint32_t uint_initial_lod = __float_as_uint(initial_lod);
-        uint32_t uint_lod_by_distance = __float_as_uint(lod_by_distance);
-        uint32_t step_uint = (uint32_t)step;
-        uint32_t reflected_origin_x = __float_as_uint(reflected_origin.x);
-        uint32_t reflected_origin_y = __float_as_uint(reflected_origin.y);
-        uint32_t reflected_origin_z = __float_as_uint(reflected_origin.z);
-        optixTraverse(
-            params.handle,
-            tile_origin,
-            tile_direction,
-            near_plane, // tmin
-            far_plane,
-            0.0f, // rayTime
-            OptixVisibilityMask(1),
-            OPTIX_RAY_FLAG_NONE,
-            0, // SBT offset
-            0, // SBT stride
-            0,
-            uint_initial_lod,
-            uint_lod_by_distance,
-            step_uint, // step, replaces slab idx
-            full_T_uint[0],
-            reflected_origin_x,
-            reflected_origin_y,
-            reflected_origin_z);
-        for (int k = 0; k < TILE_SIZE * TILE_SIZE; k++) {
-            output_t[k].y = __uint_as_float(full_T_uint[k]);
-        }
+    uint32_t step_uint = (uint32_t)step;
+    uint32_t uint_initial_lod = __float_as_uint(initial_lod);
+    uint32_t uint_lod_by_distance = __float_as_uint(lod_by_distance);
+    uint32_t alpha_threshold_uint =
+        __float_as_uint(*params.config.alpha_threshold);
+    uint32_t exp_power_uint = __float_as_uint(*params.config.exp_power);
+    optixTraverse(
+        params.handle,
+        tile_origin,
+        tile_direction,
+        near_plane, // tmin
+        far_plane,
+        0.0f, // rayTime
+        OptixVisibilityMask(1),
+        OPTIX_RAY_FLAG_NONE,
+        0, // SBTOffset
+        0, // SBTStride
+        0, // missSBTIndex
+        uint_initial_lod,
+        uint_lod_by_distance,
+        step_uint,
+        full_T_uint[0],
+        alpha_threshold_uint,
+        exp_power_uint);
+    for (int k = 0; k < TILE_SIZE * TILE_SIZE; k++) {
+        output_t[k].y = __uint_as_float(full_T_uint[k]);
     }
 
     // * Initialize registers holding the BUFFER_SIZE nearest gaussians
@@ -133,11 +130,11 @@ __device__ void forward_pass(
 
             if (distance < 99.9f) {
                 uint32_t gaussian_id = params.all_gaussian_ids[idxes[i]];
-                float gaussval = params.all_gaussvals[idxes[i]];
-                float alpha = params.all_alphas[idxes[i]];
+                // float gaussval = params.all_gaussvals[idxes[i]];
+                // float alpha = params.all_alphas[idxes[i]];
                 float3 gaussian_rgb = params.gaussian_rgb[gaussian_id];
-                float3 gaussian_position =
-                    params.gaussian_position[gaussian_id];
+                // float3 gaussian_position =
+                //     params.gaussian_position[gaussian_id];
                 float3 gaussian_normal = params.gaussian_normal[gaussian_id];
                 float3 gaussian_f0 =
                     clipped_relu_act(params.gaussian_f0[gaussian_id]);
@@ -193,7 +190,9 @@ __device__ void forward_pass(
                             [TILE_SIZE * TILE_SIZE * new_idx + k] = gaussval;
                     }
 
-                    if (output_t[0].x < T_THRESHOLD) {
+                    float transmittance_threshold =
+                        *params.config.transmittance_threshold;
+                    if (output_t[0].x < transmittance_threshold) {
                         goto finished_integration; // todo review a few options
                                                    // instead of this (continue
                                                    // etc)

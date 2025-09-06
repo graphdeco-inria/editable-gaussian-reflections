@@ -10,14 +10,12 @@ struct Params {
     uint32_t image_width;
     uint32_t image_height;
 
+    Config config;
+
     float *vertical_fov_radians;
     float *camera_znear;
     float *camera_zfar;
     float *max_lod_size;
-
-    float alpha_threshold;
-    float exp_power;
-    float transmittance_threshold;
 
     bool *grads_enabled;
     bool *cheap_approx;
@@ -122,8 +120,6 @@ struct Params {
     float normal_loss_weight;
     float f0_loss_weight;
     float roughness_loss_weight;
-
-    float *global_scale_factor;
 
     float *init_blur_sigma;
 
