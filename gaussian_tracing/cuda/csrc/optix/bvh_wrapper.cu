@@ -52,34 +52,33 @@ __global__ void _populateBVH(
     float *opacities,
     float alpha_threshold,
     float exp_power,
-    float global_scaling_factor) {
+    float global_scale_factor) {
     auto i = threadIdx.x + blockIdx.x * blockDim.x;
+    if (i >= num_gaussians)
+        return;
 
-    if (i < num_gaussians) {
-        instances[i].traversableHandle = gasHandle;
-        // instances[i].instanceId = i; // this does not get used in practice
-        instances[i].sbtOffset = 0;
-        instances[i].flags = OPTIX_INSTANCE_FLAG_NONE;
+    instances[i].traversableHandle = gasHandle;
+    // instances[i].instanceId = i; // this does not get used in practice
+    instances[i].sbtOffset = 0;
+    instances[i].flags = OPTIX_INSTANCE_FLAG_NONE;
 
-        float opacity = opacities[i];
-        opacity = sigmoid_act(opacity);
+    float opacity = opacities[i];
+    opacity = sigmoid_act(opacity);
 
-        float3 sizes = scales[i];
-        sizes = exp_act(sizes);
-        float p = exp_power;
-        float scaling_factor =
-            compute_scaling_factor(opacity, alpha_threshold, p);
-        sizes = sizes * scaling_factor * global_scaling_factor;
-        instances[i].visibilityMask =
-            scaling_factor > 0.0f &&
-            (sizes.x > 0.0f || sizes.y > 0.0f || sizes.z > 0.0f);
+    float3 sizes = scales[i];
+    sizes = exp_act(sizes);
+    float scaling_factor =
+        compute_scaling_factor(opacity, alpha_threshold, exp_power);
+    sizes = sizes * scaling_factor * global_scale_factor;
+    instances[i].visibilityMask =
+        scaling_factor > 0.0f &&
+        (sizes.x > 0.0f || sizes.y > 0.0f || sizes.z > 0.0f);
 
-        create_transform_matrix(
-            rotations[i],
-            sizes,
-            means[i],
-            reinterpret_cast<float4(&)[3]>(instances[i].transform));
-    }
+    create_transform_matrix(
+        rotations[i],
+        sizes,
+        means[i],
+        reinterpret_cast<float4(&)[3]>(instances[i].transform));
 }
 
 void populateBVH(
@@ -92,7 +91,7 @@ void populateBVH(
     float *opacities,
     float alpha_threshold,
     float exp_power,
-    float global_scaling_factor) {
+    float global_scale_factor) {
     _populateBVH<<<(num_gaussians + 31) / 32, 32>>>(
         instances,
         gasHandle,
@@ -103,50 +102,5 @@ void populateBVH(
         opacities,
         alpha_threshold,
         exp_power,
-        global_scaling_factor);
-}
-
-__global__ void _populateTensor(
-    float *mesh_cage_verts,
-    int num_verts_per_gaussian,
-    int *mesh_cage_faces,
-    int num_faces_per_gaussian,
-    float *output_verts,
-    int *output_faces,
-    int num_gaussians,
-    float3 *scales,
-    float4 *rotations,
-    float3 *means,
-    float *opacities,
-    float global_scaling_factor,
-    float alpha_threshold,
-    float exp_power) {
-    auto i = threadIdx.x + blockIdx.x * blockDim.x;
-
-    float4 transform[3];
-    if (i < num_gaussians) {
-        float opacity = opacities[i];
-        opacity = sigmoid_act(opacity);
-        float3 sizes = scales[i];
-        sizes = exp_act(sizes);
-        float p = exp_power;
-        float scaling_factor =
-            compute_scaling_factor(opacity, alpha_threshold, p);
-        sizes = sizes * scaling_factor * global_scaling_factor; //!!!!!!!!!!!!
-
-        create_transform_matrix(rotations[i], sizes, means[i], transform);
-        for (int j = 0; j < num_verts_per_gaussian; j++) {
-            float4 vert = make_float4(
-                mesh_cage_verts[j * 3],
-                mesh_cage_verts[j * 3 + 1],
-                mesh_cage_verts[j * 3 + 2],
-                1.0f);
-            output_verts[j * 3 + 0 + 3 * num_verts_per_gaussian * i] =
-                dot(vert, transform[0]);
-            output_verts[j * 3 + 1 + 3 * num_verts_per_gaussian * i] =
-                dot(vert, transform[1]);
-            output_verts[j * 3 + 2 + 3 * num_verts_per_gaussian * i] =
-                dot(vert, transform[2]);
-        }
-    }
+        global_scale_factor);
 }

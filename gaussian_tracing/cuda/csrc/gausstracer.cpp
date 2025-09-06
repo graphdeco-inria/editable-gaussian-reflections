@@ -622,7 +622,8 @@ struct Raytracer : torch::CustomClassHolder {
             m_gaussian_scales,
             m_gaussian_rotations,
             m_gaussian_opacity,
-            *config_data);
+            *config_data,
+            params_on_host);
         denoiser_wrapper = std::make_unique<DenoiserWrapper>(
             pipeline_wrapper->context,
             params_on_host,
@@ -707,21 +708,6 @@ struct Raytracer : torch::CustomClassHolder {
         }
     }
 
-    void rebuild_bvh() {
-        bvh_wrapper->rebuild(
-            m_gaussian_means,
-            m_gaussian_scales,
-            m_gaussian_rotations,
-            m_gaussian_opacity);
-        params_on_host.bvh_handle = bvh_wrapper->tlas_handle;
-
-        CUDA_CHECK(cudaMemcpy(
-            reinterpret_cast<void *>(params_on_device),
-            &params_on_host,
-            sizeof(Params),
-            cudaMemcpyHostToDevice));
-    }
-
     void update_bvh() {
         bvh_wrapper->update(
             m_gaussian_means,
@@ -730,8 +716,21 @@ struct Raytracer : torch::CustomClassHolder {
             m_gaussian_opacity);
     }
 
+    void rebuild_bvh() {
+        bvh_wrapper->rebuild(
+            m_gaussian_means,
+            m_gaussian_scales,
+            m_gaussian_rotations,
+            m_gaussian_opacity);
+        params_on_host.bvh_handle = bvh_wrapper->tlas_handle;
+        CUDA_CHECK(cudaMemcpy(
+            reinterpret_cast<void *>(params_on_device),
+            &params_on_host,
+            sizeof(Params),
+            cudaMemcpyHostToDevice));
+    }
+
     void resize(int64_t num_new_gaussians) {
-        printf("Resizing to %ld\n", num_new_gaussians);
         m_gaussian_rgb.resize_({num_new_gaussians, 3});
         m_dL_drgb.resize_({num_new_gaussians, 3});
         params_on_host.gaussian_rgb =

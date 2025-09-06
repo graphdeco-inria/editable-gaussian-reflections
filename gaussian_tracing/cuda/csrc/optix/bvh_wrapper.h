@@ -10,9 +10,9 @@ void populateBVH(
     float4 *rotations,
     float3 *means,
     float *opacity,
-    float global_scale_factor,
     float alpha_threshold,
-    float exp_power);
+    float exp_power,
+    float global_scale_factor);
 
 struct BVHWrapper {
     OptixTraversableHandle tlas_handle; // * Pass this handle when launching the
@@ -24,8 +24,9 @@ struct BVHWrapper {
         Tensor m_gaussian_scales,
         Tensor m_gaussian_rotations,
         Tensor m_gaussian_opacity,
-        const ConfigDataHolder &config_)
-        : context(context_), config(config_) {
+        const ConfigDataHolder &config_,
+        const Params &params_on_host_)
+        : context(context_), config(config_), params_on_host(params_on_host_) {
         build_blas();
         build_tlas(
             m_gaussian_means,
@@ -61,11 +62,10 @@ struct BVHWrapper {
         Tensor m_gaussian_rotations,
         Tensor m_gaussian_opacity) {
         // * Update Transforms
-        auto num_gaussians = m_gaussian_means.sizes()[0];
         populateBVH(
             reinterpret_cast<OptixInstance *>(device_instances),
             blas_handle,
-            num_gaussians,
+            m_gaussian_means.sizes()[0],
             reinterpret_cast<float3 *>(m_gaussian_scales.data_ptr()),
             reinterpret_cast<float4 *>(m_gaussian_rotations.data_ptr()),
             reinterpret_cast<float3 *>(m_gaussian_means.data_ptr()),
@@ -98,6 +98,7 @@ struct BVHWrapper {
     // * Input fields
     OptixDeviceContext context;
     const ConfigDataHolder &config;
+    const Params &params_on_host;
 
     // * Optix stuff
     uint32_t aabb_input_flags[2] = {OPTIX_GEOMETRY_FLAG_NONE};

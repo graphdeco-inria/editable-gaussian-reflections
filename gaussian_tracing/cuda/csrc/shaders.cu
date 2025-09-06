@@ -8,12 +8,13 @@
 
 extern "C" __global__ void __intersection__gaussian() {
     // * Fetch config
-    int step = optixGetPayload_2();
-    float full_T = __uint_as_float(optixGetPayload_3());
-    float alpha_threshold = __uint_as_float(optixGetPayload_4());
-    float exp_power = __uint_as_float(optixGetPayload_5());
-    float backfacing_max_dist = 0.1f;
-    float backfacing_invalid_normal_threshold = 0.9f;
+    bool grads_enabled = (bool)optixGetPayload_2();
+    float alpha_threshold = __uint_as_float(optixGetPayload_3());
+    float exp_power = __uint_as_float(optixGetPayload_4());
+    float backfacing_max_dist = __uint_as_float(optixGetPayload_5());
+    float backfacing_invalid_normal_threshold =
+        __uint_as_float(optixGetPayload_6());
+    uint32_t num_traversed_per_pixel = optixGetPayload_7();
 
     // * Fetch ray data
     float3 local_origin = optixGetObjectRayOrigin();
@@ -27,32 +28,30 @@ extern "C" __global__ void __intersection__gaussian() {
     // * Compute pixel index
     uint3 idx = optixGetLaunchIndex();
     uint3 dim = optixGetLaunchDimensions();
-
     uint32_t ray_id =
         (idx.y * TILE_SIZE) * params.image_width + idx.x * TILE_SIZE;
 
+    // * Reject gaussians behind ray
+    if (dot(local_origin, local_direction) > 0.0) {
+        return;
+    }
+
+    // * Compute the hit point along the ray
     float norm = length(local_direction);
     local_direction /= norm;
     float local_hit_distance_along_ray = dot(-local_origin, local_direction);
-
-    // * Compute the hit point along the ray
     float sorting_distance = local_hit_distance_along_ray / norm;
     float3 local_hit_unscaled =
-        (local_origin + local_hit_distance_along_ray * local_direction);
+        local_origin + local_hit_distance_along_ray * local_direction;
 
-    // * Clip the gaussian at alpha_threshold, taking bounding box scale
-    // into account todo: if end up implementing tiling, it is possible to
-    // optimize further considering the worse ray of the tile, or by using
-    // capsules
+    // * Clip the gaussian at the alpha threshold
     float sq_dist = dot(local_hit_unscaled, local_hit_unscaled);
     if (sq_dist > 1.0f) {
         return;
     }
 
-    if (dot(optixGetObjectRayOrigin(), optixGetObjectRayDirection()) > 0.0) {
-        return;
-    }
-
+    // * Reject backfacing normals when not a primary ray
+    int step = optixGetPayload_0();
     if (step != 0 && sorting_distance < backfacing_max_dist) {
         float3 gaussian_normal = params.gaussian_normal[gaussian_id];
         if (length(gaussian_normal) > backfacing_invalid_normal_threshold &&
@@ -69,21 +68,21 @@ extern "C" __global__ void __intersection__gaussian() {
     float alpha = compute_alpha(gaussval, opacity, alpha_threshold);
 
     // * Compute the exact total transmittance for the ray
+    float full_T = __uint_as_float(optixGetPayload_1());
     full_T *= 1.0 - alpha;
-    optixSetPayload_3(__float_as_uint(full_T));
+    optixSetPayload_1(__float_as_uint(full_T));
 
+    // * Log all hits to per-pixel linked list
     int hit_idx = atomicAdd(params.total_hits, 1);
     params.all_gaussian_ids[hit_idx] = gaussian_id;
     params.all_distances[hit_idx] = sorting_distance;
     params.all_alphas[hit_idx] = alpha;
-    if (*params.grads_enabled) { // todo check impact of this on forward pass
+    if (grads_enabled) { // todo check impact of this on forward pass
         params.all_gaussvals[hit_idx] = gaussval;
         params.all_local_hits[hit_idx] = local_hit;
     }
     params.all_prev_hits[hit_idx] = params.prev_hit_per_pixel[ray_id];
     params.prev_hit_per_pixel[ray_id] = hit_idx;
-
-    return;
 }
 
 extern "C" __global__ void __raygen__rg() {
@@ -91,9 +90,10 @@ extern "C" __global__ void __raygen__rg() {
     int num_pixels = params.image_width * params.image_height;
     uint3 idx = optixGetLaunchIndex();
     uint3 dim = optixGetLaunchDimensions();
-    float eps_ray_surface_offset = 0.01f;
-    float eps_min_roughness = 0.01f;
-    float reflection_invalid_normal_threshold = 0.7f;
+    float eps_ray_surface_offset = *params.config.eps_ray_surface_offset;
+    float eps_min_roughness = *params.config.eps_min_roughness;
+    float reflection_invalid_normal_threshold =
+        *params.config.reflection_invalid_normal_threshold;
 
     uint currrent_chunk_x = 0;
     uint currrent_chunk_y = 0; // todo
@@ -343,8 +343,6 @@ extern "C" __global__ void __raygen__rg() {
             remaining_lod_mean[step],
             remaining_used_lod[step],
             num_hits[step]);
-
-        // float max_weight = 0.0f;
 
 #if MAX_BOUNCES > 0
         for (int ki = 0; ki < TILE_SIZE; ki++)

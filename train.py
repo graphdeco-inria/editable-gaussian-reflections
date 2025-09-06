@@ -419,7 +419,6 @@ def main(cfg: TyroConfig):
 
     if cfg.viewer:
         from gaussianviewer import GaussianViewer
-
         from viewer.types import ViewerMode
 
         mode = ViewerMode.LOCAL if cfg.viewer_mode == "local" else ViewerMode.SERVER
@@ -641,15 +640,6 @@ def main(cfg: TyroConfig):
         ):
             raytracer.cuda_module.num_bounces.copy_(MAX_BOUNCES)
 
-        if iteration == model_params.rebalance_losses_at_iter:
-            os.environ["GLOSSY_LOSS_WEIGHT"] = str(
-                model_params.loss_weight_glossy_after_rebalance
-            )
-            os.environ["DIFFUSE_LOSS_WEIGHT"] = str(
-                model_params.loss_weight_diffuse_after_rebalance
-            )
-            raytracer.cuda_module.set_losses(True)
-
         if cfg.viewer:
             viewer.gaussian_lock.release()
 
@@ -669,9 +659,6 @@ if __name__ == "__main__":
         )
         cfg.model_params.max_one_bounce_until_iter = int(
             cfg.model_params.max_one_bounce_until_iter * cfg.opt_params.timestretch
-        )
-        cfg.model_params.rebalance_losses_at_iter = int(
-            cfg.model_params.rebalance_losses_at_iter * cfg.opt_params.timestretch
         )
         cfg.test_iterations = [
             int(x * cfg.opt_params.timestretch) for x in cfg.test_iterations

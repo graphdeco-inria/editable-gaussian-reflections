@@ -108,14 +108,6 @@ class ModelParams:
             self.no_bounces_until_iter = 3_000
             self.max_one_bounce_until_iter = -1
 
-        self.loss_weight_diffuse_after_rebalance = 5.0
-        self.loss_weight_glossy_after_rebalance = 5.0
-        self.rebalance_losses_at_iter = -1
-        if "REAL_SCENE" in os.environ:
-            self.rebalance_losses_at_iter = -1
-        if "LEGACY_WEIGHT" in os.environ:
-            self.rebalance_losses_at_iter = 18_000
-
         self.skip_n_images = 0
 
 
