@@ -1,9 +1,10 @@
 #include "params.h"
-#include "utils/vec_math.h"
-#include <iostream>
-#include <random>
 
 #include "utils/common.h"
+#include "utils/helpers.cu"
+
+#include "backward_pass.cu"
+#include "forward_pass.cu"
 
 extern "C" __global__ void __intersection__gaussian() {
     // * Fetch config
@@ -67,7 +68,7 @@ extern "C" __global__ void __intersection__gaussian() {
     float gaussval = eval_gaussian(local_hit, exp_power);
     float alpha = compute_alpha(gaussval, opacity, alpha_threshold);
 
-    // * Compute the total transmittance for the ray accurately
+    // * Compute the exact total transmittance for the ray
     full_T *= 1.0 - alpha;
     optixSetPayload_3(__float_as_uint(full_T));
 
@@ -84,9 +85,6 @@ extern "C" __global__ void __intersection__gaussian() {
 
     return;
 }
-
-#include "backward_pass.cu"
-#include "forward_pass.cu"
 
 extern "C" __global__ void __raygen__rg() {
     // * Compute pixel index

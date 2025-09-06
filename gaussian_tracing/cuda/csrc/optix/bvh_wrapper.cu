@@ -17,13 +17,14 @@ __device__ void create_transform_matrix(
     float y = rotation.z;
     float z = rotation.w;
 
-    // normalize quaternion
+    // * Normalize quaternion
     float norm = sqrtf(r * r + x * x + y * y + z * z);
     r /= norm;
     x /= norm;
     y /= norm;
     z /= norm;
 
+    // * Populate matrix
     matrix[0] = make_float4(
         s.x * (1.f - 2.f * (y * y + z * z)),
         s.y * (2.f * (x * y - r * z)),
@@ -49,9 +50,9 @@ __global__ void _populateBVH(
     float4 *rotations,
     float3 *means,
     float *opacities,
-    float global_scaling_factor,
     float alpha_threshold,
-    float exp_power) {
+    float exp_power,
+    float global_scaling_factor) {
     auto i = threadIdx.x + blockIdx.x * blockDim.x;
 
     if (i < num_gaussians) {
@@ -89,9 +90,9 @@ void populateBVH(
     float4 *rotations,
     float3 *means,
     float *opacities,
-    float global_scaling_factor,
     float alpha_threshold,
-    float exp_power) {
+    float exp_power,
+    float global_scaling_factor) {
     _populateBVH<<<(num_gaussians + 31) / 32, 32>>>(
         instances,
         gasHandle,
@@ -100,9 +101,9 @@ void populateBVH(
         rotations,
         means,
         opacities,
-        global_scaling_factor,
         alpha_threshold,
-        exp_power);
+        exp_power,
+        global_scaling_factor);
 }
 
 __global__ void _populateTensor(

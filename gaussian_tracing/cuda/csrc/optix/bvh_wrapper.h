@@ -15,8 +15,8 @@ void populateBVH(
     float exp_power);
 
 struct BVHWrapper {
-    OptixTraversableHandle tlas_handle; // * Pass this handle when launching
-                                        // the ray tracing pipeline
+    OptixTraversableHandle tlas_handle; // * Pass this handle when launching the
+                                        // ray tracing pipeline
 
     BVHWrapper(
         OptixDeviceContext context_,
@@ -70,9 +70,9 @@ struct BVHWrapper {
             reinterpret_cast<float4 *>(m_gaussian_rotations.data_ptr()),
             reinterpret_cast<float3 *>(m_gaussian_means.data_ptr()),
             reinterpret_cast<float *>(m_gaussian_opacity.data_ptr()),
-            config.global_scale_factor.item<float>(),
             config.alpha_threshold.item<float>(),
-            config.exp_power.item<float>());
+            config.exp_power.item<float>(),
+            config.global_scale_factor.item<float>());
 
         // * Update TLAS
         OptixAccelBuildOptions accel_options_tlas = {};
@@ -176,9 +176,9 @@ struct BVHWrapper {
             reinterpret_cast<float4 *>(m_gaussian_rotations.data_ptr()),
             reinterpret_cast<float3 *>(m_gaussian_means.data_ptr()),
             reinterpret_cast<float *>(m_gaussian_opacity.data_ptr()),
-            config.global_scale_factor.item<float>(),
             config.alpha_threshold.item<float>(),
-            config.exp_power.item<float>());
+            config.exp_power.item<float>(),
+            config.global_scale_factor.item<float>());
 
         OptixAccelBuildOptions accel_options_tlas = {};
         accel_options_tlas.buildFlags =
