@@ -3,9 +3,6 @@
 __device__ void forward_pass(
     const int step,
     //
-    float initial_lod,
-    float lod_by_distance,
-    //
     const uint32_t &ray_id,
     float3 tile_origin,
     float3 reflected_origin,
@@ -52,8 +49,6 @@ __device__ void forward_pass(
 
     // * Traverse BVH
     uint32_t step_uint = (uint32_t)step;
-    uint32_t uint_initial_lod = __float_as_uint(initial_lod);
-    uint32_t uint_lod_by_distance = __float_as_uint(lod_by_distance);
     uint32_t grads_enabled_uint = *params.grads_enabled;
     uint32_t alpha_threshold_uint =
         __float_as_uint(*params.config.alpha_threshold);
