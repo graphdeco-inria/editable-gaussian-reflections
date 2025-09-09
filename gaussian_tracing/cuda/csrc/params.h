@@ -123,13 +123,6 @@ struct Params {
     float4 *__restrict__ random_numbers; // input from torch
     uint32_t *__restrict__ random_seeds; // set from within the optix shader
 
-    float diffuse_loss_weight;
-    float glossy_loss_weight;
-    float position_loss_weight;
-    float normal_loss_weight;
-    float f0_loss_weight;
-    float roughness_loss_weight;
-
     float *init_blur_sigma;
 
     float *__restrict__ loss_tensor;

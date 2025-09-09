@@ -21,15 +21,6 @@
 
 #include "params.h"
 
-float GetEnvironmentVariableOrDefault(
-    const std::string &variable_name, float default_value) {
-    const char *value = getenv(variable_name.c_str());
-    if (value == 0) {
-        return default_value;
-    }
-    return std::stof(value);
-}
-
 struct Raytracer : torch::CustomClassHolder {
     int width;
     int height;
@@ -409,7 +400,6 @@ struct Raytracer : torch::CustomClassHolder {
         params_on_host.image_width = width;
         params_on_host.image_height = height;
         params_on_host.config = config_data->reify();
-        set_losses(false);
 
         // Render settings
         params_on_host.denoise = reinterpret_cast<bool *>(m_denoise.data_ptr());
@@ -675,39 +665,6 @@ struct Raytracer : torch::CustomClassHolder {
         }
     }
 
-    void set_losses(bool updateParams = true) {
-        params_on_host.diffuse_loss_weight =
-            GetEnvironmentVariableOrDefault("DIFFUSE_LOSS_WEIGHT", 1.0f);
-        params_on_host.glossy_loss_weight =
-            GetEnvironmentVariableOrDefault("GLOSSY_LOSS_WEIGHT", 1.0f);
-        params_on_host.normal_loss_weight =
-            GetEnvironmentVariableOrDefault("NORMAL_LOSS_WEIGHT", 1.0f);
-        params_on_host.position_loss_weight =
-            GetEnvironmentVariableOrDefault("POSITION_LOSS_WEIGHT", 1.0f);
-        params_on_host.f0_loss_weight =
-            GetEnvironmentVariableOrDefault("F0_LOSS_WEIGHT", 1.0f);
-        params_on_host.roughness_loss_weight =
-            GetEnvironmentVariableOrDefault("ROUGHNESS_LOSS_WEIGHT", 1.0f);
-
-        printf("diffuse_loss_weight: %f\n", params_on_host.diffuse_loss_weight);
-        printf("glossy_loss_weight: %f\n", params_on_host.glossy_loss_weight);
-        printf("normal_loss_weight: %f\n", params_on_host.normal_loss_weight);
-        printf(
-            "position_loss_weight: %f\n", params_on_host.position_loss_weight);
-        printf("f0_loss_weight: %f\n", params_on_host.f0_loss_weight);
-        printf(
-            "roughness_loss_weight: %f\n",
-            params_on_host.roughness_loss_weight);
-
-        if (updateParams) {
-            CUDA_CHECK(cudaMemcpy(
-                reinterpret_cast<void *>(params_on_device),
-                &params_on_host,
-                sizeof(Params),
-                cudaMemcpyHostToDevice));
-        }
-    }
-
     void update_bvh() {
         bvh_wrapper->update(
             m_gaussian_means,
@@ -852,7 +809,6 @@ struct Raytracer : torch::CustomClassHolder {
             .def("update_bvh", &Raytracer::update_bvh)
             .def("rebuild_bvh", &Raytracer::rebuild_bvh)
             .def("resize", &Raytracer::resize)
-            .def("set_losses", &Raytracer::set_losses)
             .def("set_camera", &Raytracer::set_camera)
             .def(
                 "get_config",

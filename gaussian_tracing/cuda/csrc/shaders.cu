@@ -313,8 +313,6 @@ extern "C" __global__ void __raygen__rg() {
         // * Compute the indicent radiance
         forward_pass(
             step,
-            initial_lod[step],
-            lod_by_distance[step],
             ray_id,
             tile_origin,
             reflected_origin,
@@ -688,8 +686,8 @@ forward_pass_end:
                 target_roughness,
                 error,
                 loss_modulation,
-                step == 0 ? params.diffuse_loss_weight
-                          : params.glossy_loss_weight,
+                step == 0 ? *params.config.loss_weight_diffuse
+                          : *params.config.loss_weight_glossy,
                 dL_dray_origin_next_step,
                 dL_dray_direction_next_step);
 

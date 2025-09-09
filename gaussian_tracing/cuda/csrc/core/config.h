@@ -8,6 +8,8 @@ struct Config {
     const float *alpha_threshold;
     const float *transmittance_threshold;
     const float *global_scale_factor;
+#define DECLARE_LOSS_PARAM(name, k) const float *loss_weight_##name;
+    ALL_TARGET_BUFFERS(DECLARE_LOSS_PARAM);
     const float *eps_forward_normalization;
     const float *eps_scale_grad;
     const float *eps_ray_surface_offset;
@@ -25,6 +27,9 @@ struct ConfigDataHolder : torch::CustomClassHolder {
     Tensor alpha_threshold = torch::tensor({0.005}, CUDA_FLOAT32);
     Tensor transmittance_threshold = torch::tensor({0.01}, CUDA_FLOAT32);
     Tensor global_scale_factor = torch::ones({1}, CUDA_FLOAT32);
+#define DECLARE_LOSS_BUFFER(name, k)                                           \
+    Tensor loss_weight_##name = torch::tensor({1.0}, CUDA_FLOAT32);
+    ALL_TARGET_BUFFERS(DECLARE_LOSS_BUFFER)
     Tensor eps_forward_normalization = torch::tensor({1e-12}, CUDA_FLOAT32);
     Tensor eps_scale_grad = torch::tensor({1e-12f}, CUDA_FLOAT32);
     Tensor eps_ray_surface_offset = torch::tensor({0.01f}, CUDA_FLOAT32);
@@ -44,7 +49,10 @@ struct ConfigDataHolder : torch::CustomClassHolder {
                 reinterpret_cast<float *>(transmittance_threshold.data_ptr()),
             .global_scale_factor =
                 reinterpret_cast<float *>(global_scale_factor.data_ptr()),
-            .eps_forward_normalization =
+#define REIFY_LOSS_BUFFER(name, k)                                             \
+    .loss_weight_##name =                                                      \
+        reinterpret_cast<float *>(loss_weight_##name.data_ptr()),
+            ALL_TARGET_BUFFERS(REIFY_LOSS_BUFFER).eps_forward_normalization =
                 reinterpret_cast<float *>(eps_forward_normalization.data_ptr()),
             .eps_scale_grad =
                 reinterpret_cast<float *>(eps_scale_grad.data_ptr()),
@@ -69,6 +77,9 @@ struct ConfigDataHolder : torch::CustomClassHolder {
                 &ConfigDataHolder::transmittance_threshold)
             .def_readonly(
                 "global_scale_factor", &ConfigDataHolder::global_scale_factor)
+#define BIND_LOSS_BUFFER(name, k)                                              \
+    .def_readonly("loss_weight_" #name, &ConfigDataHolder::loss_weight_##name)
+                ALL_TARGET_BUFFERS(BIND_LOSS_BUFFER)
             .def_readonly(
                 "eps_forward_normalization",
                 &ConfigDataHolder::eps_forward_normalization)

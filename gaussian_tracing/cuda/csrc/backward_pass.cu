@@ -194,19 +194,21 @@ __device__ void backward_pass(
                     dL_doutput_depth =
                         2.0f * sign(output_depth[k] - target_depth[k]) /
                         num_pixels *
-                        (step == 0 ? params.position_loss_weight : 0.0f);
+                        (step == 0 ? *params.config.loss_weight_depth : 0.0f);
                     dL_doutput_normal =
                         2.0f / 3.0f *
                         sign(output_normal[k] - target_normal[k]) / num_pixels *
-                        (step == 0 ? params.normal_loss_weight : 0.0f);
+                        (step == 0 ? *params.config.loss_weight_normal : 0.0f);
                     dL_doutput_f0 =
                         2.0f / 3.0f * sign(output_f0[k] - target_f0[k]) /
-                        num_pixels * (step == 0 ? params.f0_loss_weight : 0.0f);
+                        num_pixels *
+                        (step == 0 ? *params.config.loss_weight_f0 : 0.0f);
                     dL_doutput_roughness =
                         2.0f / 1.0f *
                         sign(output_roughness[k] - target_roughness[k]) /
                         num_pixels *
-                        (step == 0 ? params.roughness_loss_weight : 0.0f);
+                        (step == 0 ? *params.config.loss_weight_roughness
+                                   : 0.0f);
                 } else {
                     dL_doutput_rgb = dL_doutput_rgb * throughput[k];
                     dL_dthroughput_out[k] =
@@ -441,7 +443,7 @@ __device__ void backward_pass(
                 } else {
                     atomicAddX(
                         &params.densification_gradient_glossy[gaussian_id],
-                        dL_dmean_total / params.glossy_loss_weight *
+                        dL_dmean_total / *params.config.loss_weight_glossy *
                             grad_dist_weight / MAX_BOUNCES);
                 }
 
