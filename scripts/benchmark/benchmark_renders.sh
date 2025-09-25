@@ -24,26 +24,14 @@ python3 -c "import torch; print(torch.cuda.is_available()); print(torch.cuda.get
 # Start
 # ============================================================
 
-# RESOLUTION=512
-# SCENE_DIR="data/real_datasets_v3_filmic/refnerf_priors"
-# SCENE_LIST="gardenspheres sedan toycar"
-# OUTPUT_DIR="output/benchmark_refnerf_priors"
+export LOAD_FROM_IMAGE_FILES=1
+export OPENCV_IO_ENABLE_OPENEXR=1
 
 RESOLUTION=512
-SCENE_DIR="data/real_datasets_v3_filmic/neural_catacaustics_priors"
-SCENE_LIST="compost concave_bowl2 crazy_blade2 hallway_lamp multibounce silver_vase2 wateringcan2"
-OUTPUT_DIR="output/benchmark_neural_catacaustics_priors"
-
-# RESOLUTION=512
-# SCENE_DIR="data/real_datasets_v3_filmic/360_v2_priors"
-# SCENE_LIST="garden bicycle stump bonsai counter kitchen room treehill flowers"
-# OUTPUT_DIR="output/benchmark_360_v2_priors"
-
-# RESOLUTION=512
-# SCENE_DIR="data/real_datasets_v3_filmic/renders_priors"
-# SCENE_LIST="shiny_kitchen shiny_bedroom shiny_livingroom shiny_office"
-# # SCENE_LIST="multichromeball_kitchen_v2 multichromeball_identical_kitchen_v2 multichromeball_tint_kitchen_v2 multichromeball_value_kitchen_v2"
-# OUTPUT_DIR="output/benchmark_renders_priors"
+SCENE_DIR="data/renders"
+SCENE_LIST="shiny_kitchen shiny_bedroom shiny_livingroom shiny_office"
+# SCENE_LIST="multichromeball_kitchen_v2 multichromeball_identical_kitchen_v2 multichromeball_tint_kitchen_v2 multichromeball_value_kitchen_v2"
+OUTPUT_DIR="output/benchmark_renders"
 
 for SCENE in $SCENE_LIST;
 do
@@ -51,9 +39,6 @@ do
         --source_path $SCENE_DIR/$SCENE \
         --model_path $OUTPUT_DIR/$SCENE \
         --resolution $RESOLUTION \
-        --disable_znear_densif_pruning \
-        --loss_weight_depth 0.0 \
-        --do_depth_fit \
         --eval
 
     python render.py \
@@ -62,7 +47,7 @@ do
         --resolution $RESOLUTION \
         --eval
 
-    ZNEAR=0.5 python render_novel_views.py \
+    python render_novel_views.py \
         --source_path $SCENE_DIR/$SCENE \
         --model_path $OUTPUT_DIR/$SCENE \
         --resolution $RESOLUTION \

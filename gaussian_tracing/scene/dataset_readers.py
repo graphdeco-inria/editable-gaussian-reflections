@@ -18,7 +18,11 @@ import torch
 from tqdm import tqdm
 
 from gaussian_tracing.arguments import TyroConfig
-from gaussian_tracing.dataset import BlenderDataset, BlenderPriorDataset, ColmapDataset
+from gaussian_tracing.dataset import (
+    BlenderDataset,
+    BlenderPriorDataset,
+    ColmapPriorDataset,
+)
 from gaussian_tracing.dataset.points_utils import make_random_point_cloud
 from gaussian_tracing.utils.graphics_utils import BasicPointCloud, getWorld2View2
 from gaussian_tracing.utils.ply_utils import read_ply
@@ -75,14 +79,17 @@ def get_dataset(cfg: TyroConfig, data_dir: str, split: str):
                 split=split,
                 resolution=cfg.resolution,
                 max_images=cfg.max_images,
+                do_eval=cfg.eval,
+                do_depth_fit=cfg.do_depth_fit,
             )
     else:
-        dataset = ColmapDataset(
+        dataset = ColmapPriorDataset(
             data_dir,
             split=split,
             resolution=cfg.resolution,
             max_images=cfg.max_images,
             do_eval=cfg.eval,
+            do_depth_fit=cfg.do_depth_fit,
         )
     return dataset
 
@@ -128,7 +135,9 @@ def readSceneInfo(cfg: TyroConfig, data_dir: str) -> SceneInfo:
         colors=colors,
         normals=np.zeros_like(points),
     )
-    extra_point_cloud = make_random_point_cloud(cfg.model_params)
+    extra_point_cloud = make_random_point_cloud(
+        cfg.init_num_pts_farfield, cfg.init_diffuse_farfield
+    )
 
     scene_info = SceneInfo(
         point_cloud=point_cloud,

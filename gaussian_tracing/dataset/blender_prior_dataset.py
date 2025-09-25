@@ -10,6 +10,8 @@ from torch import Tensor
 
 from gaussian_tracing.dataset.colmap_parser import ColmapParser
 from gaussian_tracing.utils.depth_utils import (
+    project_pointcloud_to_depth_map,
+    ransac_linear_fit,
     transform_depth_to_position_image,
     transform_normals_to_world,
     transform_points,
@@ -28,11 +30,16 @@ class BlenderPriorDataset:
         split: str = "train",
         resolution: int | None = None,
         max_images: int | None = None,
+        do_eval: bool = True,
+        do_depth_fit: bool = False,
     ):
         self.data_dir = data_dir
         self.split = split
         self.resolution = resolution
         self.max_images = max_images
+        self.do_eval = do_eval
+        self.do_depth_fit = do_depth_fit
+
         self.buffer_names = [
             "render",
             "albedo",
@@ -61,7 +68,6 @@ class BlenderPriorDataset:
         self.frames = sorted(self.contents["frames"], key=lambda x: x["file_path"])
         if self.max_images is not None:
             self.frames = self.frames[: self.max_images]
-        assert len(self.frames) != 0, "Dataset is empty"
 
     def __len__(self) -> int:
         return len(self.frames)
@@ -100,15 +106,34 @@ class BlenderPriorDataset:
         R = np.transpose(w2c[:3, :3])
         T = w2c[:3, 3]
 
-        # Postprocess normal_image
         R_tensor = torch.tensor(R, dtype=torch.float32)
+        c2w_tensor = torch.tensor(c2w, dtype=torch.float32)
+        w2c_tensor = torch.tensor(w2c, dtype=torch.float32)
+
+        # Postprocess normal_image
         buffers["normal"] = transform_normals_to_world(buffers["normal"], R_tensor)
 
-        # Postprocess depth_image to position_image
+        # Postprocess depth_image
         depth_image = buffers["depth"][:, :, 0]
-        c2w_tensor = torch.tensor(c2w, dtype=torch.float32)
-        a, b = 4.0, 0.0
+        if self.do_depth_fit:
+            points_tensor = torch.tensor(
+                self.colmap_parser.points[self.colmap_parser.point_indices[image_name]],
+                dtype=torch.float32,
+            )
+            points_tensor = transform_points(points_tensor, w2c_tensor)
+            depth_points_image = project_pointcloud_to_depth_map(
+                points_tensor, fovx, fovy, depth_image.shape[:2]
+            )
+            valid_mask = depth_points_image != 0
+            x = depth_image[valid_mask].float()
+            y = depth_points_image[valid_mask]
+            # a, b = linear_least_squares_1d(x, y)
+            (a, b), _ = ransac_linear_fit(x, y)
+        else:
+            a, b = (4.0, 0.0)
         depth_image = depth_image * a + b
+
+        # Postprocess depth_image to position_image
         position_image = transform_depth_to_position_image(depth_image, fovx, fovy)
         buffers["position"] = transform_points(position_image, c2w_tensor)
 

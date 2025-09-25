@@ -643,7 +643,7 @@ def main(cfg: TyroConfig):
                             < model_params.min_weight
                         ).squeeze(1)
                     )
-                if model_params.znear_densif_pruning:
+                if not cfg.disable_znear_densif_pruning:
                     gaussians.prune_znear_only(scene)
                 raytracer.cuda_module.get_gaussians().total_weight.zero_()
                 assert "DENSIFY" not in os.environ

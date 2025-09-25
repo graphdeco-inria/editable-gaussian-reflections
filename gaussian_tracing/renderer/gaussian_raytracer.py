@@ -30,12 +30,12 @@ class GaussianRaytracer:
 
         config = self.cuda_module.get_config()
         # todo use a loop
-        config.loss_weight_diffuse.fill_(pc.model_params.loss_weight_diffuse)
-        config.loss_weight_glossy.fill_(pc.model_params.loss_weight_glossy)
-        config.loss_weight_normal.fill_(pc.model_params.loss_weight_normal)
-        config.loss_weight_depth.fill_(pc.model_params.loss_weight_depth)
-        config.loss_weight_f0.fill_(pc.model_params.loss_weight_f0)
-        config.loss_weight_roughness.fill_(pc.model_params.loss_weight_roughness)
+        config.loss_weight_diffuse.fill_(pc.cfg.loss_weight_diffuse)
+        config.loss_weight_glossy.fill_(pc.cfg.loss_weight_glossy)
+        config.loss_weight_normal.fill_(pc.cfg.loss_weight_normal)
+        config.loss_weight_depth.fill_(pc.cfg.loss_weight_depth)
+        config.loss_weight_f0.fill_(pc.cfg.loss_weight_f0)
+        config.loss_weight_roughness.fill_(pc.cfg.loss_weight_roughness)
 
         config.transmittance_threshold.fill_(pc.model_params.transmittance_threshold)
         config.alpha_threshold.fill_(pc.model_params.alpha_threshold)
