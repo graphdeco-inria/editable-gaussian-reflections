@@ -7,9 +7,7 @@ __device__ float3 sigmoid_act(float3 x) {
     return {sigmoid_act(x.x), sigmoid_act(x.y), sigmoid_act(x.z)};
 }
 
-__device__ float backward_sigmoid_act(float dL_dy, float y) {
-    return dL_dy * y * (1.0f - y);
-}
+__device__ float backward_sigmoid_act(float dL_dy, float y) { return dL_dy * y * (1.0f - y); }
 __device__ float3 backward_sigmoid_act(float3 dL_dy, float3 y) {
     return {
         backward_sigmoid_act(dL_dy.x, y.x),
@@ -42,9 +40,7 @@ __device__ float backward_relu_act(float dL_dy, float y) {
     return dL_dy * (y >= 0.0f ? 1.0f : 0.0f);
 }
 
-__device__ float3 relu_act(float3 x) {
-    return {relu_act(x.x), relu_act(x.y), relu_act(x.z)};
-}
+__device__ float3 relu_act(float3 x) { return {relu_act(x.x), relu_act(x.y), relu_act(x.z)}; }
 
 __device__ float3 backward_relu_act(float3 dL_dy, float3 y) {
     return {
@@ -62,8 +58,7 @@ __device__ float backward_clipped_relu_act(float dL_dy, float y) {
 }
 
 __device__ float3 clipped_relu_act(float3 x) {
-    return {
-        clipped_relu_act(x.x), clipped_relu_act(x.y), clipped_relu_act(x.z)};
+    return {clipped_relu_act(x.x), clipped_relu_act(x.y), clipped_relu_act(x.z)};
 }
 
 __device__ float3 backward_clipped_relu_act(float3 dL_dy, float3 y) {
@@ -76,9 +71,7 @@ __device__ float3 backward_clipped_relu_act(float3 dL_dy, float3 y) {
 // * Exp
 
 __device__ float exp_act(float x) { return exp(x); }
-__device__ float3 exp_act(float3 x) {
-    return {exp_act(x.x), exp_act(x.y), exp_act(x.z)};
-}
+__device__ float3 exp_act(float3 x) { return {exp_act(x.x), exp_act(x.y), exp_act(x.z)}; }
 
 __device__ float backward_exp_act(float dL_dy, float y) { return dL_dy * y; }
 __device__ float3 backward_exp_act(float3 dL_dy, float3 y) {

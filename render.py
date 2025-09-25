@@ -238,17 +238,13 @@ def render_set(
                 else:
                     blur_sigma = blur_sigma
 
+                config = raytracer.cuda_module.get_config()
                 if cfg.max_bounces > -1:
-                    raytracer.cuda_module.num_bounces.copy_(cfg.max_bounces)
+                    config.num_bounces.copy_(cfg.max_bounces)
 
                 if cfg.spp > 1:
-                    raytracer.cuda_module.accumulate.copy_(True)
-                    raytracer.cuda_module.accumulated_rgb.zero_()
-                    raytracer.cuda_module.accumulated_normal.zero_()
-                    raytracer.cuda_module.accumulated_depth.zero_()
-                    raytracer.cuda_module.accumulated_f0.zero_()
-                    raytracer.cuda_module.accumulated_roughness.zero_()
-                    raytracer.cuda_module.accumulated_sample_count.zero_()
+                    config.accumulate_samples.copy_(True)
+                    raytracer.cuda_module.reset_accumulators()
                     for i in range(cfg.spp):
                         package = render(
                             view,
@@ -271,8 +267,8 @@ def render_set(
                 F0_gt_image = view.F0_image
 
                 diffuse_image = tonemap(package.rgb[0]).clamp(0, 1)
-                glossy_image = tonemap(package.rgb[1:-1].sum(dim=0)).clamp(0, 1)
-                pred_image = tonemap(package.rgb[-1]).clamp(0, 1)
+                glossy_image = tonemap(package.rgb[1:].sum(dim=0)).clamp(0, 1)
+                pred_image = tonemap(package.final.squeeze(0)).clamp(0, 1)
 
                 psnr_test += psnr(pred_image, gt_image).mean() / len(views)
                 l1_test += F.l1_loss(pred_image, gt_image) / len(views)

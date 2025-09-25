@@ -20,9 +20,7 @@ __device__ __inline__ void atomicAddX(float2 *address, float2 val) {
     atomicAdd(&address->y, val.y);
 }
 
-__device__ __inline__ void atomicAddX(float *address, float val) {
-    atomicAdd(address, val);
-}
+__device__ __inline__ void atomicAddX(float *address, float val) { atomicAdd(address, val); }
 
 __device__ void fill_array(float *arr, uint32_t size, float val) {
     for (int i = 0; i < size; i++) {
@@ -59,8 +57,7 @@ __device__ float dot(float a, float b) {
 }
 
 __device__ float3 sign(float3 v) {
-    return make_float3(
-        copysignf(1.0f, v.x), copysignf(1.0f, v.y), copysignf(1.0f, v.z));
+    return make_float3(copysignf(1.0f, v.x), copysignf(1.0f, v.y), copysignf(1.0f, v.z));
 }
 
 __device__ float sign(float v) { return copysignf(1.0f, v); }

@@ -72,12 +72,9 @@ class BlenderDataset:
                 metalness_image,
                 base_color_image,
                 brdf_image,
-            ) = tuple(
-                [
-                    self._resize_image_tensor(x)
-                    for x in torch.unbind(image_tensor, dim=0)
-                ]
-            )
+            ) = torch.unbind(image_tensor, dim=0)
+            albedo_image = None
+            depth_image = None
         else:
             image = self._get_buffer(frame_name, "render")
             albedo_image = self._get_buffer(frame_name, "albedo")

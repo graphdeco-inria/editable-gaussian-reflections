@@ -19,22 +19,16 @@ class DenoiserWrapper {
     std::vector<OptixDenoiserLayer> layers;
 
   public:
-    DenoiserWrapper(
-        OptixDeviceContext context_,
-        const Params &params_on_host,
-        const Tensor m_output_rgb,
-        const Tensor m_output_normal) {
+    DenoiserWrapper(OptixDeviceContext context_, const Params &params_on_host) {
         OptixDenoiserOptions options = {};
         options.guideAlbedo = 0;
         options.guideNormal = 1;
         options.denoiseAlpha = (OptixDenoiserAlphaMode)0;
         OptixDenoiserModelKind modelKind;
         modelKind = OPTIX_DENOISER_MODEL_KIND_HDR;
-        OPTIX_CHECK(optixDenoiserCreate(
-            context_, modelKind, &options, &optix_denoiser));
+        OPTIX_CHECK(optixDenoiserCreate(context_, modelKind, &options, &optix_denoiser));
 
-        CUDA_CHECK(cudaMalloc(
-            reinterpret_cast<void **>(&hdrIntensity), sizeof(float)));
+        CUDA_CHECK(cudaMalloc(reinterpret_cast<void **>(&hdrIntensity), sizeof(float)));
 
         OptixDenoiserSizes denoiser_sizes;
         OPTIX_CHECK(optixDenoiserComputeMemoryResources(
@@ -42,35 +36,27 @@ class DenoiserWrapper {
             params_on_host.image_width,
             params_on_host.image_height,
             &denoiser_sizes));
-        scratch_size = static_cast<uint32_t>(
-            denoiser_sizes.withoutOverlapScratchSizeInBytes);
+        scratch_size = static_cast<uint32_t>(denoiser_sizes.withoutOverlapScratchSizeInBytes);
         overlap = 0;
-        CUDA_CHECK(cudaMalloc(
-            reinterpret_cast<void **>(&hdrAverageColor), 3 * sizeof(float)));
-        CUDA_CHECK(
-            cudaMalloc(reinterpret_cast<void **>(&scratch), scratch_size));
-        CUDA_CHECK(cudaMalloc(
-            reinterpret_cast<void **>(&state),
-            denoiser_sizes.stateSizeInBytes));
+        CUDA_CHECK(cudaMalloc(reinterpret_cast<void **>(&hdrAverageColor), 3 * sizeof(float)));
+        CUDA_CHECK(cudaMalloc(reinterpret_cast<void **>(&scratch), scratch_size));
+        CUDA_CHECK(cudaMalloc(reinterpret_cast<void **>(&state), denoiser_sizes.stateSizeInBytes));
 
         // * Denoise inplace
         OptixDenoiserLayer layer = {};
         layer.input = createOptixImage2D(
             params_on_host.image_width,
             params_on_host.image_height,
-            reinterpret_cast<CUdeviceptr>(
-                m_output_rgb.index({MAX_BOUNCES + 1}).data_ptr()));
+            reinterpret_cast<CUdeviceptr>(params_on_host.framebuffer.output_final));
         layer.output = createOptixImage2D(
             params_on_host.image_width,
             params_on_host.image_height,
-            reinterpret_cast<CUdeviceptr>(
-                m_output_rgb.index({MAX_BOUNCES + 1}).data_ptr()));
+            reinterpret_cast<CUdeviceptr>(params_on_host.framebuffer.output_final));
         layers.push_back(layer);
         guideLayer.normal = createOptixImage2D(
             params_on_host.image_width,
             params_on_host.image_height,
-            reinterpret_cast<CUdeviceptr>(
-                m_output_normal.index({0}).data_ptr()));
+            reinterpret_cast<CUdeviceptr>(params_on_host.framebuffer.output_normal));
 
         state_size = static_cast<uint32_t>(denoiser_sizes.stateSizeInBytes);
         OPTIX_CHECK(optixDenoiserSetup(
@@ -120,8 +106,8 @@ class DenoiserWrapper {
     }
 
   private:
-    static OptixImage2D createOptixImage2D(
-        unsigned int width, unsigned int height, CUdeviceptr tensor_data) {
+    static OptixImage2D
+    createOptixImage2D(unsigned int width, unsigned int height, CUdeviceptr tensor_data) {
         OptixImage2D oi;
         oi.data = tensor_data;
         oi.width = width;

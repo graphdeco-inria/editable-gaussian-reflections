@@ -65,7 +65,7 @@ class ModelParams:
 
         self.warmup_loss_weight_diffuse = 10000.0
         self.loss_weight_diffuse = 5.0
-        self.loss_weight_glossy = 3.0
+        self.loss_weight_glossy = 3.0  # was 3.0 at paper submission
         self.loss_weight_normal = 2.5
         self.loss_weight_depth = 2.5
         if "REAL_SCENE" in os.environ:
