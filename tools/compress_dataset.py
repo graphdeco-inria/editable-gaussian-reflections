@@ -40,7 +40,7 @@ def main():
     ]
 
     dataset_dir = "./data/renders"
-    out_dir = f"./output/convert_dataset2"
+    out_dir = f"./output/renders_compressed"
 
     for scene_name in scene_names:
         data_dir = os.path.join(dataset_dir, scene_name)
@@ -74,11 +74,8 @@ def main():
                         buffer = buffer[:,:,:1]
                     elif buffer_name == "depth":
                         buffer = buffer[:,:,:1]
-                        lower = buffer.min()
-                        upper = buffer.max()
-                        print(lower, upper)
-                        lower = 0.0
-                        upper = 4.0
+                        lower = 0.0 # buffer.min()
+                        upper = 4.0 # buffer.max()
                         buffer = (buffer - lower) / (upper - lower)
                     elif buffer_name == "position":
                         pass

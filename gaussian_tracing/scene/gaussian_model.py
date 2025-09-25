@@ -229,13 +229,13 @@ class GaussianModel:
             distCUDA2(torch.from_numpy(np.asarray(pcd.points)).float().cuda()),
             0.0000001,
         )
-        scales = torch.log(torch.sqrt(dist2) * self.model_params.init_scale_factor)[
-            ..., None
-        ].repeat(1, 3)
+        scales = torch.log(torch.sqrt(dist2) * self.cfg.init_scale)[..., None].repeat(
+            1, 3
+        )
         rots = torch.zeros((fused_point_cloud.shape[0], 4), device="cuda")
         rots[:, 0] = 1
         opacities = inverse_sigmoid(
-            self.model_params.init_opacity
+            self.cfg.init_opa
             * torch.ones(
                 (fused_point_cloud.shape[0], 1), dtype=torch.float, device="cuda"
             )
@@ -249,11 +249,11 @@ class GaussianModel:
         self._normal = nn.Parameter(fused_normal.clone())
         self._roughness = nn.Parameter(
             torch.ones((fused_point_cloud.shape[0], 1), device="cuda")
-            * self.model_params.init_roughness
+            * self.cfg.init_roughness
         )
         self._f0 = nn.Parameter(
             torch.ones((fused_point_cloud.shape[0], 3), device="cuda")
-            * self.model_params.init_f0
+            * self.cfg.init_f0
         )
         if "SKIP_TONEMAPPING" not in os.environ and "DIRECT_INIT" not in os.environ:
             self._diffuse = nn.Parameter(
@@ -294,13 +294,9 @@ class GaussianModel:
 
     @torch.no_grad()
     def add_farfield_points(self, scene):
-        print(
-            f"Generating random point cloud ({self.model_params.num_farfield_init_points})..."
-        )
+        print(f"Generating random point cloud ({self.cfg.init_num_pts_farfield})...")
         new_xyz = (
-            torch.randn(
-                self.model_params.num_farfield_init_points, 3, device="cuda"
-            ).clamp(-3, 3)
+            torch.randn(self.cfg.init_num_pts_farfield, 3, device="cuda").clamp(-3, 3)
             * scene.cameras_extent
             * self.model_params.scene_extent_init_radius
         )
@@ -325,9 +321,9 @@ class GaussianModel:
             distCUDA2(new_xyz.float().cuda()),
             0.0000001,
         )
-        new_scaling = torch.log(
-            torch.sqrt(dist2) * self.model_params.init_scale_factor_farfield
-        )[..., None].repeat(1, 3)
+        new_scaling = torch.log(torch.sqrt(dist2) * self.cfg.init_scale_farfield)[
+            ..., None
+        ].repeat(1, 3)
 
         if add_book_points:
             book_pts_scale = float(os.getenv("BOOK_PTS_SCALE", 0.001))
@@ -337,12 +333,10 @@ class GaussianModel:
         new_rotation = torch.zeros((new_xyz.shape[0], 4), device="cuda")
         new_rotation[:, 0] = 1
         new_opacity = inverse_sigmoid(
-            self.model_params.init_opacity_farfield
+            self.cfg.init_opa_farfield
             * torch.ones((new_xyz.shape[0], 1), dtype=torch.float, device="cuda")
         )
-        new_diffuse = (
-            torch.ones_like(new_xyz) * self.model_params.init_extra_point_diffuse
-        )
+        new_diffuse = torch.ones_like(new_xyz) * self.cfg.init_diffuse_farfield
         if add_book_points:
             new_diffuse[-new_xyz.shape[0] :] = torch.rand_like(
                 new_diffuse[-new_xyz.shape[0] :]
@@ -993,7 +987,7 @@ class GaussianModel:
         if opt.densif_no_pruning:
             prune_mask = torch.zeros_like(prune_mask)
 
-        if self.model_params.znear_densif_pruning:
+        if not self.cfg.disable_znear_densif_pruning:
             prune_mask |= scene.select_points_to_prune_near_cameras(
                 self._xyz.data, self.get_scaling
             )

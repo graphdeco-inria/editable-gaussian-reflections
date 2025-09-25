@@ -24,14 +24,11 @@ python3 -c "import torch; print(torch.cuda.is_available()); print(torch.cuda.get
 # Start
 # ============================================================
 
-export LOAD_FROM_IMAGE_FILES=1
-export OPENCV_IO_ENABLE_OPENEXR=1
-
 RESOLUTION=512
-SCENE_DIR="data/renders"
+SCENE_DIR="data/renders_compressed"
 SCENE_LIST="shiny_kitchen shiny_bedroom shiny_livingroom shiny_office"
 # SCENE_LIST="multichromeball_kitchen_v2 multichromeball_identical_kitchen_v2 multichromeball_tint_kitchen_v2 multichromeball_value_kitchen_v2"
-OUTPUT_DIR="output/benchmark_synthetic"
+OUTPUT_DIR="output/benchmark_renders_compressed"
 
 for SCENE in $SCENE_LIST;
 do
@@ -39,7 +36,6 @@ do
         --source_path $SCENE_DIR/$SCENE \
         --model_path $OUTPUT_DIR/$SCENE \
         --resolution $RESOLUTION \
-        --init_scale_factor 0.1 \
         --eval
 
     python render.py \

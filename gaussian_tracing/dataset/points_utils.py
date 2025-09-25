@@ -23,11 +23,7 @@ def get_point_cloud(data_dir) -> BasicPointCloud:
     return pcd
 
 
-def make_random_point_cloud(model_params) -> BasicPointCloud:
-    num_rand_pts = model_params.num_farfield_init_points
-    # glossy_bbox_size_mult = model_params.glossy_bbox_size_mult
-    init_extra_point_diffuse = model_params.init_extra_point_diffuse
-
+def make_random_point_cloud(num_rand_pts, init_extra_point_diffuse) -> BasicPointCloud:
     print(f"Generating random point cloud ({num_rand_pts})...")
     rand_xyz = (
         np.random.random((num_rand_pts, 3)) * 2.6 - 1.3

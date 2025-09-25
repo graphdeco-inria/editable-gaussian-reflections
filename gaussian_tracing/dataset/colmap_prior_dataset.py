@@ -27,7 +27,7 @@ from .colmap_loader import (
 from .image_utils import from_pil_image
 
 
-class ColmapDataset:
+class ColmapPriorDataset:
     def __init__(
         self,
         data_dir: str,
@@ -35,12 +35,14 @@ class ColmapDataset:
         resolution: int | None = None,
         max_images: int | None = None,
         do_eval: bool = True,
+        do_depth_fit: bool = False,
     ):
         self.data_dir = data_dir
         self.split = split
         self.resolution = resolution
         self.max_images = max_images
         self.do_eval = do_eval
+        self.do_depth_fit = do_depth_fit
 
         self.colmap_parser = ColmapParser(data_dir)
         self.point_cloud = BasicPointCloud(
@@ -62,7 +64,7 @@ class ColmapDataset:
             self.cam_extrinsics = read_extrinsics_text(cameras_extrinsic_file)
             self.cam_intrinsics = read_intrinsics_text(cameras_intrinsic_file)
 
-        keys = list(sorted(list(self.cam_extrinsics.keys())))[: self.max_images]
+        keys = list(sorted(list(self.cam_extrinsics.keys())))
         if self.do_eval:
             if split == "train":
                 self.keys = [
@@ -77,6 +79,8 @@ class ColmapDataset:
                 self.keys = keys
             else:
                 self.keys = []
+        if self.max_images is not None:
+            self.keys = self.keys[: self.max_images]
 
         if "MANUAL_FILTER" in os.environ:
             self.best_frames = (
@@ -110,23 +114,6 @@ class ColmapDataset:
         brdf_image = torch.zeros_like(image)
         base_color_image = albedo_image * (1.0 - metalness_image) + metalness_image
 
-        roughness_image = self._get_buffer(frame_name, "roughness")
-        metalness_image = self._get_buffer(frame_name, "metalness")
-        if "REAL_SCENE" in os.environ:
-            # original_metalness_image = metalness_image
-            # original_roughness_image = roughness_image
-            if "SKIP_MIRROR_METALS" not in os.environ:
-                roughness_image = roughness_image * (1.0 - metalness_image)
-            if "SKIP_WHITE_METALS" not in os.environ:
-                albedo_image = albedo_image * (1.0 - metalness_image) + metalness_image
-                diffuse_image = diffuse_image * (1.0 - metalness_image)
-            # if "SKIP_THRESHOLD_ROUGHNESS" not in os.environ:
-            #     upsized_roughness = torch.nn.functional.interpolate(roughness_image.moveaxis(-1, 0)[None], scale_factor=4, mode='bicubic', antialias=True)
-            #     upsized_roughness[upsized_roughness < 0.25] = 0.0
-            #     roughness_image = torch.nn.functional.interpolate(upsized_roughness, scale_factor=1/4, mode="area")[0].moveaxis(0, -1)
-            # if "SKIP_SPECULAR_FROM_METALNESS" not in os.environ:
-            #     specular_image = original_roughness_image / 2 + 0.5
-
         # Camera intrinsics
         height = intr.height
         width = intr.width
@@ -153,28 +140,34 @@ class ColmapDataset:
         R = np.transpose(w2c[:3, :3])
         T = w2c[:3, 3]
 
-        # Postprocess normal_image
         R_tensor = torch.tensor(R, dtype=torch.float32)
-        normal_image = transform_normals_to_world(normal_image, R_tensor)
-
-        # Postprocess depth_image to position_image
-        depth_image = depth_image[:, :, 0]
         c2w_tensor = torch.tensor(c2w, dtype=torch.float32)
         w2c_tensor = torch.tensor(w2c, dtype=torch.float32)
-        points_tensor = torch.tensor(
-            self.colmap_parser.points[self.colmap_parser.point_indices[image_name]],
-            dtype=torch.float32,
-        )
-        points_tensor = transform_points(points_tensor, w2c_tensor)
-        depth_points_image = project_pointcloud_to_depth_map(
-            points_tensor, fovx, fovy, depth_image.shape[:2]
-        )
-        valid_mask = depth_points_image != 0
-        x = depth_image[valid_mask].float()
-        y = depth_points_image[valid_mask]
-        # a, b = linear_least_squares_1d(x, y)
-        (a, b), _ = ransac_linear_fit(x, y)
+
+        # Postprocess normal_image
+        normal_image = transform_normals_to_world(normal_image, R_tensor)
+
+        # Postprocess depth_image
+        depth_image = depth_image[:, :, 0]
+        if self.do_depth_fit:
+            points_tensor = torch.tensor(
+                self.colmap_parser.points[self.colmap_parser.point_indices[image_name]],
+                dtype=torch.float32,
+            )
+            points_tensor = transform_points(points_tensor, w2c_tensor)
+            depth_points_image = project_pointcloud_to_depth_map(
+                points_tensor, fovx, fovy, depth_image.shape[:2]
+            )
+            valid_mask = depth_points_image != 0
+            x = depth_image[valid_mask].float()
+            y = depth_points_image[valid_mask]
+            # a, b = linear_least_squares_1d(x, y)
+            (a, b), _ = ransac_linear_fit(x, y)
+        else:
+            a, b = (4.0, 0.0)
         depth_image = depth_image * a + b
+
+        # Postprocess depth_image to position_image
         position_image = transform_depth_to_position_image(depth_image, fovx, fovy)
         position_image = transform_points(position_image, c2w_tensor)
 

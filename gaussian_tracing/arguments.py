@@ -12,18 +12,11 @@
 import os
 from dataclasses import dataclass, field
 
-# loss_weight_diffuse
-# REFLECTION_LOSS_WEIGHT
-# loss_weight_normal
-# loss_weight_depth
-# BRDF_PARAMS_LOSS_WEIGHT
-
 
 class ModelParams:
     def __init__(self):
         self.white_background = False
         self.data_device = "cuda"
-        self.eval = False
         self.scene_extent_init_radius = 4.0
         self.scene_extent_multiplier = 5.0
         self.num_feat_per_gaussian_channel = 16
@@ -34,12 +27,10 @@ class ModelParams:
 
         self.keep_every_kth_view = 1
         self.max_images = 9999999
-        self.num_farfield_init_points = 75_000
 
         self.min_opacity = 0.005
         self.min_weight = 0.1
 
-        self.znear_densif_pruning = "REAL_SCENE" not in os.environ
         self.znear_scaledown = 0.8
         self.zfar_scaleup = 1.5
 
@@ -53,33 +44,8 @@ class ModelParams:
         self.cap_max = -1  # for mcmc
 
         self.use_opacity_resets = False
-        self.init_scale_factor = 1.0  # 1.0 for 3dgs, 0.1 for mcmc
-        if "REAL_SCENE" in os.environ:
-            self.init_scale_factor = 0.1
-        self.init_scale_factor_farfield = 0.1
-        self.init_opacity = 0.1  # 0.1 for 3dgs, 0.5 for mcmc
-        self.init_opacity_farfield = 0.1
-        self.init_roughness = 0.1
-        self.init_f0 = 0.04
-        self.init_extra_point_diffuse = 0.2
 
         self.warmup_loss_weight_diffuse = 10000.0
-        self.loss_weight_diffuse = 5.0
-        self.loss_weight_glossy = 3.0  # was 3.0 at paper submission
-        self.loss_weight_normal = 2.5
-        self.loss_weight_depth = 2.5
-        if "REAL_SCENE" in os.environ:
-            self.loss_weight_depth = 0.0
-        self.loss_weight_f0 = 1.0
-        self.loss_weight_roughness = 1.0
-
-        if "ONLY_DIFFUSE_LOSS" in os.environ:
-            self.loss_weight_diffuse = 5.0
-            self.loss_weight_glossy = 0.0
-            self.loss_weight_normal = 0.0
-            self.loss_weight_depth = 0.0
-            self.loss_weight_f0 = 0.0
-            self.loss_weight_roughness = 0.0
 
         self.transmittance_threshold = 0.01
         self.alpha_threshold = 0.005
@@ -230,12 +196,12 @@ class TyroConfig:
     model_path: str = ""
     # Resolution
     resolution: int = 512
-    # Initial scale factor
-    init_scale_factor: float = 0.1
     # Evaluation
     eval: bool = False
     # Max images
     max_images: int | None = None
+    # Fit depth images to colmap point cloud
+    do_depth_fit: bool = False
 
     # Iteration
     iteration: int = -1
@@ -259,3 +225,40 @@ class TyroConfig:
     red_region: bool = False
     # Skip save frames
     skip_save_frames: bool = False
+
+    # Initialization strategy
+    init_type: str = "sfm"
+    # Initial number of GSs. Ignored if using sfm
+    init_num_pts: int = 100_000
+    # Initial number of farfield GSs.
+    init_num_pts_farfield = 75_000
+    # Initial opacity of GS
+    init_opa: float = 0.1
+    # Initial opacity of farfield GS
+    init_opa_farfield: float = 0.1
+    # Initial scale of GS
+    init_scale: float = 0.1  # 1.0 for 3dgs, 0.1 for mcmc
+    # Initial scale of farfield GS
+    init_scale_farfield: float = 0.1
+    # Initial roughness of GS
+    init_roughness: float = 0.1
+    # Initial f0 of GS
+    init_f0: float = 0.04
+    # Initial diffuse of farfield GS
+    init_diffuse_farfield: float = 0.2
+
+    # Loss weight for diffuse
+    loss_weight_diffuse: float = 5.0
+    # Loss weight for glossy
+    loss_weight_glossy: float = 3.0
+    # Loss weight for depth
+    loss_weight_depth: float = 2.5
+    # Loss weight for normal
+    loss_weight_normal: float = 2.5
+    # Loss weight for f0
+    loss_weight_f0: float = 1.0
+    # Loss weight for roughness
+    loss_weight_roughness: float = 1.0
+
+    # Disable z-near pruning
+    disable_znear_densif_pruning: bool = False
