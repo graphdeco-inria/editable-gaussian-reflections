@@ -7,10 +7,7 @@
 #include "../utils/common.h"
 
 __device__ void create_transform_matrix(
-    const float4 rotation,
-    const float3 scaling,
-    const float3 position,
-    float4 (&matrix)[3]) {
+    const float4 rotation, const float3 scaling, const float3 position, float4 (&matrix)[3]) {
     float3 s = scaling;
     float r = rotation.x;
     float x = rotation.y;
@@ -45,61 +42,47 @@ __device__ void create_transform_matrix(
 __global__ void _populateBVH(
     OptixInstance *instances,
     OptixTraversableHandle gasHandle,
-    int num_gaussians,
-    float3 *scales,
-    float4 *rotations,
-    float3 *means,
-    float *opacities,
+    int gaussian_count,
+    Gaussians gaussians, // * Must copy here
     float alpha_threshold,
     float exp_power,
     float global_scale_factor) {
     auto i = threadIdx.x + blockIdx.x * blockDim.x;
-    if (i >= num_gaussians)
+    if (i >= gaussians.count)
         return;
 
     instances[i].traversableHandle = gasHandle;
-    // instances[i].instanceId = i; // this does not get used in practice
     instances[i].sbtOffset = 0;
     instances[i].flags = OPTIX_INSTANCE_FLAG_NONE;
 
-    float opacity = opacities[i];
-    opacity = sigmoid_act(opacity);
+    float opacity = sigmoid_act(gaussians.opacity[i]);
+    float scaling_factor = compute_scaling_factor(opacity, alpha_threshold, exp_power);
 
-    float3 sizes = scales[i];
-    sizes = exp_act(sizes);
-    float scaling_factor =
-        compute_scaling_factor(opacity, alpha_threshold, exp_power);
+    float3 sizes = exp_act(gaussians.scale[i]);
     sizes = sizes * scaling_factor * global_scale_factor;
+
     instances[i].visibilityMask =
-        scaling_factor > 0.0f &&
-        (sizes.x > 0.0f || sizes.y > 0.0f || sizes.z > 0.0f);
+        scaling_factor > 0.0f && (sizes.x > 0.0f || sizes.y > 0.0f || sizes.z > 0.0f);
 
     create_transform_matrix(
-        rotations[i],
+        gaussians.rotation[i],
         sizes,
-        means[i],
+        gaussians.mean[i],
         reinterpret_cast<float4(&)[3]>(instances[i].transform));
 }
 
 void populateBVH(
     OptixInstance *instances,
     OptixTraversableHandle gasHandle,
-    int num_gaussians,
-    float3 *scales,
-    float4 *rotations,
-    float3 *means,
-    float *opacities,
+    const Gaussians &gaussians,
     float alpha_threshold,
     float exp_power,
     float global_scale_factor) {
-    _populateBVH<<<(num_gaussians + 31) / 32, 32>>>(
+    _populateBVH<<<(gaussians.count + 31) / 32, 32>>>(
         instances,
         gasHandle,
-        num_gaussians,
-        scales,
-        rotations,
-        means,
-        opacities,
+        gaussians.count,
+        gaussians,
         alpha_threshold,
         exp_power,
         global_scale_factor);

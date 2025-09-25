@@ -6,10 +6,7 @@ struct Config {
     std::string name;
     bool debug;
 
-    Config(
-        int version = 1,
-        const std::string &name = "default",
-        bool debug = false)
+    Config(int version = 1, const std::string &name = "default", bool debug = false)
         : version(version), name(name), debug(debug) {}
 };
 
@@ -24,7 +21,7 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
         .def_readwrite("name", &Config::name)
         .def_readwrite("debug", &Config::debug)
         .def("__repr__", [](const Config &c) {
-            return "<Config version=" + std::to_string(c.version) + " name='" +
-                   c.name + "' debug=" + (c.debug ? "True" : "False") + ">";
+            return "<Config version=" + std::to_string(c.version) + " name='" + c.name +
+                   "' debug=" + (c.debug ? "True" : "False") + ">";
         });
 }

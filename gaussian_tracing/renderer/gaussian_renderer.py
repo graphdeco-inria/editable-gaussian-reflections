@@ -72,27 +72,29 @@ def render(
         )
 
     # All of these results are reshaped to (C, H, W)
-    rgb = raytracer.cuda_module.output_rgb.clone().detach().moveaxis(-1, 1)
+    framebuffer = raytracer.cuda_module.get_framebuffer()
+    rgb = framebuffer.output_rgb.clone().detach().moveaxis(-1, 1)
+    # todo clean this up
     return SimpleNamespace(
         rgb=rgb,
-        depth=raytracer.cuda_module.output_depth.clone().detach().moveaxis(-1, 1)
-        if hasattr(raytracer.cuda_module, "output_depth")
-        and raytracer.cuda_module.output_depth is not None
+        final=framebuffer.output_final.clone().detach().moveaxis(-1, 1),
+        depth=framebuffer.output_depth.clone().detach().moveaxis(-1, 1)
+        if hasattr(framebuffer, "output_depth") and framebuffer.output_depth is not None
         else torch.zeros_like(rgb).mean(dim=1, keepdim=True),
-        normal=raytracer.cuda_module.output_normal.clone().detach().moveaxis(-1, 1)
-        if raytracer.cuda_module.output_normal is not None
+        normal=framebuffer.output_normal.clone().detach().moveaxis(-1, 1)
+        if framebuffer.output_normal is not None
         else torch.zeros_like(rgb),
-        roughness=raytracer.cuda_module.output_roughness.clone()
+        roughness=framebuffer.output_roughness.clone()
         .detach()
         .moveaxis(-1, 1)
         .repeat(1, 3, 1, 1)
-        if raytracer.cuda_module.output_roughness is not None
+        if framebuffer.output_roughness is not None
         else torch.zeros_like(rgb),
-        F0=raytracer.cuda_module.output_f0.clone().detach().moveaxis(-1, 1)
-        if raytracer.cuda_module.output_f0 is not None
+        F0=framebuffer.output_f0.clone().detach().moveaxis(-1, 1)
+        if framebuffer.output_f0 is not None
         else torch.zeros_like(rgb),
-        brdf=raytracer.cuda_module.output_brdf.clone().detach().moveaxis(-1, 1)
-        if raytracer.cuda_module.output_brdf is not None
+        brdf=framebuffer.output_brdf.clone().detach().moveaxis(-1, 1)
+        if framebuffer.output_brdf is not None
         else torch.zeros_like(rgb),
         target=_target,
         target_diffuse=_target_diffuse,

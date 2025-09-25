@@ -12,13 +12,8 @@ __device__ float D_GGX(float3 N, float3 H, float alpha) {
     return a2 / (M_PI * (denom * denom) + BRDF_EPS);
 }
 
-__device__ void D_GGX_derivatives(
-    float3 N,
-    float3 H,
-    float alpha,
-    float &dD_dalpha,
-    float3 &dD_dN,
-    float3 &dD_dH) {
+__device__ void
+D_GGX_derivatives(float3 N, float3 H, float alpha, float &dD_dalpha, float3 &dD_dN, float3 &dD_dH) {
     float3 Nn = normalize(N);
     float3 Hn = normalize(H);
     float x = fmaxf(dot(Nn, Hn), 0.0f);
@@ -133,8 +128,7 @@ __device__ void fresnel_schlick_backward(
     dl_dcosTheta = dot(dl_dF, dF_dcosTheta);
 }
 
-__device__ float3
-cook_torrance_brdf(float3 N, float3 V, float3 L, float roughness, float3 F0) {
+__device__ float3 cook_torrance_brdf(float3 N, float3 V, float3 L, float roughness, float3 F0) {
     if (F0.x == 0.0f && F0.y == 0.0f && F0.z == 0.0f) {
         return make_float3(0.0f, 0.0f, 0.0f);
     }
@@ -155,8 +149,7 @@ cook_torrance_brdf(float3 N, float3 V, float3 L, float roughness, float3 F0) {
     return (D * G * F) / denom;
 }
 
-__device__ float3
-cook_torrance_weight(float3 N, float3 V, float3 L, float roughness, float3 F0) {
+__device__ float3 cook_torrance_weight(float3 N, float3 V, float3 L, float roughness, float3 F0) {
     if (F0.x == 0.0f && F0.y == 0.0f && F0.z == 0.0f) {
         return make_float3(0.0f, 0.0f, 0.0f);
     }
@@ -174,22 +167,19 @@ cook_torrance_weight(float3 N, float3 V, float3 L, float roughness, float3 F0) {
     return F * G * VdotH / (NdotH * NdotV + BRDF_EPS);
 }
 
-__device__ float3 sample_cook_torrance(
-    float3 N, float3 V, float roughness, float2 uniform_samples) {
+__device__ float3
+sample_cook_torrance(float3 N, float3 V, float roughness, float2 uniform_samples) {
     // * Walter's trick
     float alpha = roughness * roughness;
     float phi = 2.0f * M_PI * uniform_samples.x;
     float y = uniform_samples.y;
     float cosTheta = sqrtf((1.0f - y) / (1.0f + (alpha * alpha - 1.0f) * y));
     float sinTheta = sqrtf(1.0f - cosTheta * cosTheta);
-    float3 H_local =
-        make_float3(sinTheta * cosf(phi), sinTheta * sinf(phi), cosTheta);
+    float3 H_local = make_float3(sinTheta * cosf(phi), sinTheta * sinf(phi), cosTheta);
 
     // * Transform H to world space
-    float3 up = fabsf(N.z) < 0.99f ? make_float3(0.0f, 0.0f, 1.0f)
-                                   : make_float3(1.0f, 0.0f, 0.0f);
-    float3 T = normalize(
-        cross(N.z < 0.999f ? make_float3(0, 0, 1) : make_float3(1, 0, 0), N));
+    float3 up = fabsf(N.z) < 0.99f ? make_float3(0.0f, 0.0f, 1.0f) : make_float3(1.0f, 0.0f, 0.0f);
+    float3 T = normalize(cross(N.z < 0.999f ? make_float3(0, 0, 1) : make_float3(1, 0, 0), N));
     float3 B = cross(N, T);
     float3 H = H_local.x * T + H_local.y * B + H_local.z * N;
 

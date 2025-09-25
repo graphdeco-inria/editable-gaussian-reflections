@@ -32,8 +32,7 @@
 #include <curand_kernel.h>
 
 template <unsigned int N>
-static __host__ __device__ __inline__ unsigned int
-tea(unsigned int val0, unsigned int val1) {
+static __host__ __device__ __inline__ unsigned int tea(unsigned int val0, unsigned int val1) {
     unsigned int v0 = val0;
     unsigned int v1 = val1;
     unsigned int s0 = 0;
@@ -65,7 +64,6 @@ static __host__ __device__ __inline__ float rnd(unsigned int &prev) {
     return ((float)lcg(prev) / (float)0x01000000);
 }
 
-static __host__ __device__ __inline__ unsigned int
-rot_seed(unsigned int seed, unsigned int frame) {
+static __host__ __device__ __inline__ unsigned int rot_seed(unsigned int seed, unsigned int frame) {
     return seed ^ frame;
 }

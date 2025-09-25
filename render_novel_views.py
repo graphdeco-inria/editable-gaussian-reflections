@@ -37,11 +37,13 @@ def render_set(
     save_dir,
 ):
     for idx, camera in enumerate(tqdm(cameras, desc="Rendering progress")):
+        config = raytracer.cuda_module.get_config()
+        if cfg.max_bounces > -1:
+            config.num_bounces.copy_(cfg.max_bounces)
+
         if cfg.spp > 1:
-            raytracer.cuda_module.accumulate.copy_(True)
-            raytracer.cuda_module.accumulated_rgb.zero_()
-            raytracer.cuda_module.accumulated_normal.zero_()
-            raytracer.cuda_module.accumulated_sample_count.zero_()
+            config.accumulate_samples.copy_(True)
+            raytracer.cuda_module.reset_accumulators()
             for i in range(cfg.spp):
                 package = render(
                     camera,
@@ -56,10 +58,8 @@ def render_set(
             )
 
         diffuse_image = tonemap(package.rgb[0]).clamp(0, 1)
-        glossy_image = tonemap(package.rgb[1:-1].sum(dim=0)).clamp(0, 1)
-        pred_image = tonemap(package.rgb[-1]).clamp(0, 1)
-        ray_origin = raytracer.cuda_module.output_ray_origin[0].moveaxis(-1, 0).abs()
-        ray_direction = raytracer.cuda_module.output_ray_direction[0].moveaxis(-1, 0)
+        glossy_image = tonemap(package.rgb[1:].sum(dim=0)).clamp(0, 1)
+        pred_image = tonemap(package.final.squeeze(0)).clamp(0, 1)
 
         # Match normal image with EnvGS visualization
         R_tensor = torch.tensor(camera.R.T, dtype=torch.float32)
@@ -77,8 +77,6 @@ def render_set(
             "diffuse": diffuse_image,
             "depth": package.depth[0] / package.depth[0].amax(),
             "normal": normal_image * 0.5 + 0.5,
-            "ray_origin": ray_origin / 5,
-            "ray_direction": ray_direction * 0.5 + 0.5,
             "roughness": package.roughness[0],
             "F0": package.F0[0],
         }

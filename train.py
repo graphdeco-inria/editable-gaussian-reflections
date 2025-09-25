@@ -112,9 +112,9 @@ def training_report(
 
                     if "SKIP_TONEMAPPING_OUTPUT" in os.environ:
                         diffuse_image = package.rgb[0].clamp(0, 1)
-                        glossy_image = package.rgb[1:-1].sum(dim=0)
-                        pred_image = package.rgb[-1].clamp(0, 1)
-                        pred_image_without_denoising = package.rgb[:-1].sum(dim=0)
+                        glossy_image = package.rgb[1:].sum(dim=0)
+                        pred_image = package.final[0].clamp(0, 1)
+                        pred_image_without_denoising = package.rgb.sum(dim=0)
                         diffuse_gt_image = torch.clamp(
                             viewpoint.diffuse_image, 0.0, 1.0
                         )
@@ -122,11 +122,9 @@ def training_report(
                         gt_image = torch.clamp(viewpoint.original_image, 0.0, 1.0)
                     else:
                         diffuse_image = tonemap(package.rgb[0]).clamp(0, 1)
-                        glossy_image = tonemap(package.rgb[1:-1].sum(dim=0)).clamp(0, 1)
-                        pred_image = tonemap(package.rgb[-1]).clamp(0, 1)
-                        pred_image_without_denoising = tonemap(
-                            package.rgb[:-1].sum(dim=0)
-                        )
+                        glossy_image = tonemap(package.rgb[1:].sum(dim=0)).clamp(0, 1)
+                        pred_image = tonemap(package.final[0]).clamp(0, 1)
+                        pred_image_without_denoising = tonemap(package.rgb.sum(dim=0))
                         diffuse_gt_image = tonemap(viewpoint.diffuse_image).clamp(0, 1)
                         glossy_gt_image = tonemap(viewpoint.glossy_image).clamp(0, 1)
                         gt_image = tonemap(viewpoint.original_image).clamp(0, 1)
@@ -207,7 +205,7 @@ def training_report(
                     if tb_writer and (idx < len(cfg.val_views)):
                         if package.rgb.shape[0] > 2:
                             save_image(
-                                package.rgb[:-1].clamp(0, 1),
+                                tonemap(package.rgb).clamp(0, 1),
                                 tb_writer.log_dir
                                 + "/"
                                 + f"{config['name']}_view/iter_{iteration:09}_view_{viewpoint.colmap_id}_rgb_all_rays.png",
@@ -242,6 +240,56 @@ def training_report(
                                 + f"{config['name']}_view/iter_{iteration:09}_view_{viewpoint.colmap_id}_brdf_all_rays.png",
                                 padding=0,
                             )
+
+                        fb = raytracer.cuda_module.get_framebuffer()
+                        save_image(
+                            fb.output_ray_origin[0].moveaxis(-1, 0).abs() / 5,
+                            tb_writer.log_dir
+                            + "/"
+                            + f"{config['name']}_view/iter_{iteration:09}_view_{viewpoint.colmap_id}_ray_origin.png",
+                            padding=0,
+                        )
+                        save_image(
+                            fb.output_ray_direction[0].moveaxis(-1, 0) / 2 + 0.5,
+                            tb_writer.log_dir
+                            + "/"
+                            + f"{config['name']}_view/iter_{iteration:09}_view_{viewpoint.colmap_id}_ray_direction.png",
+                            padding=0,
+                        )
+                        stats = raytracer.cuda_module.get_stats()
+                        torch.save(
+                            stats.num_traversed_per_pixel,
+                            tb_writer.log_dir
+                            + "/"
+                            + f"{config['name']}_view/iter_{iteration:09}_view_{viewpoint.colmap_id}_num_traversed_per_pixel.pt",
+                        )
+                        torch.save(
+                            stats.num_traversed_per_pixel,
+                            tb_writer.log_dir
+                            + "/"
+                            + f"{config['name']}_view/iter_{iteration:09}_view_{viewpoint.colmap_id}_num_traversed_per_pixel.pt",
+                        )
+                        # also save them as normalized png
+                        save_image(
+                            (
+                                stats.num_traversed_per_pixel.float()
+                                / stats.num_traversed_per_pixel.max()
+                            ),
+                            tb_writer.log_dir
+                            + "/"
+                            + f"{config['name']}_view/iter_{iteration:09}_view_{viewpoint.colmap_id}_num_traversed_per_pixel.png",
+                            padding=0,
+                        )
+                        save_image(
+                            (
+                                stats.num_traversed_per_pixel.float()
+                                / stats.num_traversed_per_pixel.max()
+                            ),
+                            tb_writer.log_dir
+                            + "/"
+                            + f"{config['name']}_view/iter_{iteration:09}_view_{viewpoint.colmap_id}_num_traversed_per_pixel.png",
+                            padding=0,
+                        )
 
                         save_image(
                             torch.stack(
@@ -433,12 +481,14 @@ def main(cfg: TyroConfig):
 
     start = time.time()
 
-    MAX_BOUNCES = cfg.max_bounces
+    config = raytracer.cuda_module.get_config()
+    MAX_BOUNCES = config.num_bounces.item()
+    config.num_bounces.fill_(0)
 
     if model_params.no_bounces_until_iter > 0:
-        raytracer.cuda_module.num_bounces.copy_(0)
+        config.num_bounces.copy_(0)
     elif model_params.max_one_bounce_until_iter > 0:
-        raytracer.cuda_module.num_bounces.copy_(min(MAX_BOUNCES, 1))
+        config.num_bounces.copy_(min(raytracer.config.MAX_BOUNCES, 1))
 
     for iteration in tqdm(
         range(first_iter, cfg.iterations + 1),
@@ -553,17 +603,20 @@ def main(cfg: TyroConfig):
                         f"{iteration:5}: {gaussians.get_scaling.amin(dim=1).mean().item():.5f} +- {gaussians.get_scaling.amin(dim=1).std().item():.5f}\n"
                     )
 
-                # From raytracer.num_hits, print the mean, max, and std
-                num_hits = raytracer.cuda_module.num_hits_per_pixel.float()
-                with open(os.path.join(cfg.model_path, "num_hits.txt"), "a") as f:
-                    f.write(
-                        f"{iteration:5}: {num_hits.mean().item():.3f} +- {num_hits.std().item():.3f}\n"
-                    )
+                stats = raytracer.cuda_module.get_stats()
 
-                num_traversed = raytracer.cuda_module.num_traversed_per_pixel.float()
+                # From raytracer.num_hits, print the mean, max, and std
+                num_traversed = stats.num_traversed_per_pixel.float()
                 with open(os.path.join(cfg.model_path, "num_traversed.txt"), "a") as f:
                     f.write(
                         f"{iteration:5}: {num_traversed.mean().item():.3f} +- {num_traversed.std().item():.3f}\n"
+                    )
+                num_accumulated = stats.num_accumulated_per_pixel.float()
+                with open(
+                    os.path.join(cfg.model_path, "num_accumulated.txt"), "a"
+                ) as f:
+                    f.write(
+                        f"{iteration:5}: {num_accumulated.mean().item():.3f} +- {num_accumulated.std().item():.3f}\n"
                     )
 
                 with open(os.path.join(cfg.model_path, "num_gaussians.txt"), "a") as f:
@@ -585,14 +638,14 @@ def main(cfg: TyroConfig):
                 ):
                     gaussians.prune_points(
                         (
-                            raytracer.cuda_module.gaussian_total_weight
+                            raytracer.cuda_module.get_gaussians().total_weight
                             / opt_params.densification_interval
                             < model_params.min_weight
                         ).squeeze(1)
                     )
                 if model_params.znear_densif_pruning:
                     gaussians.prune_znear_only(scene)
-                raytracer.cuda_module.gaussian_total_weight.zero_()
+                raytracer.cuda_module.get_gaussians().total_weight.zero_()
                 assert "DENSIFY" not in os.environ
 
                 torch.cuda.synchronize()
@@ -616,9 +669,9 @@ def main(cfg: TyroConfig):
 
         if iteration == model_params.no_bounces_until_iter:
             if model_params.max_one_bounce_until_iter in [0, -1]:
-                raytracer.cuda_module.num_bounces.copy_(MAX_BOUNCES)
+                config.num_bounces.copy_(MAX_BOUNCES)
             else:
-                raytracer.cuda_module.num_bounces.copy_(min(MAX_BOUNCES, 1))
+                config.num_bounces.copy_(min(MAX_BOUNCES, 1))
 
             if "SKIP_INIT_FARFIELD" not in os.environ:
                 torch.cuda.synchronize()
@@ -638,7 +691,7 @@ def main(cfg: TyroConfig):
             iteration == model_params.max_one_bounce_until_iter
             and iteration > model_params.no_bounces_until_iter
         ):
-            raytracer.cuda_module.num_bounces.copy_(MAX_BOUNCES)
+            config.num_bounces.copy_(config.num_bounces)
 
         if cfg.viewer:
             viewer.gaussian_lock.release()

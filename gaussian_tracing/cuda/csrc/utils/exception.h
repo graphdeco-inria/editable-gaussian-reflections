@@ -54,16 +54,14 @@
 // E.g.:
 //  OPTIX_CHECK_LOG2( optixProgramGroupCreate( ..., LOG, &LOG_SIZE, ... );
 //
-#define OPTIX_CHECK_LOG(call)                                                  \
-    do {                                                                       \
-        char LOG[2048];                                                        \
-        size_t LOG_SIZE = sizeof(LOG);                                         \
-        ::sutil::optixCheckLog(                                                \
-            call, LOG, sizeof(LOG), LOG_SIZE, #call, __FILE__, __LINE__);      \
+#define OPTIX_CHECK_LOG(call)                                                                      \
+    do {                                                                                           \
+        char LOG[2048];                                                                            \
+        size_t LOG_SIZE = sizeof(LOG);                                                             \
+        ::sutil::optixCheckLog(call, LOG, sizeof(LOG), LOG_SIZE, #call, __FILE__, __LINE__);       \
     } while (false)
 
-#define OPTIX_CHECK_NOTHROW(call)                                              \
-    ::sutil::optixCheckNoThrow(call, #call, __FILE__, __LINE__)
+#define OPTIX_CHECK_NOTHROW(call) ::sutil::optixCheckNoThrow(call, #call, __FILE__, __LINE__)
 
 //------------------------------------------------------------------------------
 //
@@ -77,8 +75,7 @@
 
 // A non-throwing variant for use in destructors.
 // An iostream must be provided for output (e.g. std::cerr).
-#define CUDA_CHECK_NOTHROW(call)                                               \
-    ::sutil::cudaCheckNoThrow(call, #call, __FILE__, __LINE__)
+#define CUDA_CHECK_NOTHROW(call) ::sutil::cudaCheckNoThrow(call, #call, __FILE__, __LINE__)
 
 //------------------------------------------------------------------------------
 //
@@ -86,15 +83,12 @@
 //
 //------------------------------------------------------------------------------
 
-#define SUTIL_ASSERT(cond)                                                     \
-    ::sutil::assertCond(static_cast<bool>(cond), #cond, __FILE__, __LINE__)
+#define SUTIL_ASSERT(cond) ::sutil::assertCond(static_cast<bool>(cond), #cond, __FILE__, __LINE__)
 
-#define SUTIL_ASSERT_MSG(cond, msg)                                            \
-    ::sutil::assertCondMsg(                                                    \
-        static_cast<bool>(cond), #cond, msg, __FILE__, __LINE__)
+#define SUTIL_ASSERT_MSG(cond, msg)                                                                \
+    ::sutil::assertCondMsg(static_cast<bool>(cond), #cond, msg, __FILE__, __LINE__)
 
-#define SUTIL_ASSERT_FAIL_MSG(msg)                                             \
-    ::sutil::assertFailMsg(msg, __FILE__, __LINE__)
+#define SUTIL_ASSERT_FAIL_MSG(msg) ::sutil::assertFailMsg(msg, __FILE__, __LINE__)
 
 namespace sutil {
 
@@ -113,12 +107,10 @@ class Exception : public std::runtime_error {
     }
 };
 
-inline void optixCheck(
-    OptixResult res, const char *call, const char *file, unsigned int line) {
+inline void optixCheck(OptixResult res, const char *call, const char *file, unsigned int line) {
     if (res != OPTIX_SUCCESS) {
         std::stringstream ss;
-        ss << "Optix call '" << call << "' failed: " << file << ':' << line
-           << ")\n";
+        ss << "Optix call '" << call << "' failed: " << file << ':' << line << ")\n";
         throw Exception(res, ss.str().c_str());
     }
 }
@@ -133,36 +125,28 @@ inline void optixCheckLog(
     unsigned int line) {
     if (res != OPTIX_SUCCESS) {
         std::stringstream ss;
-        ss << "Optix call '" << call << "' failed: " << file << ':' << line
-           << ")\nLog:\n"
-           << log << (sizeof_log_returned > sizeof_log ? "<TRUNCATED>" : "")
-           << '\n';
+        ss << "Optix call '" << call << "' failed: " << file << ':' << line << ")\nLog:\n"
+           << log << (sizeof_log_returned > sizeof_log ? "<TRUNCATED>" : "") << '\n';
         throw Exception(res, ss.str().c_str());
     }
 }
 
-inline void optixCheckNoThrow(
-    OptixResult res,
-    const char *call,
-    const char *file,
-    unsigned int line) noexcept {
+inline void
+optixCheckNoThrow(OptixResult res, const char *call, const char *file, unsigned int line) noexcept {
     if (res != OPTIX_SUCCESS) {
         try {
-            std::cerr << "Optix call '" << call << "' failed: " << file << ':'
-                      << line << ")\n";
+            std::cerr << "Optix call '" << call << "' failed: " << file << ':' << line << ")\n";
         } catch (...) {
         }
         std::terminate();
     }
 }
 
-inline void cudaCheck(
-    cudaError_t error, const char *call, const char *file, unsigned int line) {
+inline void cudaCheck(cudaError_t error, const char *call, const char *file, unsigned int line) {
     if (error != cudaSuccess) {
         std::stringstream ss;
-        ss << "CUDA call (" << call << " ) failed with error: '"
-           << cudaGetErrorString(error) << "' (" << file << ":" << line
-           << ")\n";
+        ss << "CUDA call (" << call << " ) failed with error: '" << cudaGetErrorString(error)
+           << "' (" << file << ":" << line << ")\n";
         throw Exception(ss.str().c_str());
     }
 }
@@ -172,31 +156,25 @@ inline void cudaSyncCheck(const char *file, unsigned int line) {
     cudaError_t error = cudaGetLastError();
     if (error != cudaSuccess) {
         std::stringstream ss;
-        ss << "CUDA error on synchronize with error '"
-           << cudaGetErrorString(error) << "' (" << file << ":" << line
-           << ")\n";
+        ss << "CUDA error on synchronize with error '" << cudaGetErrorString(error) << "' (" << file
+           << ":" << line << ")\n";
         throw Exception(ss.str().c_str());
     }
 }
 
 inline void cudaCheckNoThrow(
-    cudaError_t error,
-    const char *call,
-    const char *file,
-    unsigned int line) noexcept {
+    cudaError_t error, const char *call, const char *file, unsigned int line) noexcept {
     if (error != cudaSuccess) {
         try {
             std::cerr << "CUDA call (" << call << " ) failed with error: '"
-                      << cudaGetErrorString(error) << "' (" << file << ":"
-                      << line << ")\n";
+                      << cudaGetErrorString(error) << "' (" << file << ":" << line << ")\n";
         } catch (...) {
         }
         std::terminate();
     }
 }
 
-inline void
-assertCond(bool result, const char *cond, const char *file, unsigned int line) {
+inline void assertCond(bool result, const char *cond, const char *file, unsigned int line) {
     if (!result) {
         std::stringstream ss;
         ss << file << " (" << line << "): " << cond;
@@ -205,11 +183,7 @@ assertCond(bool result, const char *cond, const char *file, unsigned int line) {
 }
 
 inline void assertCondMsg(
-    bool result,
-    const char *cond,
-    const std::string &msg,
-    const char *file,
-    unsigned int line) {
+    bool result, const char *cond, const std::string &msg, const char *file, unsigned int line) {
     if (!result) {
         std::stringstream ss;
         ss << msg << ": " << file << " (" << line << "): " << cond;

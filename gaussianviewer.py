@@ -72,8 +72,8 @@ class GaussianViewer(Viewer):
         self.gaussian_lock = Lock()
         self.raytracer = raytracer
         if self.raytracer is not None:
-            self.ray_count = self.raytracer.config.MAX_BOUNCES + 1
-            self.accumulated_rgb = torch.zeros_like(raytracer.cuda_module.output_rgb[:-2])
+            self.ray_count = raytracer.cuda_module.get_config().num_bounces + 1
+            self.accumulated_rgb = torch.zeros_like(raytracer.cuda_module.get_framebuffer().output_rgb[:-2])
             self.current_sample_count = 0
         else:
             self.ray_count = 4
@@ -266,17 +266,23 @@ class GaussianViewer(Viewer):
                 with self.gaussian_lock:
                     self.camera.dirty_check()
 
+                    config = self.raytracer.cuda_module.get_config()
+                    fb = self.raytracer.cuda_module.get_framebuffer()
+
                     if isinstance(self.gaussians, EditableGaussianModel):
                         self.gaussians.dirty_check(self.scaling_modifier)
                         if self.tool == "select" and self.last_rendered_selection_mask_id != self.selection_mode_counter:
                             # Render masks for point and click selection
                             self.gaussians.is_dirty = True
-                            self.raytracer.cuda_module.accumulate.copy_(False)
-                            accum_rgb_backup = self.raytracer.cuda_module.accumulated_rgb.clone()
-                            accum_normal_backup = self.raytracer.cuda_module.accumulated_normal.clone()
-                            accum_sample_count_backup = self.raytracer.cuda_module.accumulated_sample_count.clone()
-                            self.raytracer.cuda_module.accumulated_rgb.zero_()
-                            self.raytracer.cuda_module.accumulated_sample_count.zero_()
+                            config.accumulate_samples.copy_(False)
+                            accum_rgb_backup = fb.accumulated_rgb.clone()
+                            accum_normal_backup = fb.accumulated_normal.clone()
+                            accum_f0_backup = fb.accumulated_f0.clone()
+                            accum_depth_backup = fb.accumulated_depth.clone()
+                            accum_roughness_backup = fb.accumulated_roughness.clone()
+                            accum_sample_count_backup = fb.accumulated_sample_count.clone()
+                            fb.accumulated_rgb.zero_()
+                            fb.accumulated_sample_count.zero_()
                             for obj_name in self.bounding_boxes.keys():
                                 if obj_name == "everything":
                                     continue
@@ -284,14 +290,17 @@ class GaussianViewer(Viewer):
                                 rgb = self.gaussians._diffuse
                                 rgb *= 0 
                                 rgb[self.gaussians.selections[obj_name].squeeze(1)] += 1
-                                package = render(camera, self.raytracer, targets_available=False)
+                                package = render(camera, self.raytracer, targets_available=False, denoise=self.denoise)
                                 mask_render = package.rgb[0].mean(dim=0).cpu().numpy()
                                 self.selection_masks[obj_name] = mask_render
                                 self.gaussians._diffuse.copy_(rgb_backup)
                             self.last_rendered_selection_mask_id = self.selection_mode_counter
-                            self.raytracer.cuda_module.accumulated_rgb.copy_(accum_rgb_backup)
-                            self.raytracer.cuda_module.accumulated_normal.copy_(accum_normal_backup)
-                            self.raytracer.cuda_module.accumulated_sample_count.copy_(accum_sample_count_backup)
+                            fb.accumulated_rgb.copy_(accum_rgb_backup)
+                            fb.accumulated_normal.copy_(accum_normal_backup)
+                            fb.accumulated_f0.copy_(accum_f0_backup)
+                            fb.accumulated_depth.copy_(accum_depth_backup)
+                            fb.accumulated_roughness.copy_(accum_roughness_backup)
+                            fb.accumulated_sample_count.copy_(accum_sample_count_backup)
 
                         for key in self.edits.keys():
                             # Duplicates are produced here
@@ -302,30 +311,25 @@ class GaussianViewer(Viewer):
                         self.update_active_edit() 
                     
                     if self.gaussians.is_dirty or self.camera.is_dirty or not self.accumulate_samples or self.is_dirty:
-                        self.raytracer.cuda_module.accumulated_rgb.zero_()
-                        self.raytracer.cuda_module.accumulated_normal.zero_()
-                        self.raytracer.cuda_module.accumulated_sample_count.zero_()
+                        self.raytracer.cuda_module.reset_accumulators()
                         self.is_dirty = False
 
-                    bkp_accumulate = self.raytracer.cuda_module.accumulate
-                    bkp_denoise = self.raytracer.cuda_module.denoise 
-                    bkp_num_bounces = self.raytracer.cuda_module.num_bounces
-                    bkp_global_scale_factor = self.raytracer.cuda_module.global_scale_factor
-                    self.raytracer.cuda_module.accumulate.copy_(self.accumulate_samples)
-                    self.raytracer.cuda_module.denoise.copy_(self.denoise)
-                    self.raytracer.cuda_module.num_bounces.copy_(self.max_bounces)
-                    self.raytracer.cuda_module.global_scale_factor.copy_(self.scaling_modifier)
-                    package = render(camera, self.raytracer, targets_available=False, force_update_bvh=self.gaussians.is_dirty)
-                    self.raytracer.cuda_module.accumulate.copy_(bkp_accumulate)
-                    self.raytracer.cuda_module.denoise.copy_(bkp_denoise)
-                    self.raytracer.cuda_module.num_bounces.copy_(bkp_num_bounces)
-                    self.raytracer.cuda_module.global_scale_factor.copy_(bkp_global_scale_factor)
+                    bkp_accumulate = config.accumulate_samples.clone()
+                    bkp_num_bounces = config.num_bounces.clone()
+                    bkp_global_scale_factor = config.global_scale_factor.clone()
+                    config.accumulate_samples.copy_(self.accumulate_samples)
+                    config.num_bounces.copy_(self.max_bounces)
+                    config.global_scale_factor.copy_(self.scaling_modifier)
+                    package = render(camera, self.raytracer, targets_available=False, force_update_bvh=self.gaussians.is_dirty, denoise=self.denoise)
+                    config.accumulate_samples.copy_(bkp_accumulate)
+                    config.num_bounces.copy_(bkp_num_bounces)
+                    config.global_scale_factor.copy_(bkp_global_scale_factor)
 
                     mode_name = self.render_modes[self.render_mode]
                     nth_ray = self.ray_choice - 1
                     if mode_name == "RGB":
                         if nth_ray == -1:
-                            net_image = tonemap(package.rgb[-1])
+                            net_image = tonemap(package.final[0])
                         elif self.sum_rgb_passes:
                             net_image = tonemap(package.rgb[:nth_ray + 1].sum(dim=0))
                         else:
@@ -341,7 +345,7 @@ class GaussianViewer(Viewer):
                         depth = (depth - depth.amin()) / (depth.amax() - depth.amin())
                         net_image = depth.repeat(3, 1, 1)
                     elif mode_name == "Illumination":
-                        net_image = self.raytracer.cuda_module.output_incident_radiance[max(nth_ray, 0)].moveaxis(-1, 0)
+                        net_image = self.raytracer.cuda_module.get_framebuffer().output_incident_radiance[max(nth_ray, 0)].moveaxis(-1, 0)
                     elif mode_name == "Roughness":
                         net_image = package.roughness[max(nth_ray, 0)]
 
