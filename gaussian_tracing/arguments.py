@@ -79,17 +79,17 @@ class ModelParams:
 
 class OptimizationParams:
     def __init__(self):
-        self.position_lr_max_steps = 32_000
+        self.xyz_lr_max_steps = 32_000
 
         # flat schedule
-        self.position_lr_init = 0.00016
-        self.position_lr_final = 0.0000016
-        self.position_lr_delay_mult = 0.01
+        self.xyz_lr_init = 0.00016
+        self.xyz_lr_final = 0.0000016
+        self.xyz_lr_delay_mult = 0.01
 
         self.timestretch = 0.25
 
+        self.xyz_lr = 0.0025
         self.normal_lr = 0.0025
-        self.position_lr = 0.0025
         self.roughness_lr = 0.0025
         self.f0_lr = 0.0025
         self.diffuse_lr = 0.005

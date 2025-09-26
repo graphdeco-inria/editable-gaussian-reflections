@@ -59,46 +59,6 @@ def transform_depth_to_position_image(depth, fov_x_rad, fov_y_rad):
     return position
 
 
-def transform_distance_to_position_image(distance, fov_x_rad, fov_y_rad):
-    """
-    Convert a distance image (camera-center to surface point) to a position image.
-
-    Args:
-        distance (torch.Tensor): Distance image of shape (H, W)
-        fov_x_rad (float): Horizontal field of view in radians
-        fov_y_rad (float): Vertical field of view in radians
-
-    Returns:
-        torch.Tensor: Position image of shape (H, W, 3)
-    """
-    device = distance.device
-    H, W = distance.shape
-
-    # Compute focal lengths from FOV
-    fx = W / (2 * math.tan(fov_x_rad / 2))
-    fy = H / (2 * math.tan(fov_y_rad / 2))
-    cx = W / 2
-    cy = H / 2
-
-    # Pixel grid
-    u = torch.arange(W, device=device)
-    v = torch.arange(H, device=device)
-    u_grid, v_grid = torch.meshgrid(u, v, indexing="xy")
-
-    # Ray directions in camera space
-    x = (u_grid - cx) / fx
-    y = (v_grid - cy) / fy
-    z = torch.ones_like(x)
-
-    # Normalize ray directions
-    dirs = torch.stack((x, y, z), dim=-1)
-    dirs = dirs / torch.norm(dirs, dim=-1, keepdim=True)
-
-    # Scale ray directions by distance
-    position = dirs * distance.unsqueeze(-1)
-    return position
-
-
 def transform_points(
     points: torch.Tensor, transformation_matrix: torch.Tensor
 ) -> torch.Tensor:
