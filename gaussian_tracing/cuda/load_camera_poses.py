@@ -98,16 +98,6 @@ with ThreadPoolExecutor(max_workers=4) as executor:
                 desc="Loading train glossy maps",
             )
         )
-        train_position_images = list(
-            tqdm(
-                apply(
-                    lambda i: load_image_exr("train", i, "position"),
-                    range(NUM_TRAIN_IMAGES),
-                ),
-                total=NUM_TRAIN_IMAGES,
-                desc="Loading train position maps",
-            )
-        )
         train_normal_images = list(
             tqdm(
                 apply(
@@ -194,16 +184,6 @@ with ThreadPoolExecutor(max_workers=4) as executor:
                 ),
                 total=NUM_TEST_IMAGES,
                 desc="Loading test glossy maps",
-            )
-        )
-        test_position_images = list(
-            tqdm(
-                apply(
-                    lambda i: load_image_exr("test", i, "position"),
-                    range(NUM_TEST_IMAGES),
-                ),
-                total=NUM_TEST_IMAGES,
-                desc="Loading test position maps",
             )
         )
         test_normal_images = list(

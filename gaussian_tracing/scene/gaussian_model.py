@@ -57,15 +57,12 @@ class GaussianModel:
         self.model_params = cfg.model_params
         self._xyz = torch.empty(0)
         self._normal = torch.empty(0)
-        self._position = torch.empty(0)
         self._roughness = torch.empty(0)
         self._f0 = torch.empty(0)
         self._diffuse = torch.empty(0)
         self._scaling = torch.empty(0)
         self._rotation = torch.empty(0)
         self._opacity = torch.empty(0)
-        self._lod_mean = torch.empty(0)
-        self._lod_scale = torch.empty(0)
         self._round_counter = torch.empty(0)
         self.max_radii2D = torch.empty(0)
         self.xyz_gradient_accum_diffuse = torch.empty(0)
@@ -84,15 +81,12 @@ class GaussianModel:
         return (
             self._xyz,
             self._normal,
-            self._position,
             self._roughness,
             self._f0,
             self._diffuse,
             self._scaling,
             self._rotation,
             self._opacity,
-            self._lod_mean,
-            self._lod_scale,
             self._round_counter,
             self.max_radii2D,
             self.xyz_gradient_accum_diffuse,
@@ -107,15 +101,12 @@ class GaussianModel:
         (
             self._xyz,
             self._normal,
-            self._position,
             self._roughness,
             self._f0,
             self._diffuse,
             self._scaling,
             self._rotation,
             self._opacity,
-            self._lod_mean,
-            self._lod_scale,
             self._round_counter,
             self.max_radii2D,
             xyz_gradient_accum_diffuse,
@@ -137,12 +128,9 @@ class GaussianModel:
     def init_empty_grads(self):
         self._xyz.grad = torch.zeros_like(self._xyz)
         self._normal.grad = torch.zeros_like(self._normal)
-        self._position.grad = torch.zeros_like(self._position)
         self._roughness.grad = torch.zeros_like(self._roughness)
         self._f0.grad = torch.zeros_like(self._f0)
         self._opacity.grad = torch.zeros_like(self._opacity)
-        self._lod_mean.grad = torch.zeros_like(self._lod_mean)
-        self._lod_scale.grad = torch.zeros_like(self._lod_scale)
         self._round_counter.grad = torch.zeros_like(self._round_counter)
         self._diffuse.grad = torch.zeros_like(self._diffuse)
         self._scaling.grad = torch.zeros_like(self._scaling)
@@ -177,10 +165,6 @@ class GaussianModel:
         return self._normal
 
     @property
-    def get_position(self):
-        return self._position
-
-    @property
     def get_roughness(self):
         return self._roughness
 
@@ -196,14 +180,6 @@ class GaussianModel:
     @property
     def get_opacity(self):
         return self.opacity_activation(self._opacity)
-
-    @property
-    def get_lod_mean(self):
-        return self._lod_mean
-
-    @property
-    def get_lod_scale(self):
-        return torch.exp(self._lod_scale)
 
     def get_covariance(self, scaling_modifier=1):
         return self.covariance_activation(
@@ -244,8 +220,6 @@ class GaussianModel:
         print("Number of points at initialisation : ", fused_point_cloud.shape[0])
 
         self._xyz = nn.Parameter(fused_point_cloud.requires_grad_(True))
-
-        self._position = nn.Parameter(fused_point_cloud.clone())
         self._normal = nn.Parameter(fused_normal.clone())
         self._roughness = nn.Parameter(
             torch.ones((fused_point_cloud.shape[0], 1), device="cuda")
@@ -265,15 +239,6 @@ class GaussianModel:
         self._rotation = nn.Parameter(rots.requires_grad_(True))
         self._opacity = nn.Parameter(opacities.requires_grad_(True))
 
-        self._lod_scale = nn.Parameter(
-            torch.log(
-                torch.ones((fused_point_cloud.shape[0], 1), device="cuda")
-                * self.model_params.lod_init_scale
-            )
-        )
-        self._lod_mean = nn.Parameter(
-            torch.zeros((fused_point_cloud.shape[0], 1), device="cuda")
-        )
         self._round_counter = torch.zeros(
             (fused_point_cloud.shape[0], 1), device="cuda"
         )
@@ -281,13 +246,10 @@ class GaussianModel:
         self.max_radii2D = torch.zeros((self.get_xyz.shape[0]), device="cuda")
 
         self._xyz.grad = torch.zeros_like(self._xyz)
-        self._position.grad = torch.zeros_like(self._position)
         self._normal.grad = torch.zeros_like(self._normal)
         self._roughness.grad = torch.zeros_like(self._roughness)
         self._f0.grad = torch.zeros_like(self._f0)
         self._opacity.grad = torch.zeros_like(self._opacity)
-        self._lod_mean.grad = torch.zeros_like(self._lod_mean)
-        self._lod_scale.grad = torch.zeros_like(self._lod_scale)
         self._diffuse.grad = torch.zeros_like(self._diffuse)
         self._scaling.grad = torch.zeros_like(self._scaling)
         self._rotation.grad = torch.zeros_like(self._rotation)
@@ -343,13 +305,9 @@ class GaussianModel:
             )
 
         new_normal = torch.zeros_like(new_xyz)
-        new_position = torch.zeros_like(new_xyz)
         new_f0 = torch.ones_like(new_xyz) * 0.04
 
         new_roughness = torch.zeros_like(new_xyz)[:, :1]
-
-        new_lod_mean = torch.ones_like(new_roughness)  # tmp, for future
-        new_lod_scale = torch.ones_like(new_roughness)  # tmp, for future
 
         new_round_counter = torch.zeros(
             new_xyz.shape[0], 1, dtype=torch.int, device="cuda"
@@ -362,14 +320,11 @@ class GaussianModel:
 
         self.densification_postfix(
             new_xyz,
-            new_position,
             new_normal,
             new_roughness,
             new_f0,
             new_diffuse,
             new_opacity,
-            new_lod_mean,
-            new_lod_scale,
             new_scaling,
             new_rotation,
             new_round_counter,
@@ -393,13 +348,10 @@ class GaussianModel:
         self.denom = torch.zeros((self.get_xyz.shape[0], 1), device="cuda")
 
         self._xyz.grad = torch.zeros_like(self._xyz)
-        self._position.grad = torch.zeros_like(self._position)
         self._normal.grad = torch.zeros_like(self._normal)
         self._roughness.grad = torch.zeros_like(self._roughness)
         self._f0.grad = torch.zeros_like(self._f0)
         self._opacity.grad = torch.zeros_like(self._opacity)
-        self._lod_mean.grad = torch.zeros_like(self._lod_mean)
-        self._lod_scale.grad = torch.zeros_like(self._lod_scale)
         self._diffuse.grad = torch.zeros_like(self._diffuse)
         self._scaling.grad = torch.zeros_like(self._scaling)
         self._rotation.grad = torch.zeros_like(self._rotation)
@@ -407,14 +359,9 @@ class GaussianModel:
         opt_list = [
             {
                 "params": [self._xyz],
-                "lr": training_args.position_lr_init * self.spatial_lr_scale,
+                "lr": training_args.xyz_lr_init * self.spatial_lr_scale,
                 "name": "xyz",
             },
-            # {
-            #     "params": [self._position],
-            #     "lr": training_args.position_lr_init * self.spatial_lr_scale,
-            #     "name": "position",
-            # },
             {"params": [self._normal], "lr": training_args.normal_lr, "name": "normal"},
             {
                 "params": [self._roughness],
@@ -438,16 +385,6 @@ class GaussianModel:
                 "lr": training_args.rotation_lr,
                 "name": "rotation",
             },
-            # {
-            #     "params": [self._lod_mean],
-            #     "lr": training_args.lod_mean_lr,
-            #     "name": "lod_mean",
-            # },
-            # {
-            #     "params": [self._lod_scale],
-            #     "lr": training_args.lod_scale_lr,
-            #     "name": "lod_scale",
-            # },
         ]
 
         self.optimizer = torch.optim.Adam(
@@ -457,10 +394,10 @@ class GaussianModel:
             betas=(training_args.beta_1, training_args.beta_2),
         )
         self.xyz_scheduler_args = get_expon_lr_func(
-            lr_init=training_args.position_lr_init * self.spatial_lr_scale,
-            lr_final=training_args.position_lr_final * self.spatial_lr_scale,
-            lr_delay_mult=training_args.position_lr_delay_mult,
-            max_steps=training_args.position_lr_max_steps,
+            lr_init=training_args.xyz_lr_init * self.spatial_lr_scale,
+            lr_final=training_args.xyz_lr_final * self.spatial_lr_scale,
+            lr_delay_mult=training_args.xyz_lr_delay_mult,
+            max_steps=training_args.xyz_lr_max_steps,
         )
 
     def update_learning_rate(self, iteration):
@@ -477,11 +414,8 @@ class GaussianModel:
         xyz = self._xyz.detach().cpu().numpy()
         f_dc = self._diffuse.detach().cpu().numpy()
         opacities = self._opacity.detach().cpu().numpy()
-        # lod_mean = self._lod_mean.detach().cpu().numpy()
-        # lod_scale = self._lod_scale.detach().cpu().numpy()
         scale = self._scaling.detach().cpu().numpy()
         rotation = self._rotation.detach().cpu().numpy()
-        # position = self._position.detach().cpu().numpy()
         normal = self._normal.detach().cpu().numpy()
         roughness = self._roughness.detach().cpu().numpy()
         f0 = self._f0.detach().cpu().numpy()
@@ -501,9 +435,6 @@ class GaussianModel:
             "rot_1",
             "rot_2",
             "rot_3",
-            # "pos_0",
-            # "pos_1",
-            # "pos_2",
             "normal_0",
             "normal_1",
             "normal_2",
@@ -511,8 +442,6 @@ class GaussianModel:
             "f0_0",
             "f0_1",
             "f0_2",
-            # "lod_mean",
-            # "lod_scale",
         ]
         dtype_full = [(attribute, "f4") for attribute in all_attributes]
 
@@ -524,12 +453,9 @@ class GaussianModel:
                 opacities,
                 scale,
                 rotation,
-                # position,
                 normal,
                 roughness,
                 f0,
-                # lod_mean,
-                # lod_scale,
             ),
             axis=1,
         )
@@ -581,14 +507,6 @@ class GaussianModel:
         for idx, attr_name in enumerate(rot_names):
             rots[:, idx] = np.asarray(plydata.elements[0][attr_name])
 
-        # pos_names = [
-        #     p.name for p in plydata.elements[0].properties if p.name.startswith("pos")
-        # ]
-        # pos_names = sorted(pos_names, key=lambda x: int(x.split("_")[-1]))
-        # positions = np.zeros((xyz.shape[0], len(pos_names)))
-        # for idx, attr_name in enumerate(pos_names):
-        #     positions[:, idx] = np.asarray(plydata.elements[0][attr_name])
-
         normal_names = [
             p.name
             for p in plydata.elements[0].properties
@@ -609,9 +527,6 @@ class GaussianModel:
         for idx, attr_name in enumerate(f0_names):
             f0[:, idx] = np.asarray(plydata.elements[0][attr_name])
 
-        # lod_mean = np.asarray(plydata.elements[0]["lod_mean"])[..., np.newaxis]
-        # lod_scale = np.asarray(plydata.elements[0]["lod_scale"])[..., np.newaxis]
-
         self._xyz = nn.Parameter(torch.tensor(xyz, dtype=torch.float, device="cuda"))
         self._diffuse = nn.Parameter(
             torch.tensor(diffuse, dtype=torch.float, device="cuda")
@@ -619,17 +534,12 @@ class GaussianModel:
         self._opacity = nn.Parameter(
             torch.tensor(opacities, dtype=torch.float, device="cuda")
         )
-        # self._lod_mean = nn.Parameter(torch.zeros((xyz.shape[0], 1), device="cuda"))
-        # self._lod_scale = nn.Parameter(torch.zeros((xyz.shape[0], 1), device="cuda"))
         self._scaling = nn.Parameter(
             torch.tensor(scales, dtype=torch.float, device="cuda")
         )
         self._rotation = nn.Parameter(
             torch.tensor(rots, dtype=torch.float, device="cuda")
         )
-        # self._position = nn.Parameter(
-        #     torch.tensor(positions, dtype=torch.float, device="cuda")
-        # )
         self._normal = nn.Parameter(
             torch.tensor(normals, dtype=torch.float, device="cuda")
         )
@@ -682,9 +592,6 @@ class GaussianModel:
         self._xyz = optimizable_tensors["xyz"]
         self._xyz.grad = torch.zeros_like(self._xyz)
         #
-        # self._position = optimizable_tensors["position"]
-        # self._position.grad = torch.zeros_like(self._position)
-        #
         self._normal = optimizable_tensors["normal"]
         self._normal.grad = torch.zeros_like(self._normal)
         #
@@ -699,12 +606,6 @@ class GaussianModel:
         #
         self._opacity = optimizable_tensors["opacity"]
         self._opacity.grad = torch.zeros_like(self._opacity)
-        #
-        # self._lod_mean = optimizable_tensors["lod_mean"]
-        # self._lod_mean.grad = torch.zeros_like(self._lod_mean)
-        # #
-        # self._lod_scale = optimizable_tensors["lod_scale"]
-        # self._lod_scale.grad = torch.zeros_like(self._lod_scale)
         #
         self._scaling = optimizable_tensors["scaling"]
         self._scaling.grad = torch.zeros_like(self._scaling)
@@ -762,14 +663,11 @@ class GaussianModel:
     def densification_postfix(
         self,
         new_xyz,
-        new_position,
         new_normal,
         new_roughness,
         new_f0,
         new_diffuse,
         new_opacity,
-        new_lod_mean,
-        new_lod_scale,
         new_scaling,
         new_rotation,
         new_round_counter,
@@ -778,7 +676,6 @@ class GaussianModel:
     ):
         d = {
             "xyz": new_xyz,
-            "position": new_position,
             "normal": new_normal,
             "roughness": new_roughness,
             "f0": new_f0,
@@ -786,18 +683,11 @@ class GaussianModel:
             "opacity": new_opacity,
             "scaling": new_scaling,
             "rotation": new_rotation,
-            "lod_mean": new_lod_mean,
-            "lod_scale": new_lod_scale,
         }
 
         optimizable_tensors = self.cat_tensors_to_optimizer(d)
         optimizable_tensors["xyz"].grad = torch.zeros_like(optimizable_tensors["xyz"])
         self._xyz = optimizable_tensors["xyz"]
-
-        # optimizable_tensors["position"].grad = torch.zeros_like(
-        #     optimizable_tensors["position"]
-        # )
-        # self._position = optimizable_tensors["position"]
 
         optimizable_tensors["normal"].grad = torch.zeros_like(
             optimizable_tensors["normal"]
@@ -819,16 +709,6 @@ class GaussianModel:
             optimizable_tensors["opacity"]
         )
         self._opacity = optimizable_tensors["opacity"]
-
-        # optimizable_tensors["lod_mean"].grad = torch.zeros_like(
-        #     optimizable_tensors["lod_mean"]
-        # )
-        # self._lod_mean = optimizable_tensors["lod_mean"]
-
-        # optimizable_tensors["lod_scale"].grad = torch.zeros_like(
-        #     optimizable_tensors["lod_scale"]
-        # )
-        # self._lod_scale = optimizable_tensors["lod_scale"]
 
         optimizable_tensors["scaling"].grad = torch.zeros_like(
             optimizable_tensors["scaling"]
@@ -874,7 +754,6 @@ class GaussianModel:
         new_xyz = torch.bmm(rots, samples.unsqueeze(-1)).squeeze(-1) + self.get_xyz[
             selected_pts_mask
         ].repeat(N, 1)
-        new_position = self._position[selected_pts_mask].repeat(N, 1)
         new_normal = self._normal[selected_pts_mask].repeat(N, 1)
         new_roughness = self._roughness[selected_pts_mask].repeat(N, 1)
         new_f0 = self._f0[selected_pts_mask].repeat(N, 1)
@@ -884,10 +763,6 @@ class GaussianModel:
             self.get_scaling[selected_pts_mask].repeat(N, 1) / (0.8 * N)
         )
         new_rotation = self._rotation[selected_pts_mask].repeat(N, 1)
-        new_lod_mean = self._lod_mean[selected_pts_mask].repeat(N, 1)
-        if "ON_SPLIT_SKIP_DONT_TOUCH_LOD" not in os.environ:
-            new_lod_mean /= 0.8 * N
-        new_lod_scale = self._lod_scale[selected_pts_mask].repeat(N, 1)
         new_round_counter = self._round_counter[selected_pts_mask].repeat(N, 1) + 1
         new_comes_from_colmap_pc = (
             self.comes_from_colmap_pc[selected_pts_mask].repeat(N, 1) + 1
@@ -895,14 +770,11 @@ class GaussianModel:
 
         self.densification_postfix(
             new_xyz,
-            new_position,
             new_normal,
             new_roughness,
             new_f0,
             new_diffuse,
             new_opacity,
-            new_lod_mean,
-            new_lod_scale,
             new_scaling,
             new_rotation,
             new_round_counter,
@@ -937,7 +809,6 @@ class GaussianModel:
             )
         else:
             new_xyz = self._xyz[selected_pts_mask]
-        new_position = self._position[selected_pts_mask]
         new_normal = self._normal[selected_pts_mask]
         new_roughness = self._roughness[selected_pts_mask]
         new_f0 = self._f0[selected_pts_mask]
@@ -950,21 +821,16 @@ class GaussianModel:
         else:
             new_scaling = self._scaling[selected_pts_mask]
         new_rotation = self._rotation[selected_pts_mask]
-        new_lod_mean = self._lod_mean[selected_pts_mask]
-        new_lod_scale = self._lod_scale[selected_pts_mask]
         new_round_counter = self._round_counter[selected_pts_mask] + 1
         new_comes_from_colmap_pc = self.comes_from_colmap_pc[selected_pts_mask]
 
         self.densification_postfix(
             new_xyz,
-            new_position,
             new_normal,
             new_roughness,
             new_f0,
             new_diffuse,
             new_opacity,
-            new_lod_mean,
-            new_lod_scale,
             new_scaling,
             new_rotation,
             new_round_counter,
@@ -1008,18 +874,12 @@ class GaussianModel:
                 print("NaN in rotation")
             if torch.isnan(self._opacity).any():
                 print("NaN in opacity")
-            if torch.isnan(self._lod_mean).any():
-                print("NaN in lod_mean")
-            if torch.isnan(self._lod_scale).any():
-                print("NaN in lod_scale")
             if torch.isnan(self._diffuse).any():
                 print("NaN in diffuse")
             if torch.isnan(self._roughness).any():
                 print("NaN in roughness")
             if torch.isnan(self._f0).any():
                 print("NaN in f0")
-            if torch.isnan(self._position).any():
-                print("NaN in position")
             if torch.isnan(self._normal).any():
                 print("NaN in normal")
             if torch.isnan(self.xyz_gradient_accum_diffuse).any():
@@ -1064,35 +924,16 @@ class GaussianModel:
                 torch.argsort(torch.argsort(self.get_opacity.squeeze()))
                 / num_gaussians_before_densification
             )
-            lod_ranking = (
-                torch.argsort(torch.argsort(-self.get_lod_mean.squeeze()))
-                / num_gaussians_before_densification
-            )
 
             score = (
                 grad_ranking
                 + size_ranking * opt.densif_size_ranking_weight
                 + opacity_ranking * opt.densif_opacity_ranking_weight
                 + opacity_ranking * opt.densif_opacity_ranking_weight
-                + lod_ranking * opt.densif_lod_ranking_weight
             )
 
             if "GRAD_RANKING_ONLY" in os.environ:
                 score = grad_ranking
-
-            if opt.densif_lod_ranking_weight != 0.0:
-                print("lod ranking is enabled")
-                score = (
-                    grad_ranking.log()
-                    + lod_ranking.log() * opt.densif_lod_ranking_weight
-                )
-
-            if "DONT_DENSIFY_HIGH_LOD" in os.environ:
-                score[
-                    self.get_lod_mean.squeeze()
-                    > float(os.environ["DONT_DENSIFY_HIGH_LOD"])
-                ] = 0.0
-                # log(quantile(grad_score)) + w * log(quantile(-lod_score))
 
             # target = self.schedule[self.num_densification_steps]
             # k = target - num_gaussians_before_densification

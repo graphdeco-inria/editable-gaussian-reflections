@@ -363,7 +363,6 @@ class EditableGaussianModel(GaussianModel):
         )
 
         new_xyz = self._xyz[target_selection].clone() + offset + delta_xyz
-        new_position = self._position[target_selection].clone()
         new_rotation = self._rotation[target_selection].clone()
         new_scaling = self._scaling[target_selection].clone()
         new_opacity = self._opacity[target_selection].clone()
@@ -371,12 +370,9 @@ class EditableGaussianModel(GaussianModel):
         new_roughness = self._roughness[target_selection].clone()
         new_f0 = self._f0[target_selection].clone()
         new_normal = self._normal[target_selection].clone()
-        new_lod_mean = self._lod_mean[target_selection].clone()
-        new_lod_scale = self._lod_scale[target_selection].clone()
         new_round_counter = self._round_counter[target_selection].clone()
 
         self._xyz = torch.cat((self._xyz, new_xyz), dim=0)
-        self._position = torch.cat((self._position, new_position), dim=0)
         self._rotation = torch.cat((self._rotation, new_rotation), dim=0)
         self._scaling = torch.cat((self._scaling, new_scaling), dim=0)
         self._opacity = torch.cat((self._opacity, new_opacity), dim=0)
@@ -384,8 +380,6 @@ class EditableGaussianModel(GaussianModel):
         self._roughness = torch.cat((self._roughness, new_roughness), dim=0)
         self._f0 = torch.cat((self._f0, new_f0), dim=0)
         self._normal = torch.cat((self._normal, new_normal), dim=0)
-        self._lod_mean = torch.cat((self._lod_mean, new_lod_mean), dim=0)
-        self._lod_scale = torch.cat((self._lod_scale, new_lod_scale), dim=0)
         self._round_counter = torch.cat((self._round_counter, new_round_counter), dim=0)
 
         self.selections[obj_name + "_copy"] = torch.zeros_like(
