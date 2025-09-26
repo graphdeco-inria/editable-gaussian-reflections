@@ -148,13 +148,8 @@ class Scene:
     @torch.no_grad()
     def autoadjust_zplanes(self):
         for camera in self.train_cameras[1.0] + self.test_cameras[1.0]:
-            # R = torch.from_numpy(camera.R).cuda().float()
-            # T = camera.camera_center
-            distances = (
-                camera.position_image - camera.camera_center[:, None, None]
-            ).norm(dim=0)
-            camera.znear = distances.amin() * self.model_params.znear_scaledown
-            camera.zfar = distances.amax() * self.model_params.zfar_scaleup
+            camera.znear = camera.depth_image.amin() * self.model_params.znear_scaledown
+            camera.zfar = camera.depth_image.amax() * self.model_params.zfar_scaleup
             camera.update()
 
         # Assert that for all cameras, image_height is equal and FoVy is equal

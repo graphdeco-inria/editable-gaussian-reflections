@@ -33,7 +33,7 @@ class Camera(nn.Module):
         uid,
         diffuse_image,
         glossy_image,
-        position_image,
+        depth_image,
         normal_image,
         roughness_image,
         metalness_image,
@@ -98,7 +98,7 @@ class Camera(nn.Module):
             self._diffuse_image = self._original_image
 
         self._normal_image = normal_image.half().to(image_holding_device)
-        self._position_image = position_image.half().to(image_holding_device)
+        self._depth_image = depth_image.half().to(image_holding_device)
         self._roughness_image = (roughness_image).half().to(image_holding_device)
         if "ZERO_ROUGHNESS" in os.environ:
             self._roughness_image = self._roughness_image * 0
@@ -132,14 +132,6 @@ class Camera(nn.Module):
 
         self.update()
 
-        self._depth_image = torch.norm(
-            self._position_image
-            - self.camera_center.unsqueeze(-1)
-            .unsqueeze(-1)
-            .to(self._position_image.device),
-            dim=0,
-        )
-
     @classmethod
     def from_cam_info(cls, cam_info):
         return cls(
@@ -155,7 +147,7 @@ class Camera(nn.Module):
             data_device="cuda",
             diffuse_image=cam_info.diffuse_image.moveaxis(-1, 0),
             glossy_image=cam_info.glossy_image.moveaxis(-1, 0),
-            position_image=cam_info.position_image.moveaxis(-1, 0),
+            depth_image=cam_info.depth_image,
             normal_image=cam_info.normal_image.moveaxis(-1, 0),
             roughness_image=cam_info.roughness_image.moveaxis(-1, 0),
             metalness_image=cam_info.metalness_image.moveaxis(-1, 0),
@@ -179,10 +171,6 @@ class Camera(nn.Module):
     @property
     def normal_image(self):
         return self._normal_image.float().cuda()
-
-    @property
-    def position_image(self):
-        return self._position_image.float().cuda()
 
     @property
     def depth_image(self):
