@@ -86,6 +86,11 @@ class BlenderPriorDataset:
         # buffers["specular"] = torch.ones_like(buffers["render"]) * 0.5
         # buffers["base_color"] = buffers["albedo"] * (1.0 - buffers["metalness"]) + buffers["metalness"]
 
+        # Resize all buffers
+        if self.resolution is not None:
+            for k, v in buffers.items():
+                buffers[k] = _resize_image_tensor(v, self.resolution)
+
         # Camera intrinsics
         height, width = buffers["render"].shape[:2]
         if "camera_angle_y" in self.contents:
@@ -107,14 +112,12 @@ class BlenderPriorDataset:
         T = w2c[:3, 3]
 
         R_tensor = torch.tensor(R, dtype=torch.float32)
-        c2w_tensor = torch.tensor(c2w, dtype=torch.float32)
         w2c_tensor = torch.tensor(w2c, dtype=torch.float32)
 
         # Postprocess normal_image
         buffers["normal"] = transform_normals_to_world(buffers["normal"], R_tensor)
 
         # Postprocess depth_image
-        depth_image = buffers["depth"][:, :, 0]
         if self.do_depth_fit:
             points_tensor = torch.tensor(
                 self.colmap_parser.points[self.colmap_parser.point_indices[image_name]],
@@ -122,25 +125,22 @@ class BlenderPriorDataset:
             )
             points_tensor = transform_points(points_tensor, w2c_tensor)
             depth_points_image = project_pointcloud_to_depth_map(
-                points_tensor, fovx, fovy, depth_image.shape[:2]
+                points_tensor, fovx, fovy, buffers["depth"].shape[:2]
             )
             valid_mask = depth_points_image != 0
-            x = depth_image[valid_mask].float()
+            x = buffers["depth"][:, :, 0][valid_mask].float()
             y = depth_points_image[valid_mask]
             # a, b = linear_least_squares_1d(x, y)
             (a, b), _ = ransac_linear_fit(x, y)
         else:
             a, b = (4.0, 0.0)
-        depth_image = depth_image * a + b
+        buffers["depth"] = buffers["depth"] * a + b
 
-        # Postprocess depth_image to position_image
-        position_image = transform_depth_to_position_image(depth_image, fovx, fovy)
-        buffers["position"] = transform_points(position_image, c2w_tensor)
-
-        # Resize all buffers
-        if self.resolution is not None:
-            for k, v in buffers.items():
-                buffers[k] = _resize_image_tensor(v, self.resolution)
+        # Convert to depth to distance image
+        position_image = transform_depth_to_position_image(
+            buffers["depth"][:, :, 0], fovx, fovy
+        )
+        buffers["distance"] = torch.norm(position_image, dim=-1)
 
         cam_info = CameraInfo(
             uid=idx,
@@ -157,8 +157,7 @@ class BlenderPriorDataset:
             albedo_image=buffers["albedo"],
             diffuse_image=buffers["diffuse"],
             glossy_image=buffers["glossy"],
-            depth_image=buffers["depth"],
-            position_image=buffers["position"],
+            depth_image=buffers["distance"],
             normal_image=buffers["normal"],
             roughness_image=buffers["roughness"],
             metalness_image=buffers["metalness"],
@@ -198,9 +197,9 @@ def _resize_image_tensor(image, resolution):
     aspect_ratio = width / height
     image = rearrange(image, "h w c -> 1 c h w")
     image = torch.nn.functional.interpolate(
-        image.float(),
+        image,
         (resolution, int(resolution * aspect_ratio)),
         mode="area",
-    ).half()
+    )
     image = rearrange(image, "1 c h w -> h w c")
     return image

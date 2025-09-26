@@ -135,20 +135,17 @@ class ColmapPriorDataset:
         w2c = np.eye(4)
         w2c[:3, :3] = qvec2rotmat(extr.qvec)
         w2c[:3, 3] = extr.tvec
-        c2w = np.linalg.inv(w2c)
         # R is stored transposed due to 'glm' in CUDA code
         R = np.transpose(w2c[:3, :3])
         T = w2c[:3, 3]
 
         R_tensor = torch.tensor(R, dtype=torch.float32)
-        c2w_tensor = torch.tensor(c2w, dtype=torch.float32)
         w2c_tensor = torch.tensor(w2c, dtype=torch.float32)
 
         # Postprocess normal_image
         normal_image = transform_normals_to_world(normal_image, R_tensor)
 
         # Postprocess depth_image
-        depth_image = depth_image[:, :, 0]
         if self.do_depth_fit:
             points_tensor = torch.tensor(
                 self.colmap_parser.points[self.colmap_parser.point_indices[image_name]],
@@ -159,7 +156,7 @@ class ColmapPriorDataset:
                 points_tensor, fovx, fovy, depth_image.shape[:2]
             )
             valid_mask = depth_points_image != 0
-            x = depth_image[valid_mask].float()
+            x = depth_image[:, :, 0][valid_mask].float()
             y = depth_points_image[valid_mask]
             # a, b = linear_least_squares_1d(x, y)
             (a, b), _ = ransac_linear_fit(x, y)
@@ -167,9 +164,11 @@ class ColmapPriorDataset:
             a, b = (4.0, 0.0)
         depth_image = depth_image * a + b
 
-        # Postprocess depth_image to position_image
-        position_image = transform_depth_to_position_image(depth_image, fovx, fovy)
-        position_image = transform_points(position_image, c2w_tensor)
+        # Convert to depth to distance image
+        position_image = transform_depth_to_position_image(
+            depth_image[:, :, 0], fovx, fovy
+        )
+        distance_image = torch.norm(position_image, dim=-1)
 
         cam_info = CameraInfo(
             uid=idx,
@@ -185,8 +184,7 @@ class ColmapPriorDataset:
             albedo_image=albedo_image,
             diffuse_image=diffuse_image,
             glossy_image=glossy_image,
-            position_image=position_image,
-            depth_image=depth_image,
+            depth_image=distance_image,
             normal_image=normal_image,
             roughness_image=roughness_image,
             metalness_image=metalness_image,

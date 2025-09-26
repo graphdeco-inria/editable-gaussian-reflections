@@ -8,6 +8,7 @@ import torch
 from einops import rearrange
 
 from gaussian_tracing.dataset.colmap_parser import ColmapParser
+from gaussian_tracing.utils.depth_utils import transform_depth_to_position_image
 from gaussian_tracing.utils.graphics_utils import BasicPointCloud, focal2fov, fov2focal
 
 from .camera_info import CameraInfo
@@ -66,7 +67,7 @@ class BlenderDataset:
                 diffuse_image,
                 glossy_image,
                 normal_image,
-                position_image,
+                _,
                 roughness_image,
                 specular_image,
                 metalness_image,
@@ -84,7 +85,6 @@ class BlenderDataset:
             metalness_image = self._get_buffer(frame_name, "metalness")
             normal_image = self._get_buffer(frame_name, "normal")
             depth_image = self._get_buffer(frame_name, "depth")
-            position_image = self._get_buffer(frame_name, "position")
             specular_image = self._get_buffer(frame_name, "specular")
             brdf_image = self._get_buffer(frame_name, "glossy_brdf")
             base_color_image = self._get_buffer(frame_name, "base_color")
@@ -108,6 +108,12 @@ class BlenderDataset:
         R = np.transpose(w2c[:3, :3])
         T = w2c[:3, 3]
 
+        # Convert to depth to distance image
+        position_image = transform_depth_to_position_image(
+            depth_image[:, :, 0], fovx, fovy
+        )
+        distance_image = torch.norm(position_image, dim=-1)
+
         cam_info = CameraInfo(
             uid=idx,
             R=R,
@@ -122,8 +128,7 @@ class BlenderDataset:
             albedo_image=albedo_image,
             diffuse_image=diffuse_image,
             glossy_image=glossy_image,
-            position_image=position_image,
-            depth_image=depth_image,
+            depth_image=distance_image,
             normal_image=normal_image,
             roughness_image=roughness_image,
             metalness_image=metalness_image,
@@ -150,9 +155,9 @@ def _resize_image_tensor(image, resolution):
     aspect_ratio = width / height
     image = rearrange(image, "h w c -> 1 c h w")
     image = torch.nn.functional.interpolate(
-        image.float(),
+        image,
         (resolution, int(resolution * aspect_ratio)),
         mode="area",
-    ).half()
+    )
     image = rearrange(image, "1 c h w -> h w c")
     return image
