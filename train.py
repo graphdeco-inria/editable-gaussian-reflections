@@ -110,24 +110,13 @@ def training_report(
                         exist_ok=True,
                     )
 
-                    if "SKIP_TONEMAPPING_OUTPUT" in os.environ:
-                        diffuse_image = package.rgb[0].clamp(0, 1)
-                        glossy_image = package.rgb[1:].sum(dim=0)
-                        pred_image = package.final[0].clamp(0, 1)
-                        pred_image_without_denoising = package.rgb.sum(dim=0)
-                        diffuse_gt_image = torch.clamp(
-                            viewpoint.diffuse_image, 0.0, 1.0
-                        )
-                        glossy_gt_image = torch.clamp(viewpoint.glossy_image, 0.0, 1.0)
-                        gt_image = torch.clamp(viewpoint.original_image, 0.0, 1.0)
-                    else:
-                        diffuse_image = tonemap(package.rgb[0]).clamp(0, 1)
-                        glossy_image = tonemap(package.rgb[1:].sum(dim=0)).clamp(0, 1)
-                        pred_image = tonemap(package.final[0]).clamp(0, 1)
-                        pred_image_without_denoising = tonemap(package.rgb.sum(dim=0))
-                        diffuse_gt_image = tonemap(viewpoint.diffuse_image).clamp(0, 1)
-                        glossy_gt_image = tonemap(viewpoint.glossy_image).clamp(0, 1)
-                        gt_image = tonemap(viewpoint.original_image).clamp(0, 1)
+                    diffuse_image = tonemap(package.rgb[0]).clamp(0, 1)
+                    glossy_image = tonemap(package.rgb[1:].sum(dim=0)).clamp(0, 1)
+                    pred_image = tonemap(package.final[0]).clamp(0, 1)
+                    pred_image_without_denoising = tonemap(package.rgb.sum(dim=0))
+                    diffuse_gt_image = tonemap(viewpoint.diffuse_image).clamp(0, 1)
+                    glossy_gt_image = tonemap(viewpoint.glossy_image).clamp(0, 1)
+                    gt_image = tonemap(viewpoint.original_image).clamp(0, 1)
 
                     if tb_writer and (idx < len(cfg.val_views)):
                         error_diffuse = diffuse_image - diffuse_gt_image
@@ -536,16 +525,7 @@ def main(cfg: TyroConfig):
                 gaussians._scaling.copy_(
                     torch.log(gaussians.get_scaling * opt_params.scale_decay)
                 )
-            if opt_params.lod_mean_decay < 1.0:
-                gaussians._lod_mean.copy_(
-                    torch.log(gaussians.get_lod_mean * opt_params.lod_mean_decay)
-                )
-            if opt_params.lod_scale_decay < 1.0:
-                gaussians._lod_scale.copy_(
-                    torch.log(gaussians.get_lod_scale * opt_params.lod_scale_decay)
-                )
 
-        # todo clamp the min opacities so they don't go under ALPHA_THRESHOLD
         iter_end.record()
 
         with torch.no_grad():

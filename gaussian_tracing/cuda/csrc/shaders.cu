@@ -130,7 +130,7 @@ extern "C" __global__ void __raygen__rg() {
 
         // * Compute reflection ray for the following step
         float3 effective_position = ray_origin + pixel.output_depth[step] * ray_direction;
-        float3 next_direction = sample_cook_torrance(
+        float3 next_direction = sample_vndf(
             effective_normal,
             -ray_direction,
             effective_roughness,
@@ -142,8 +142,8 @@ extern "C" __global__ void __raygen__rg() {
         if (step > 0) {
             pixel.output_throughput[step] = pixel.output_throughput[step - 1];
         }
-        pixel.output_throughput[step] *= cook_torrance_weight(
-            effective_normal, -ray_direction, next_direction, effective_roughness, effective_F0);
+
+        pixel.output_throughput[step] *= principled_specular(effective_normal, -ray_direction, next_direction, effective_F0, effective_roughness) / fmaxf(sample_vndf_pdf(effective_normal, -ray_direction, next_direction, effective_roughness), 1e-12f); 
 
         // * Update ray and log it for debugging
         ray_origin = next_origin;
