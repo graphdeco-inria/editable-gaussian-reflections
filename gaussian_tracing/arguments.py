@@ -11,7 +11,8 @@
 
 import os
 from dataclasses import dataclass, field
-
+from typing import Annotated, List, Optional, Literal
+from tyro.conf import arg
 
 class ModelParams:
     def __init__(self):
@@ -51,28 +52,11 @@ class ModelParams:
         self.alpha_threshold = 0.005
         self.exp_power = 3
 
-        # level of detail args below
-        self.lod_prob_blur_targets = 1.0
-        self.lod_init_scale = 0.005
-        self.lod_init_frac_extra_points = 0.25
-        self.lod_clamp_minsize = True
-        self.lod_clamp_minsize_factor = 1.0
-        self.lod_max_world_size_blur = 0.05
-        self.lod_force_blur_sigma = -1.0
-        self.lod_schedule_power = 1.0
-
         self.use_diffuse_target = False
         self.use_glossy_target = False
 
-        self.sparseness = -1
-        self.hard_sparse = -1
-
-        if "LEGACY_SCHEDULE" in os.environ:
-            self.no_bounces_until_iter = 6_000
-            self.max_one_bounce_until_iter = 12_000
-        else:
-            self.no_bounces_until_iter = 3_000
-            self.max_one_bounce_until_iter = -1
+        self.no_bounces_until_iter = 3_000
+        self.max_one_bounce_until_iter = -1
 
         self.skip_n_images = 0
 
@@ -94,10 +78,7 @@ class OptimizationParams:
         self.f0_lr = 0.0025
         self.diffuse_lr = 0.005
 
-        self.lod_mean_lr = 0.005 / 100
-        self.lod_scale_lr = 0.005 / 100 * 5
-
-        self.opacity_lr = 0.025  #! was 0.05 which does not match 3dgs
+        self.opacity_lr = 0.025  
         self.scaling_lr = 0.005
         self.rotation_lr = 0.001
         self.percent_dense = 0.01
@@ -112,8 +93,6 @@ class OptimizationParams:
 
         self.scale_decay = 0.9999
         self.opacity_decay = 1.0
-        self.lod_mean_decay = 1.0
-        self.lod_scale_decay = 1.0
 
         self.densif_scaledown_clones = False
         self.densif_jitter_clones = False
@@ -130,7 +109,6 @@ class OptimizationParams:
         self.densif_final_num_gaussians = 800_000
         self.densif_size_ranking_weight = 0.0
         self.densif_opacity_ranking_weight = 0.0
-        self.densif_lod_ranking_weight = 0.0
         self.densif_no_pruning_large_radii = False
         self.densif_use_fixed_split_clone_ratio = True
         self.densif_split_clone_ratio = 0.5
@@ -191,9 +169,9 @@ class TyroConfig:
     iterations: int = 32_000
 
     # Source path
-    source_path: str = ""
+    source_path: Annotated[str, arg(aliases=["-s"])] = ""
     # Model path
-    model_path: str = ""
+    model_path: Annotated[str, arg(aliases=["-m"])] = ""
     # Resolution
     resolution: int = 512
     # Evaluation
@@ -247,17 +225,12 @@ class TyroConfig:
     # Initial diffuse of farfield GS
     init_diffuse_farfield: float = 0.2
 
-    # Loss weight for diffuse
+    # * Loss weights
     loss_weight_diffuse: float = 5.0
-    # Loss weight for glossy
     loss_weight_glossy: float = 3.0
-    # Loss weight for depth
     loss_weight_depth: float = 2.5
-    # Loss weight for normal
     loss_weight_normal: float = 2.5
-    # Loss weight for f0
     loss_weight_f0: float = 1.0
-    # Loss weight for roughness
     loss_weight_roughness: float = 1.0
 
     # Disable z-near pruning

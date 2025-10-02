@@ -64,17 +64,6 @@ class Scene:
             :: self.model_params.keep_every_kth_view
         ]
 
-        if "HARD_SPARSE" in os.environ:
-            cameras = scene_info.train_cameras
-            cameras = [cameras[0], cameras[49], cameras[100], cameras[199]]
-            scene_info.train_cameras = cameras
-
-        if self.model_params.sparseness != -1:
-            cameras = sorted(scene_info.train_cameras, key=lambda x: x.image_path)
-            cameras = cameras[:50] + cameras[-50:]
-            # take every kth cameras where k = args.sparseness
-            scene_info.train_cameras = cameras[:: self.model_params.sparseness]
-
         scene_info.train_cameras = scene_info.train_cameras[
             self.model_params.skip_n_images :
         ]
@@ -115,16 +104,11 @@ class Scene:
 
         self.gaussians.scene = self
 
-    def select_points_to_prune_near_cameras(
-        self, points, scales, sigma=int(os.getenv("PRUNING_SIGMA", 0))
-    ):
+    def select_points_to_prune_near_cameras(self, points, scales):
         # Delete all gaussians that would intesect a sphere around each camera at 3 stddev
         # The sphere radius is determined by the distance to the closest point
 
         points_to_prune = torch.zeros(points.shape[0], dtype=torch.bool, device="cuda")
-
-        if "SKIPZNEAR" in os.environ:
-            return points_to_prune
 
         for camera in self.train_cameras[1.0]:
             # if isinstance(camera.R, torch.Tensor):
@@ -138,7 +122,7 @@ class Scene:
 
             points_dist_to_camera = (points - T).norm(dim=1)
             too_close = (
-                points_dist_to_camera - sigma * scales.amax(dim=1) < camera.znear
+                points_dist_to_camera < camera.znear
             )
 
             points_to_prune |= too_close
@@ -164,15 +148,6 @@ class Scene:
             )
 
         self.max_zfar = max([x.zfar for x in self.train_cameras[1.0]]).item()
-        self.max_pixel_blur_sigma = (
-            self.gaussians.model_params.lod_max_world_size_blur
-            / (
-                2
-                * math.tan(self.train_cameras[1.0][0].FoVy / 2)
-                / self.train_cameras[1.0][0].image_height
-                * self.max_zfar
-            )
-        )
 
     def save(self, iteration):
         point_cloud_path = os.path.join(
