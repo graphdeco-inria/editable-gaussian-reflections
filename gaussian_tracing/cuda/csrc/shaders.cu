@@ -152,8 +152,7 @@ extern "C" __global__ void __raygen__rg() {
         pixel.output_ray_direction[step] = ray_direction;
     }
 
-    // * Total all rgb passes into the final image (on which denoising is
-    // applied)
+    // * Total all rgb passes into the final image (on which denoising is applied)
     for (int step = 0; step < num_bounces + 1; step++) {
         pixel.output_final += pixel.output_rgb[step];
     }

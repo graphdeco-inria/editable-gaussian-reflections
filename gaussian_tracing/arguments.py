@@ -195,17 +195,13 @@ class TyroConfig:
     modes: list[str] = field(
         default_factory=lambda: ["regular", "env_rot_1", "env_move_1", "env_move_2"]
     )
-    # Blur sigmas [None, 4.0, 16.0]
-    blur_sigmas: list[float | None] = field(default_factory=lambda: [None])
     # Skip video
     skip_video: bool = False
-    # Red region
-    red_region: bool = False
     # Skip save frames
     skip_save_frames: bool = False
 
     # Initialization strategy
-    init_type: str = "sfm"
+    init_type: str = "sfm" #!!!!
     # Initial number of GSs. Ignored if using sfm
     init_num_pts: int = 100_000
     # Initial number of farfield GSs.

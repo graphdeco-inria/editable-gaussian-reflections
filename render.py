@@ -139,8 +139,8 @@ def render_set(
                 if "env" in mode:
                     if idx == 0:
                         view0 = view
-                        view0.FoVx = 2.0944 * 2  # ??? wrong value still works?
-                        view0.FoVy = -2.0944 * 2  # ?? why negative
+                        view0.FoVx = 2.0944 * 2  
+                        view0.FoVy = -2.0944 * 2 
                         continue  # * Skip frame 0, rotation is incorrect for some reason I don't understand
                     view = view0
 
@@ -592,19 +592,6 @@ def main(cfg: TyroConfig):
 
     gaussians = GaussianModel(cfg)
     scene = Scene(cfg, gaussians, load_iteration=cfg.iteration, shuffle=False)
-
-    if cfg.red_region:
-        bbox_min = [0.22, -0.5, -0.22]
-        bbox_max = [0.46, -0.13, -0.05]
-
-        mask = (
-            (gaussians.get_xyz < torch.tensor(bbox_max, device="cuda"))
-            .all(dim=-1)
-            .logical_and(
-                (gaussians.get_xyz > torch.tensor(bbox_min, device="cuda")).all(dim=-1)
-            )
-        )
-        gaussians._features_dc[mask] = torch.tensor([1.0, 0.0, 0.0], device="cuda")
 
     viewpoint_stack = scene.getTrainCameras().copy()
     raytracer = GaussianRaytracer(
