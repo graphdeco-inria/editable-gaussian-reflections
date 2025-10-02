@@ -102,7 +102,7 @@ def training_report(
                     package = render(
                         viewpoint,
                         raytracer,
-                        denoise=cfg.denoise,
+                        denoise=False
                     )
 
                     os.makedirs(
@@ -112,6 +112,7 @@ def training_report(
 
                     diffuse_image = tonemap(package.rgb[0]).clamp(0, 1)
                     glossy_image = tonemap(package.rgb[1:].sum(dim=0)).clamp(0, 1)
+                    print(package.final.amin(), package.final.sum())
                     pred_image = tonemap(package.final[0]).clamp(0, 1)
                     pred_image_without_denoising = tonemap(package.rgb.sum(dim=0))
                     diffuse_gt_image = tonemap(viewpoint.diffuse_image).clamp(0, 1)
@@ -407,14 +408,6 @@ def training_report(
                         f"{iteration:05d}, {diffuse_psnr_test:02.2f}, {glossy_psnr_test:02.2f}, {psnr_test:02.2f}\n"
                     )
 
-        # if tb_writer:
-        #     tb_writer.add_histogram(
-        #         "scene/opacity_histogram", scene.gaussians.get_opacity, iteration
-        #     )
-        #     tb_writer.add_scalar(
-        #         "total_points", scene.gaussians.get_xyz.shape[0], iteration
-        #     )
-
         torch.cuda.empty_cache()
 
 
@@ -432,11 +425,6 @@ def main(cfg: TyroConfig):
     gaussians.training_setup(opt_params)
 
     first_iter = 0
-    if cfg.start_checkpoint:
-        (capture_data, first_iter) = torch.load(
-            cfg.start_checkpoint, weights_only=False
-        )  #!!! Cant release like this, security risk
-        gaussians.restore(capture_data, opt_params)
     first_iter += 1
 
     iter_start = torch.cuda.Event(enable_timing=True)
@@ -447,21 +435,13 @@ def main(cfg: TyroConfig):
         gaussians, viewpoint_stack[0].image_width, viewpoint_stack[0].image_height
     )
 
-    if "KEYVIEW" in os.environ:
-        keyview = [
-            x
-            for x in scene.getTrainCameras()
-            if x.colmap_id == int(os.environ["KEYVIEW"])
-        ][0]
-
     if cfg.viewer:
         from gaussianviewer import GaussianViewer
         from viewer.types import ViewerMode
 
         mode = ViewerMode.LOCAL if cfg.viewer_mode == "local" else ViewerMode.SERVER
-        SPARSE_ADAM_AVAILABLE = False
         viewer = GaussianViewer.from_gaussians(
-            raytracer, model_params, opt_params, gaussians, SPARSE_ADAM_AVAILABLE, mode
+            raytracer, model_params, opt_params, gaussians, False, mode
         )
         viewer.accumulate_samples = False
         if cfg.viewer_mode != "none":
@@ -494,9 +474,6 @@ def main(cfg: TyroConfig):
         if not viewpoint_stack:
             viewpoint_stack = scene.getTrainCameras().copy()
         viewpoint_cam = viewpoint_stack.pop(randint(0, len(viewpoint_stack) - 1))
-
-        if "KEYVIEW" in os.environ and random.random() < 0.5:
-            viewpoint_cam = keyview
 
         torch.cuda.synchronize()  # todo may be needed or not, idk, occasional crash. double check after deadline
         _ = render(
@@ -626,7 +603,6 @@ def main(cfg: TyroConfig):
                 if not cfg.disable_znear_densif_pruning:
                     gaussians.prune_znear_only(scene)
                 raytracer.cuda_module.get_gaussians().total_weight.zero_()
-                assert "DENSIFY" not in os.environ
 
                 torch.cuda.synchronize()
                 raytracer.rebuild_bvh()
@@ -640,12 +616,6 @@ def main(cfg: TyroConfig):
                 gaussians._roughness.data.clamp_(min=0.0, max=1.0)
                 gaussians._f0.data.clamp_(min=0.0, max=1.0)
 
-            if iteration in cfg.checkpoint_iterations:
-                print("\n[ITER {}] Saving Checkpoint".format(iteration))
-                torch.save(
-                    (gaussians.capture(), iteration),
-                    cfg.model_path + "/chkpnt" + str(iteration) + ".pth",
-                )
 
         if iteration == model_params.no_bounces_until_iter:
             if model_params.max_one_bounce_until_iter in [0, -1]:
@@ -653,9 +623,8 @@ def main(cfg: TyroConfig):
             else:
                 config.num_bounces.copy_(min(MAX_BOUNCES, 1))
 
-            if "SKIP_INIT_FARFIELD" not in os.environ:
-                torch.cuda.synchronize()
-                gaussians.add_farfield_points(scene)
+            torch.cuda.synchronize()
+            gaussians.add_farfield_points(scene)
             raytracer.rebuild_bvh()
             torch.cuda.synchronize()
 
@@ -676,16 +645,15 @@ def main(cfg: TyroConfig):
         if cfg.viewer:
             viewer.gaussian_lock.release()
 
-    # All done
     print("\nTraining complete.")
 
 
 if __name__ == "__main__":
     cfg = tyro.cli(TyroConfig)
 
-    # TODO: Remove this custom config modification.
     if cfg.viewer:
         cfg.test_iterations = []
+
     if cfg.opt_params.timestretch != 1:
         cfg.model_params.no_bounces_until_iter = int(
             cfg.model_params.no_bounces_until_iter * cfg.opt_params.timestretch

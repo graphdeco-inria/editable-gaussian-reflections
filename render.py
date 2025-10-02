@@ -592,11 +592,6 @@ def main(cfg: TyroConfig):
 
     gaussians = GaussianModel(cfg)
     scene = Scene(cfg, gaussians, load_iteration=cfg.iteration, shuffle=False)
-    if "DBG_FLOATERS" in os.environ:
-        mask = scene.select_points_to_prune_near_cameras(
-            gaussians.get_xyz, gaussians.get_scaling
-        )
-        gaussians._opacity.data[mask] = -100000000.0
 
     if cfg.red_region:
         bbox_min = [0.22, -0.5, -0.22]
@@ -615,9 +610,6 @@ def main(cfg: TyroConfig):
     raytracer = GaussianRaytracer(
         gaussians, viewpoint_stack[0].image_width, viewpoint_stack[0].image_height
     )
-
-    if "MAKE_MIRROR" in os.environ:
-        gaussians._roughness.zero_()
 
     if cfg.train_views:
         render_set(

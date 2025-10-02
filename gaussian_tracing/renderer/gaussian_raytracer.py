@@ -101,7 +101,6 @@ class GaussianRaytracer:
     def __call__(
         self,
         viewpoint_camera,
-        # todo pass targets in a dict
         target=None,
         target_diffuse=None,
         target_glossy=None,
@@ -180,5 +179,5 @@ class GaussianRaytracer:
             self._import_param_gradients()
 
         return {
-            "render": framebuffer.output_rgb.clone(),  # todo cleanup to new system which just returns the framebuffer
+            "render": framebuffer.output_rgb.clone(), 
         }
