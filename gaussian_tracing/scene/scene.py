@@ -40,7 +40,6 @@ class Scene:
         :param path: Path to colmap scene main folder.
         """
         self.cfg = cfg
-        self.model_params = cfg.model_params
         self.model_path = cfg.model_path
         self.loaded_iter = None
         self.gaussians = gaussians
@@ -104,10 +103,6 @@ class Scene:
         points_to_prune = torch.zeros(points.shape[0], dtype=torch.bool, device="cuda")
 
         for camera in self.train_cameras[1.0]:
-            # if isinstance(camera.R, torch.Tensor):
-            #     R = camera.R.cuda().float()
-            # else:
-            #     R = torch.from_numpy(camera.R).cuda().float()
             if isinstance(camera.camera_center, torch.Tensor):
                 T = camera.camera_center
             else:
@@ -125,8 +120,8 @@ class Scene:
     @torch.no_grad()
     def autoadjust_zplanes(self):
         for camera in self.train_cameras[1.0] + self.test_cameras[1.0]:
-            camera.znear = camera.depth_image.amin() * self.model_params.znear_scaledown
-            camera.zfar = camera.depth_image.amax() * self.model_params.zfar_scaleup
+            camera.znear = camera.depth_image.amin() * self.cfg.znear_scaledown
+            camera.zfar = camera.depth_image.amax() * self.cfg.zfar_scaleup
             camera.update()
 
         # Assert that for all cameras, image_height is equal and FoVy is equal

@@ -29,41 +29,38 @@ class GaussianRaytracer:
         )
 
         config = self.cuda_module.get_config()
-        # todo use a loop
         config.loss_weight_diffuse.fill_(pc.cfg.loss_weight_diffuse)
         config.loss_weight_glossy.fill_(pc.cfg.loss_weight_glossy)
         config.loss_weight_normal.fill_(pc.cfg.loss_weight_normal)
         config.loss_weight_depth.fill_(pc.cfg.loss_weight_depth)
         config.loss_weight_f0.fill_(pc.cfg.loss_weight_f0)
         config.loss_weight_roughness.fill_(pc.cfg.loss_weight_roughness)
-
-        config.transmittance_threshold.fill_(pc.model_params.transmittance_threshold)
-        config.alpha_threshold.fill_(pc.model_params.alpha_threshold)
-        config.exp_power.fill_(pc.model_params.exp_power)
+        config.transmittance_threshold.fill_(pc.cfg.transmittance_threshold)
+        config.alpha_threshold.fill_(pc.cfg.alpha_threshold)
+        config.exp_power.fill_(pc.cfg.exp_power)
 
         self.pc = pc
 
         self._export_param_values()
-        torch.cuda.synchronize()  #!!! remove
+        torch.cuda.synchronize()  
         self.cuda_module.rebuild_bvh()
-        torch.cuda.synchronize()  #!!! remove
+        torch.cuda.synchronize()  
 
     @torch.no_grad()
     def rebuild_bvh(self):
         new_size = self.pc._xyz.shape[0]
 
-        torch.cuda.synchronize()  #!!! remove
+        torch.cuda.synchronize()  
         self.cuda_module.resize(new_size)
-        torch.cuda.synchronize()  #!!! remove
+        torch.cuda.synchronize()  
         self._export_param_values()
-        torch.cuda.synchronize()  #!!! remove
+        torch.cuda.synchronize()  
         self.cuda_module.rebuild_bvh()
-        torch.cuda.synchronize()  #!!! remove
+        torch.cuda.synchronize()  
 
     @torch.no_grad()
     def _export_param_values(self):
         gaussians = self.cuda_module.get_gaussians()
-        # todo use a loop
         gaussians.scale.copy_(self.pc._get_scaling)
         gaussians.rotation.copy_(self.pc._get_rotation)
         gaussians.mean.copy_(self.pc.get_xyz)
@@ -76,7 +73,6 @@ class GaussianRaytracer:
     @torch.no_grad()
     def _import_param_gradients(self):
         gaussians = self.cuda_module.get_gaussians()
-        # todo use a loop
         self.pc._xyz.grad.add_(gaussians.mean.grad)
         self.pc._opacity.grad.add_(gaussians.opacity.grad)
         self.pc._scaling.grad.add_(gaussians.scale.grad)
@@ -88,7 +84,6 @@ class GaussianRaytracer:
 
     def zero_grad(self):
         gaussians = self.cuda_module.get_gaussians()
-        # todo use a loop
         gaussians.rgb.grad.zero_()
         gaussians.opacity.grad.zero_()
         gaussians.scale.grad.zero_()

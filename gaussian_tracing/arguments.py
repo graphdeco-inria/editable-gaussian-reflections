@@ -14,68 +14,10 @@ from dataclasses import dataclass, field
 from typing import Annotated, List, Optional, Literal
 from tyro.conf import arg
 
-class ModelParams:
-    def __init__(self):
-        self.white_background = False
-        self.data_device = "cuda"
-        self.scene_extent_init_radius = 4.0
-        self.scene_extent_multiplier = 5.0
-        self.num_feat_per_gaussian_channel = 16
-
-        self.raytracer_version = ""  # "build_v0.1_attached_brdf"
-
-        self.max_images = 9999999
-
-        self.min_opacity = 0.005
-        self.min_weight = 0.1
-
-        self.znear_scaledown = 0.8
-        self.zfar_scaleup = 1.5
-
-        self.transmittance_threshold = 0.01
-        self.alpha_threshold = 0.005
-        self.exp_power = 3
-
-        self.no_bounces_until_iter = 3_000
-
-
-class OptimizationParams:
-    def __init__(self):
-        self.xyz_lr_max_steps = 32_000
-
-        # flat schedule
-        self.xyz_lr_init = 0.00016
-        self.xyz_lr_final = 0.0000016
-        self.xyz_lr_delay_mult = 0.01
-
-        self.timestretch = 0.25
-
-        self.xyz_lr = 0.0025
-        self.normal_lr = 0.0025
-        self.roughness_lr = 0.0025
-        self.f0_lr = 0.0025
-        self.diffuse_lr = 0.005
-
-        self.opacity_lr = 0.025  
-        self.scaling_lr = 0.005
-        self.rotation_lr = 0.001
-        self.percent_dense = 0.01
-
-        self.scale_decay = 0.9999
-
-        self.pruning_interval = 500
-
-        self.beta_1 = 0.9
-        self.beta_2 = 0.999  # important to be lower than 0.999
 
 
 @dataclass
 class TyroConfig:
-    # Model params
-    model_params: ModelParams = field(default_factory=lambda: ModelParams())
-    # Optimization params
-    opt_params: OptimizationParams = field(default_factory=lambda: OptimizationParams())
-
     viewer: bool = False
     viewer_mode: str = "local"
     detect_anomaly: bool = False
@@ -88,11 +30,7 @@ class TyroConfig:
         default_factory=lambda: [4, 6_000, 12_000, 18_000, 24_000, 32_000]
     )
     quiet: bool = False
-    # Checkpoint iterations
-    checkpoint_iterations: list[int] = field(default_factory=lambda: [])
-    # Start checkpoint
-    start_checkpoint: str | None = None
-    # Total iterations
+    
     iterations: int = 32_000
 
     # * Dataset params
@@ -102,6 +40,24 @@ class TyroConfig:
     eval: bool = False
     max_images: int | None = None
     do_depth_fit: bool = False
+
+    # * Model params
+    white_background: bool = False
+    data_device: str = "cuda"
+    scene_extent_init_radius: float = 4.0
+    scene_extent_multiplier: float = 5.0
+    num_feat_per_gaussian_channel: int = 16
+    raytracer_version: str = ""  # "build_v0.1_attached_brdf"
+    max_images: int = 9999999
+    min_opacity: float = 0.005
+    min_weight: float = 0.1
+    disable_znear_densif_pruning: bool = False
+    znear_scaledown: float = 0.8
+    zfar_scaleup: float = 1.5
+    transmittance_threshold: float = 0.01
+    alpha_threshold: float = 0.005
+    exp_power: int = 3
+    no_bounces_until_iter: int = 3_000
 
     # * Render params
     iteration: int = -1
@@ -133,5 +89,23 @@ class TyroConfig:
     loss_weight_f0: float = 1.0
     loss_weight_roughness: float = 1.0
 
-    # 
-    disable_znear_densif_pruning: bool = False
+    # * Optimization params
+    xyz_lr_max_steps: int = 32_000
+    xyz_lr_init: float = 0.00016
+    xyz_lr_final: float = 0.0000016
+    xyz_lr_delay_mult: float = 0.01
+    timestretch: float = 0.25
+    xyz_lr: float = 0.0025
+    normal_lr: float = 0.0025
+    roughness_lr: float = 0.0025
+    f0_lr: float = 0.0025
+    diffuse_lr: float = 0.005
+    opacity_lr: float = 0.025
+    scaling_lr: float = 0.005
+    rotation_lr: float = 0.001
+    percent_dense: float = 0.01
+    scale_decay: float = 0.9999
+    pruning_interval: int = 500
+    beta_1: float = 0.9
+    beta_2: float = 0.999
+

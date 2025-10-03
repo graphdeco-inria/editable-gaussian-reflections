@@ -54,7 +54,6 @@ class GaussianModel:
 
     def __init__(self, cfg: TyroConfig):
         self.cfg = cfg
-        self.model_params = cfg.model_params
         self._xyz = torch.empty(0)
         self._normal = torch.empty(0)
         self._roughness = torch.empty(0)
@@ -260,7 +259,7 @@ class GaussianModel:
         new_xyz = (
             torch.randn(self.cfg.init_num_pts_farfield, 3, device="cuda").clamp(-3, 3)
             * scene.cameras_extent
-            * self.model_params.scene_extent_init_radius
+            * self.cfg.scene_extent_init_radius
         )
         mask = scene.select_points_to_prune_near_cameras(
             new_xyz, torch.zeros_like(new_xyz)

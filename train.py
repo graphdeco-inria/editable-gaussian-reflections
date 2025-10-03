@@ -400,9 +400,6 @@ def training_report(
 
 
 def main(cfg: TyroConfig):
-    model_params = cfg.model_params
-    opt_params = cfg.opt_params
-
     # Initialize system state (RNG)
     safe_state(cfg.quiet)
     torch.autograd.set_detect_anomaly(cfg.detect_anomaly)
@@ -410,7 +407,7 @@ def main(cfg: TyroConfig):
     tb_writer = prepare_output_and_logger(cfg)
     gaussians = GaussianModel(cfg)
     scene = Scene(cfg, gaussians)
-    gaussians.training_setup(opt_params)
+    gaussians.training_setup(cfg)
 
     first_iter = 0
     first_iter += 1
@@ -428,9 +425,7 @@ def main(cfg: TyroConfig):
         from viewer.types import ViewerMode
 
         mode = ViewerMode.LOCAL if cfg.viewer_mode == "local" else ViewerMode.SERVER
-        viewer = GaussianViewer.from_gaussians(
-            raytracer, model_params, opt_params, gaussians, False, mode
-        )
+        viewer = GaussianViewer.from_gaussians(raytracer, cfg, gaussians, False, mode)
         viewer.accumulate_samples = False
         if cfg.viewer_mode != "none":
             viewer_thd = Thread(target=viewer.run, daemon=True)
@@ -442,9 +437,9 @@ def main(cfg: TyroConfig):
     MAX_BOUNCES = config.num_bounces.item()
     config.num_bounces.fill_(0)
 
-    if model_params.no_bounces_until_iter > 0:
+    if cfg.no_bounces_until_iter > 0:
         config.num_bounces.copy_(0)
-    elif model_params.max_one_bounce_until_iter > 0:
+    elif cfg.max_one_bounce_until_iter > 0:
         config.num_bounces.copy_(min(raytracer.config.MAX_BOUNCES, 1))
 
     for iteration in tqdm(
@@ -463,7 +458,7 @@ def main(cfg: TyroConfig):
             viewpoint_stack = scene.getTrainCameras().copy()
         viewpoint_cam = viewpoint_stack.pop(randint(0, len(viewpoint_stack) - 1))
 
-        torch.cuda.synchronize()  # todo may be needed or not, idk, occasional crash. double check after deadline
+        torch.cuda.synchronize()  
         _ = render(
             viewpoint_cam,
             raytracer,
@@ -471,9 +466,9 @@ def main(cfg: TyroConfig):
         )
 
         with torch.no_grad():
-            if opt_params.scale_decay < 1.0:
+            if cfg.scale_decay < 1.0:
                 gaussians._scaling.copy_(
-                    torch.log(gaussians.get_scaling * opt_params.scale_decay)
+                    torch.log(gaussians.get_scaling * cfg.scale_decay)
                 )
 
         iter_end.record()
@@ -561,16 +556,16 @@ def main(cfg: TyroConfig):
                 print("\n[ITER {}] Saving Gaussians".format(iteration))
                 scene.save(iteration)
 
-            if iteration % opt_params.pruning_interval == 0:
+            if iteration % cfg.pruning_interval == 0:
                 if (
-                    iteration > model_params.no_bounces_until_iter + 500
-                    and model_params.min_weight > 0
+                    iteration > cfg.no_bounces_until_iter + 500
+                    and cfg.min_weight > 0
                 ):
                     gaussians.prune_points(
                         (
                             raytracer.cuda_module.get_gaussians().total_weight
-                            / opt_params.pruning_interval
-                            < model_params.min_weight
+                            / cfg.pruning_interval
+                            < cfg.min_weight
                         ).squeeze(1)
                     )
                 if not cfg.disable_znear_densif_pruning:
@@ -589,7 +584,7 @@ def main(cfg: TyroConfig):
                 gaussians._roughness.data.clamp_(min=0.0, max=1.0)
                 gaussians._f0.data.clamp_(min=0.0, max=1.0)
 
-        if iteration == model_params.no_bounces_until_iter:
+        if iteration == cfg.no_bounces_until_iter:
             config.num_bounces.copy_(MAX_BOUNCES)
 
             torch.cuda.synchronize()
@@ -597,7 +592,7 @@ def main(cfg: TyroConfig):
             raytracer.rebuild_bvh()
             torch.cuda.synchronize()
 
-        if iteration == 1 and model_params.no_bounces_until_iter in [-1, 0]:
+        if iteration == 1 and cfg.no_bounces_until_iter in [-1, 0]:
             gaussians.add_farfield_points(scene)
             raytracer.rebuild_bvh()
             torch.cuda.synchronize()
@@ -614,19 +609,19 @@ if __name__ == "__main__":
     if cfg.viewer:
         cfg.test_iterations = []
 
-    if cfg.opt_params.timestretch != 1:
-        cfg.model_params.no_bounces_until_iter = int(
-            cfg.model_params.no_bounces_until_iter * cfg.opt_params.timestretch
+    if cfg.timestretch != 1:
+        cfg.no_bounces_until_iter = int(
+            cfg.no_bounces_until_iter * cfg.timestretch
         )
         cfg.test_iterations = [
-            int(x * cfg.opt_params.timestretch) for x in cfg.test_iterations
+            int(x * cfg.timestretch) for x in cfg.test_iterations
         ]
         cfg.save_iterations = [
-            int(x * cfg.opt_params.timestretch) for x in cfg.save_iterations
+            int(x * cfg.timestretch) for x in cfg.save_iterations
         ]
-        cfg.iterations = int(cfg.opt_params.timestretch * cfg.iterations)
-        cfg.opt_params.pruning_interval = int(
-            cfg.opt_params.timestretch * cfg.opt_params.pruning_interval
+        cfg.iterations = int(cfg.timestretch * cfg.iterations)
+        cfg.pruning_interval = int(
+            cfg.timestretch * cfg.pruning_interval
         )
 
     main(cfg)
