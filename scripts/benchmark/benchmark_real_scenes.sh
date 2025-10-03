@@ -25,25 +25,24 @@ python3 -c "import torch; print(torch.cuda.is_available()); print(torch.cuda.get
 # ============================================================
 
 # RESOLUTION=512
-# SCENE_DIR="data/real_datasets_v3_filmic/refnerf_priors"
+# SCENE_DIR="data/refnerf"
 # SCENE_LIST="gardenspheres sedan toycar"
-# OUTPUT_DIR="output/benchmark_refnerf_priors"
+# OUTPUT_DIR="output/benchmark_refnerf"
 
 RESOLUTION=512
-SCENE_DIR="data/real_datasets_v3_filmic/neural_catacaustics_priors"
+SCENE_DIR="data/neural_catacaustics"
 SCENE_LIST="compost concave_bowl2 crazy_blade2 hallway_lamp multibounce silver_vase2 wateringcan2"
-OUTPUT_DIR="output/benchmark_neural_catacaustics_priors"
+OUTPUT_DIR="output/benchmark_neural_catacaustics"
 
 # RESOLUTION=512
-# SCENE_DIR="data/real_datasets_v3_filmic/360_v2_priors"
+# SCENE_DIR="data/360_v2"
 # SCENE_LIST="garden bicycle stump bonsai counter kitchen room treehill flowers"
-# OUTPUT_DIR="output/benchmark_360_v2_priors"
+# OUTPUT_DIR="output/benchmark_360_v2"
 
 # RESOLUTION=512
-# SCENE_DIR="data/real_datasets_v3_filmic/renders_priors"
-# SCENE_LIST="shiny_kitchen shiny_bedroom shiny_livingroom shiny_office"
-# # SCENE_LIST="multichromeball_kitchen_v2 multichromeball_identical_kitchen_v2 multichromeball_tint_kitchen_v2 multichromeball_value_kitchen_v2"
-# OUTPUT_DIR="output/benchmark_renders_priors"
+# SCENE_DIR="data/renders_predicted"
+# SCENE_LIST="shiny_kitchen shiny_bedroom shiny_livingroom shiny_office multichromeball_kitchen_v2 multichromeball_identical_kitchen_v2 multichromeball_tint_kitchen_v2 multichromeball_value_kitchen_v2"
+# OUTPUT_DIR="output/benchmark_renders_predicted"
 
 for SCENE in $SCENE_LIST;
 do

@@ -102,7 +102,7 @@ class ColmapPriorDataset:
         frame_name = os.path.splitext(image_name)[0]
         image_path = os.path.join(self.data_dir, "images", frame_name + ".jpg")
 
-        image = self._get_buffer(frame_name, "image")
+        image = self._get_buffer(frame_name, "render")
         albedo_image = self._get_buffer(frame_name, "albedo")
         diffuse_image = self._get_buffer(frame_name, "diffuse")
         glossy_image = self._get_buffer(frame_name, "glossy")
@@ -196,7 +196,10 @@ class ColmapPriorDataset:
 
     def _get_buffer(self, frame_name: str, buffer_name: str):
         file_name = frame_name.split("/")[-1]
-        buffer_path = os.path.join(self.buffers_dir, buffer_name, file_name + ".png")
+        frame_id = file_name.split("_")[-1]
+        buffer_path = os.path.join(
+            self.buffers_dir, buffer_name, f"{buffer_name}_{frame_id}.png"
+        )
 
         buffer_image = Image.open(buffer_path)
         buffer_height = self.resolution
@@ -206,7 +209,7 @@ class ColmapPriorDataset:
         buffer_image = buffer_image.resize((buffer_width, buffer_height))
         buffer = from_pil_image(buffer_image)
 
-        if buffer_name in ["image", "irradiance", "diffuse", "glossy"]:
+        if buffer_name in ["render", "irradiance", "diffuse", "glossy"]:
             buffer = untonemap(buffer)
             buffer /= 3.5  # Align exposure
         elif buffer_name == "albedo":

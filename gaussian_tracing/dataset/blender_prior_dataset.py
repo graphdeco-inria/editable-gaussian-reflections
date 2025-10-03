@@ -82,9 +82,14 @@ class BlenderPriorDataset:
             buffer_name: self._get_buffer(frame_name, buffer_name)
             for buffer_name in self.buffer_names
         }
-        # buffers["brdf"] = torch.zeros_like(buffers["render"])
-        # buffers["specular"] = torch.ones_like(buffers["render"]) * 0.5
-        # buffers["base_color"] = buffers["albedo"] * (1.0 - buffers["metalness"]) + buffers["metalness"]
+        if buffers["brdf"] is None:
+            buffers["brdf"] = torch.zeros_like(buffers["render"])
+        if buffers["specular"] is None:
+            buffers["specular"] = torch.ones_like(buffers["render"]) * 0.5
+        if buffers["base_color"] is None:
+            buffers["base_color"] = (
+                buffers["albedo"] * (1.0 - buffers["metalness"]) + buffers["metalness"]
+            )
 
         # Resize all buffers
         if self.resolution is not None:
@@ -173,6 +178,8 @@ class BlenderPriorDataset:
         buffer_path = os.path.join(
             self.buffers_dir, buffer_name, f"{buffer_name}_{frame_id}" + ".png"
         )
+        if not os.path.isfile(buffer_path):
+            return None
 
         buffer_image = Image.open(buffer_path)
         buffer = from_pil_image(buffer_image)

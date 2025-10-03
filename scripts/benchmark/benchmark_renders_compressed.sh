@@ -26,8 +26,7 @@ python3 -c "import torch; print(torch.cuda.is_available()); print(torch.cuda.get
 
 RESOLUTION=512
 SCENE_DIR="data/renders_compressed"
-SCENE_LIST="shiny_kitchen shiny_bedroom shiny_livingroom shiny_office"
-# SCENE_LIST="multichromeball_kitchen_v2 multichromeball_identical_kitchen_v2 multichromeball_tint_kitchen_v2 multichromeball_value_kitchen_v2"
+SCENE_LIST="shiny_kitchen shiny_bedroom shiny_livingroom shiny_office multichromeball_kitchen_v2 multichromeball_identical_kitchen_v2 multichromeball_tint_kitchen_v2 multichromeball_value_kitchen_v2"
 OUTPUT_DIR="output/benchmark_renders_compressed"
 
 for SCENE in $SCENE_LIST;

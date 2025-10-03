@@ -202,6 +202,8 @@ class TyroConfig:
     max_images: int | None = None
     # Fit depth images to colmap point cloud
     do_depth_fit: bool = False
+    # Voxel scale for ply initialization
+    voxel_scale: float = 50.0
 
     # Iteration
     iteration: int = -1

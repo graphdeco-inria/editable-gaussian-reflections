@@ -7,7 +7,7 @@ from gaussian_tracing.dataset import BlenderDataset
 from gaussian_tracing.dataset.image_utils import to_pil_image
 from gaussian_tracing.utils.tonemapping import tonemap
 from gaussian_tracing.utils.depth_utils import transform_normals_world_to_camera
-
+from gaussian_tracing.utils.depth_utils import transform_distance_to_position_image
 
 def main():
     scene_names = [
@@ -32,7 +32,6 @@ def main():
         "roughness",
         "metalness",
         "depth",
-        "position",
         "normal",
         "base_color",
         "specular",
@@ -62,7 +61,7 @@ def main():
                 frame_id = os.path.splitext(cam_info.image_name)[0].split("_")[-1]
                 for buffer_name in buffer_names:
                     buffer = getattr(cam_info, f"{buffer_name}_image") if buffer_name != "render" else cam_info.image
-                    buffer_ext = ".png" if buffer_name != "position" else ".npy"
+                    buffer_ext = ".png"
                     buffer_path = os.path.join(out_dir, scene_name, split_name, buffer_name, f"{buffer_name}_{frame_id}{buffer_ext}")
                     os.makedirs(os.path.dirname(buffer_path), exist_ok=True)
 
@@ -73,12 +72,16 @@ def main():
                     elif buffer_name in ["roughness", "metalness", "specular"]:
                         buffer = buffer[:,:,:1]
                     elif buffer_name == "depth":
-                        buffer = buffer[:,:,:1]
+                        distance_image = buffer[:,:,None]
+                        position_image = transform_distance_to_position_image(
+                            distance_image[:,:,0], cam_info.FovX, cam_info.FovY
+                        )
+                        depth_image = position_image[:,:,2]
+                        buffer = depth_image[:,:,None]
+
                         lower = 0.0 # buffer.min()
                         upper = 4.0 # buffer.max()
                         buffer = (buffer - lower) / (upper - lower)
-                    elif buffer_name == "position":
-                        pass
                     elif buffer_name == "normal":
                         buffer = transform_normals_world_to_camera(buffer, torch.tensor(cam_info.R, dtype=buffer.dtype))
                         buffer = buffer * 0.5 + 0.5
