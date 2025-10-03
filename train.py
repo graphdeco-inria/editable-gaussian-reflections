@@ -17,7 +17,7 @@ from threading import Thread
 
 import torch
 import tyro
-import yaml
+import json
 from torchvision.utils import save_image
 from tqdm import tqdm
 
@@ -40,15 +40,15 @@ from torch.utils.tensorboard import SummaryWriter
 def prepare_output_and_logger(cfg: TyroConfig):
     if not cfg.model_path:
         cfg.model_path = os.path.join(
-            "./output/", datetime.now().isoformat(timespec="seconds")
+            "output", datetime.now().isoformat(timespec="seconds")
         )
 
     # Set up output folder
     print("Output folder: {}".format(cfg.model_path))
     os.makedirs(cfg.model_path, exist_ok=True)
-    # Dump cfg.
-    with open(f"{cfg.model_path}/cfg.yml", "w") as f:
-        yaml.dump(vars(cfg), f)
+    # Dump cfg as JSON.
+    with open(os.path.join(cfg.model_path, "cfg.json"), "w") as f:
+        json.dump(vars(cfg), f, indent=2)
 
     return SummaryWriter(cfg.model_path)
 
@@ -64,7 +64,9 @@ def training_report(
     if iteration in cfg.test_iterations:
         torch.cuda.empty_cache()
         validation_configs = (
-            {"name": "test", "cameras": scene.getTestCameras()},
+            {
+                "name": "test", "cameras": scene.getTestCameras()
+            },
             {
                 "name": "train",
                 "cameras": [
@@ -73,7 +75,7 @@ def training_report(
                     ]
                     for idx in cfg.val_views
                 ],
-            },
+            }
         )
 
         for config in validation_configs:
@@ -95,7 +97,7 @@ def training_report(
                     )
 
                     os.makedirs(
-                        tb_writer.log_dir + "/" + f"{config['name']}_view",
+                        os.path.join(tb_writer.log_dir, f"{config['name']}_view"),
                         exist_ok=True,
                     )
 
@@ -122,9 +124,7 @@ def training_report(
                                     gt_image,
                                 ]
                             ).clamp(0, 1),
-                            tb_writer.log_dir
-                            + "/"
-                            + f"{config['name']}_view/iter_{iteration:09}_view_{viewpoint.colmap_id}.png",
+                            os.path.join(tb_writer.log_dir, f"{config['name']}_view", f"iter_{iteration:09}_view_{viewpoint.colmap_id}.png"),
                             nrow=2,
                             padding=0,
                         )
@@ -141,9 +141,7 @@ def training_report(
                                     error_final.abs() / error_final.std() / 3,
                                 ]
                             ).clamp(0, 1),
-                            tb_writer.log_dir
-                            + "/"
-                            + f"{config['name']}_view/iter_{iteration:09}_view_{viewpoint.colmap_id}_error_maps.png",
+                            os.path.join(tb_writer.log_dir, f"{config['name']}_view", f"iter_{iteration:09}_view_{viewpoint.colmap_id}_error_maps.png"),
                             nrow=3,
                             padding=0,
                         )
@@ -184,68 +182,50 @@ def training_report(
                         if package.rgb.shape[0] > 2:
                             save_image(
                                 tonemap(package.rgb).clamp(0, 1),
-                                tb_writer.log_dir
-                                + "/"
-                                + f"{config['name']}_view/iter_{iteration:09}_view_{viewpoint.colmap_id}_rgb_all_rays.png",
+                                os.path.join(tb_writer.log_dir, f"{config['name']}_view", f"iter_{iteration:09}_view_{viewpoint.colmap_id}_rgb_all_rays.png"),
                                 padding=0,
                             )
                             save_image(
                                 torch.clamp(package.normal / 2 + 0.5, 0.0, 1.0),
-                                tb_writer.log_dir
-                                + "/"
-                                + f"{config['name']}_view/iter_{iteration:09}_view_{viewpoint.colmap_id}_normal_all_rays.png",
+                                os.path.join(tb_writer.log_dir, f"{config['name']}_view", f"iter_{iteration:09}_view_{viewpoint.colmap_id}_normal_all_rays.png"),
                                 padding=0,
                             )
                             save_image(
                                 torch.clamp(package.F0, 0.0, 1.0),
-                                tb_writer.log_dir
-                                + "/"
-                                + f"{config['name']}_view/iter_{iteration:09}_view_{viewpoint.colmap_id}_F0_all_rays.png",
+                                os.path.join(tb_writer.log_dir, f"{config['name']}_view", f"iter_{iteration:09}_view_{viewpoint.colmap_id}_F0_all_rays.png"),
                                 padding=0,
                             )
                             save_image(
                                 package.depth
                                 / package.depth.amax(dim=(1, 2, 3), keepdim=True),
-                                tb_writer.log_dir
-                                + "/"
-                                + f"{config['name']}_view/iter_{iteration:09}_view_{viewpoint.colmap_id}_depth_all_rays.png",
+                                os.path.join(tb_writer.log_dir, f"{config['name']}_view", f"iter_{iteration:09}_view_{viewpoint.colmap_id}_depth_all_rays.png"),
                                 padding=0,
                             )
                             save_image(
                                 torch.clamp(package.brdf, 0.0, 1.0),
-                                tb_writer.log_dir
-                                + "/"
-                                + f"{config['name']}_view/iter_{iteration:09}_view_{viewpoint.colmap_id}_brdf_all_rays.png",
+                                os.path.join(tb_writer.log_dir, f"{config['name']}_view", f"iter_{iteration:09}_view_{viewpoint.colmap_id}_brdf_all_rays.png"),
                                 padding=0,
                             )
 
                         fb = raytracer.cuda_module.get_framebuffer()
                         save_image(
                             fb.output_ray_origin[0].moveaxis(-1, 0).abs() / 5,
-                            tb_writer.log_dir
-                            + "/"
-                            + f"{config['name']}_view/iter_{iteration:09}_view_{viewpoint.colmap_id}_ray_origin.png",
+                            os.path.join(tb_writer.log_dir, f"{config['name']}_view", f"iter_{iteration:09}_view_{viewpoint.colmap_id}_ray_origin.png"),
                             padding=0,
                         )
                         save_image(
                             fb.output_ray_direction[0].moveaxis(-1, 0) / 2 + 0.5,
-                            tb_writer.log_dir
-                            + "/"
-                            + f"{config['name']}_view/iter_{iteration:09}_view_{viewpoint.colmap_id}_ray_direction.png",
+                            os.path.join(tb_writer.log_dir, f"{config['name']}_view", f"iter_{iteration:09}_view_{viewpoint.colmap_id}_ray_direction.png"),
                             padding=0,
                         )
                         stats = raytracer.cuda_module.get_stats()
                         torch.save(
                             stats.num_traversed_per_pixel,
-                            tb_writer.log_dir
-                            + "/"
-                            + f"{config['name']}_view/iter_{iteration:09}_view_{viewpoint.colmap_id}_num_traversed_per_pixel.pt",
+                            os.path.join(tb_writer.log_dir, f"{config['name']}_view", f"iter_{iteration:09}_view_{viewpoint.colmap_id}_num_traversed_per_pixel.pt"),
                         )
                         torch.save(
                             stats.num_traversed_per_pixel,
-                            tb_writer.log_dir
-                            + "/"
-                            + f"{config['name']}_view/iter_{iteration:09}_view_{viewpoint.colmap_id}_num_traversed_per_pixel.pt",
+                            os.path.join(tb_writer.log_dir, f"{config['name']}_view", f"iter_{iteration:09}_view_{viewpoint.colmap_id}_num_traversed_per_pixel.pt"),
                         )
                         # also save them as normalized png
                         save_image(
@@ -253,9 +233,7 @@ def training_report(
                                 stats.num_traversed_per_pixel.float()
                                 / stats.num_traversed_per_pixel.max()
                             ),
-                            tb_writer.log_dir
-                            + "/"
-                            + f"{config['name']}_view/iter_{iteration:09}_view_{viewpoint.colmap_id}_num_traversed_per_pixel.png",
+                            os.path.join(tb_writer.log_dir, f"{config['name']}_view", f"iter_{iteration:09}_view_{viewpoint.colmap_id}_num_traversed_per_pixel.png"),
                             padding=0,
                         )
                         save_image(
@@ -263,9 +241,7 @@ def training_report(
                                 stats.num_traversed_per_pixel.float()
                                 / stats.num_traversed_per_pixel.max()
                             ),
-                            tb_writer.log_dir
-                            + "/"
-                            + f"{config['name']}_view/iter_{iteration:09}_view_{viewpoint.colmap_id}_num_traversed_per_pixel.png",
+                            os.path.join(tb_writer.log_dir, f"{config['name']}_view", f"iter_{iteration:09}_view_{viewpoint.colmap_id}_num_traversed_per_pixel.png"),
                             padding=0,
                         )
 
@@ -273,25 +249,19 @@ def training_report(
                             torch.stack(
                                 [roughness_image.cuda(), roughness_gt_image]
                             ).clamp(0, 1),
-                            tb_writer.log_dir
-                            + "/"
-                            + f"{config['name']}_view/iter_{iteration:09}_view_{viewpoint.colmap_id}_roughness_vs_target.png",
+                            os.path.join(tb_writer.log_dir, f"{config['name']}_view", f"iter_{iteration:09}_view_{viewpoint.colmap_id}_roughness_vs_target.png"),
                             nrow=2,
                             padding=0,
                         )
                         save_image(
                             torch.stack([F0_image.cuda(), F0_gt_image]).clamp(0, 1),
-                            tb_writer.log_dir
-                            + "/"
-                            + f"{config['name']}_view/iter_{iteration:09}_view_{viewpoint.colmap_id}_F0_vs_target.png",
+                            os.path.join(tb_writer.log_dir, f"{config['name']}_view", f"iter_{iteration:09}_view_{viewpoint.colmap_id}_F0_vs_target.png"),
                             nrow=2,
                             padding=0,
                         )
                         save_image(
                             torch.stack([pred_image, gt_image]).clamp(0, 1),
-                            tb_writer.log_dir
-                            + "/"
-                            + f"{config['name']}_view/iter_{iteration:09}_view_{viewpoint.colmap_id}_final_denoised_vs_target.png",
+                            os.path.join(tb_writer.log_dir, f"{config['name']}_view", f"iter_{iteration:09}_view_{viewpoint.colmap_id}_final_denoised_vs_target.png"),
                             nrow=2,
                             padding=0,
                         )
@@ -299,25 +269,19 @@ def training_report(
                             torch.stack([pred_image_without_denoising, gt_image]).clamp(
                                 0, 1
                             ),
-                            tb_writer.log_dir
-                            + "/"
-                            + f"{config['name']}_view/iter_{iteration:09}_view_{viewpoint.colmap_id}_final_without_denoising_vs_target.png",
+                            os.path.join(tb_writer.log_dir, f"{config['name']}_view", f"iter_{iteration:09}_view_{viewpoint.colmap_id}_final_without_denoising_vs_target.png"),
                             nrow=2,
                             padding=0,
                         )
                         save_image(
                             torch.stack([diffuse_image, diffuse_gt_image]).clamp(0, 1),
-                            tb_writer.log_dir
-                            + "/"
-                            + f"{config['name']}_view/iter_{iteration:09}_view_{viewpoint.colmap_id}_diffuse_vs_target.png",
+                            os.path.join(tb_writer.log_dir, f"{config['name']}_view", f"iter_{iteration:09}_view_{viewpoint.colmap_id}_diffuse_vs_target.png"),
                             nrow=2,
                             padding=0,
                         )
                         save_image(
                             torch.stack([glossy_image, glossy_gt_image]).clamp(0, 1),
-                            tb_writer.log_dir
-                            + "/"
-                            + f"{config['name']}_view/iter_{iteration:09}_view_{viewpoint.colmap_id}_glossy_vs_target.png",
+                            os.path.join(tb_writer.log_dir, f"{config['name']}_view", f"iter_{iteration:09}_view_{viewpoint.colmap_id}_glossy_vs_target.png"),
                             nrow=2,
                             padding=0,
                         )
@@ -330,9 +294,7 @@ def training_report(
                                 - depth_gt_image.amin()
                             )
                             / (depth_gt_image.amax() - depth_gt_image.amin()),
-                            tb_writer.log_dir
-                            + "/"
-                            + f"{config['name']}_view/iter_{iteration:09}_view_{viewpoint.colmap_id}_depth_vs_target.png",
+                            os.path.join(tb_writer.log_dir, f"{config['name']}_view", f"iter_{iteration:09}_view_{viewpoint.colmap_id}_depth_vs_target.png"),
                             nrow=2,
                             padding=0,
                         )
@@ -340,9 +302,7 @@ def training_report(
                             torch.stack([normal_image.cuda(), normal_gt_image]).clamp(
                                 0, 1
                             ),
-                            tb_writer.log_dir
-                            + "/"
-                            + f"{config['name']}_view/iter_{iteration:09}_view_{viewpoint.colmap_id}_normal_vs_target.png",
+                            os.path.join(tb_writer.log_dir, f"{config['name']}_view", f"iter_{iteration:09}_view_{viewpoint.colmap_id}_normal_vs_target.png"),
                             nrow=2,
                             padding=0,
                         )
@@ -400,7 +360,6 @@ def training_report(
 
 
 def main(cfg: TyroConfig):
-    # Initialize system state (RNG)
     safe_state(cfg.quiet)
     torch.autograd.set_detect_anomaly(cfg.detect_anomaly)
 

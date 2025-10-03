@@ -399,7 +399,7 @@ def render_set(
             all_F0_renders.append(format_image(package.F0[0]))
             all_F0_gts.append(format_image(package.target_f0))
 
-        video_dir = f"videos_{mode}/".replace("_normal", "")
+        video_dir = f"videos_{mode}".replace("_normal", "")
         os.makedirs(os.path.join(cfg.model_path, video_dir), exist_ok=True)
 
         if not cfg.skip_video:
