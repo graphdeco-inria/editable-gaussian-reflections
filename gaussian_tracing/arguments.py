@@ -62,17 +62,8 @@ class OptimizationParams:
         self.percent_dense = 0.01
 
         self.scale_decay = 0.9999
-        self.opacity_decay = 1.0
 
-        self.densification_interval = 500
-        self.opacity_reset_interval = (
-            999999999999  # Doesn't change metrics in 3dgs, may cause issues
-        )
-        self.densify_from_iter = 999999999999  # was 500 in 3dgs, 1500 when doing LOD
-        self.densify_until_iter = 15_000  # was 25k in mcmc
-        self.densify_grad_threshold = 0.0002
-
-        self.prune_even_without_densification = True
+        self.pruning_interval = 500
 
         self.beta_1 = 0.9
         self.beta_2 = 0.999  # important to be lower than 0.999
@@ -114,7 +105,6 @@ class TyroConfig:
 
     # * Render params
     iteration: int = -1
-    max_bounces: int = 2
     spp: int = 128
     train_views: bool = False
     denoise: bool = True

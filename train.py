@@ -471,10 +471,6 @@ def main(cfg: TyroConfig):
         )
 
         with torch.no_grad():
-            if opt_params.opacity_decay < 1.0:
-                gaussians._opacity.copy_(
-                    inverse_sigmoid(gaussians.get_opacity * opt_params.opacity_decay)
-                )
             if opt_params.scale_decay < 1.0:
                 gaussians._scaling.copy_(
                     torch.log(gaussians.get_scaling * opt_params.scale_decay)
@@ -523,7 +519,7 @@ def main(cfg: TyroConfig):
                         f"{iteration:5}: {gaussians.get_scaling.amax(dim=1).mean().item():.5f} +- {gaussians.get_scaling.amax(dim=1).std().item():.5f}\n"
                     )
 
-                # same but for the median axis
+                # Same but for the median axis
                 with open(
                     os.path.join(cfg.model_path, "size_axis_median.txt"), "a"
                 ) as f:
@@ -565,7 +561,7 @@ def main(cfg: TyroConfig):
                 print("\n[ITER {}] Saving Gaussians".format(iteration))
                 scene.save(iteration)
 
-            if iteration % opt_params.densification_interval == 0:
+            if iteration % opt_params.pruning_interval == 0:
                 if (
                     iteration > model_params.no_bounces_until_iter + 500
                     and model_params.min_weight > 0
@@ -573,7 +569,7 @@ def main(cfg: TyroConfig):
                     gaussians.prune_points(
                         (
                             raytracer.cuda_module.get_gaussians().total_weight
-                            / opt_params.densification_interval
+                            / opt_params.pruning_interval
                             < model_params.min_weight
                         ).squeeze(1)
                     )
@@ -593,12 +589,8 @@ def main(cfg: TyroConfig):
                 gaussians._roughness.data.clamp_(min=0.0, max=1.0)
                 gaussians._f0.data.clamp_(min=0.0, max=1.0)
 
-
         if iteration == model_params.no_bounces_until_iter:
-            if model_params.max_one_bounce_until_iter in [0, -1]:
-                config.num_bounces.copy_(MAX_BOUNCES)
-            else:
-                config.num_bounces.copy_(min(MAX_BOUNCES, 1))
+            config.num_bounces.copy_(MAX_BOUNCES)
 
             torch.cuda.synchronize()
             gaussians.add_farfield_points(scene)
@@ -609,12 +601,6 @@ def main(cfg: TyroConfig):
             gaussians.add_farfield_points(scene)
             raytracer.rebuild_bvh()
             torch.cuda.synchronize()
-
-        if (
-            iteration == model_params.max_one_bounce_until_iter
-            and iteration > model_params.no_bounces_until_iter
-        ):
-            config.num_bounces.copy_(config.num_bounces)
 
         if cfg.viewer:
             viewer.gaussian_lock.release()
@@ -639,14 +625,8 @@ if __name__ == "__main__":
             int(x * cfg.opt_params.timestretch) for x in cfg.save_iterations
         ]
         cfg.iterations = int(cfg.opt_params.timestretch * cfg.iterations)
-        cfg.opt_params.densification_interval = int(
-            cfg.opt_params.timestretch * cfg.opt_params.densification_interval
-        )
-        cfg.opt_params.densify_from_iter = int(
-            cfg.opt_params.timestretch * cfg.opt_params.densify_from_iter
-        )
-        cfg.opt_params.densify_until_iter = int(
-            cfg.opt_params.timestretch * cfg.opt_params.densify_until_iter
+        cfg.opt_params.pruning_interval = int(
+            cfg.opt_params.timestretch * cfg.opt_params.pruning_interval
         )
 
     main(cfg)
