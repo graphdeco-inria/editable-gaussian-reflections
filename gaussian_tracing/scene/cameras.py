@@ -16,7 +16,6 @@ import torch
 from torch import nn
 
 from gaussian_tracing.utils.graphics_utils import getProjectionMatrix, getWorld2View2
-from gaussian_tracing.utils.tonemapping import tonemap
 
 
 class Camera(nn.Module):
@@ -59,9 +58,7 @@ class Camera(nn.Module):
         image_holding_device = os.getenv("IMAGE_HOLDING_DEVICE", "cuda")
 
         EXPOSURE = float(os.getenv("EXPOSURE", 3.5))
-        self._original_image = (
-            (diffuse_image + glossy_image).half().to(image_holding_device)
-        )
+        self._original_image = (diffuse_image + glossy_image).half().to(image_holding_device)
         self._diffuse_image = diffuse_image.half().to(image_holding_device)
         self._glossy_image = glossy_image.half().to(image_holding_device)
         self._original_image *= EXPOSURE
@@ -74,12 +71,7 @@ class Camera(nn.Module):
         self._brdf_image = brdf_image.half().to(image_holding_device)
 
         self._F0_image = (
-            (
-                (1.0 - metalness_image)
-                * 0.08
-                * specular_image
-                + metalness_image * base_color_image
-            )
+            ((1.0 - metalness_image) * 0.08 * specular_image + metalness_image * base_color_image)
             .half()
             .to(image_holding_device)
         )
@@ -88,9 +80,7 @@ class Camera(nn.Module):
             self.data_device = torch.device(data_device)
         except Exception as e:
             print(e)
-            print(
-                f"[Warning] Custom device {data_device} failed, fallback to default cuda device"
-            )
+            print(f"[Warning] Custom device {data_device} failed, fallback to default cuda device")
             self.data_device = torch.device("cuda")
 
         self.trans = trans
@@ -159,19 +149,13 @@ class Camera(nn.Module):
 
     def update(self):
         self.world_view_transform = (
-            torch.tensor(getWorld2View2(self.R, self.T, self.trans, self.scale))
-            .transpose(0, 1)
-            .cuda()
+            torch.tensor(getWorld2View2(self.R, self.T, self.trans, self.scale)).transpose(0, 1).cuda()
         )
         self.projection_matrix = (
-            getProjectionMatrix(znear=0.01, zfar=100.0, fovX=self.FoVx, fovY=self.FoVy)
-            .transpose(0, 1)
-            .cuda()
+            getProjectionMatrix(znear=0.01, zfar=100.0, fovX=self.FoVx, fovY=self.FoVy).transpose(0, 1).cuda()
         )
         self.full_proj_transform = (
-            self.world_view_transform.unsqueeze(0).bmm(
-                self.projection_matrix.unsqueeze(0)
-            )
+            self.world_view_transform.unsqueeze(0).bmm(self.projection_matrix.unsqueeze(0))
         ).squeeze(0)
         self.camera_center = self.world_view_transform.cpu().inverse().cuda()[3, :3]
 

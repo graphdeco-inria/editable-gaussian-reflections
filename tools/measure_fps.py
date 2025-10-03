@@ -50,9 +50,7 @@ def main(cfg: TyroConfig):
     scene = Scene(cfg, gaussians, load_iteration=cfg.iteration, shuffle=False)
     views = scene.getTrainCameras()
 
-    raytracer = GaussianRaytracer(
-        gaussians, views[0].image_width, views[0].image_height
-    )
+    raytracer = GaussianRaytracer(gaussians, views[0].image_width, views[0].image_height)
 
     # Run twice. First run is always slow.
     for _ in range(2):

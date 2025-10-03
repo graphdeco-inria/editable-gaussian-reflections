@@ -2,9 +2,7 @@ import os
 
 import torch
 
-GAUSS_TRACER_PATH = os.path.join(
-    os.path.dirname(os.path.abspath(__file__)), "cuda", "build", "libgausstracer.so"
-)
+GAUSS_TRACER_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "cuda", "build", "libgausstracer.so")
 LOADED = False
 
 

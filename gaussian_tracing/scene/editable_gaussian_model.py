@@ -14,9 +14,7 @@ class EditableGaussianModel(GaussianModel):
         self.ready_for_editing = False
 
     def make_editable(self, edits, bounding_boxes, model_path):
-        assert set(edits.keys()) == set(bounding_boxes.keys()), (
-            "Edits and bounding boxes must have the same keys"
-        )
+        assert set(edits.keys()) == set(bounding_boxes.keys()), "Edits and bounding boxes must have the same keys"
         self.edits = edits
         self.bounding_boxes = bounding_boxes
         self.created_objects = list(self.edits.keys())
@@ -35,9 +33,7 @@ class EditableGaussianModel(GaussianModel):
                             max_bound = torch.tensor(bounding_box["max"], device="cuda")
 
                             center_xy = 0.5 * (min_bound[[0, 1]] + max_bound[[0, 1]])
-                            half_extent_xy = 0.5 * (
-                                max_bound[[0, 1]] - min_bound[[0, 1]]
-                            )
+                            half_extent_xy = 0.5 * (max_bound[[0, 1]] - min_bound[[0, 1]])
                             z_min, z_max = min_bound[2], max_bound[2]
 
                             xy = self._xyz[:, [0, 1]]
@@ -49,12 +45,8 @@ class EditableGaussianModel(GaussianModel):
 
                             return inside_ellipse & inside_z
                         else:
-                            dist1 = self._xyz - (
-                                torch.tensor(bounding_box["min"], device="cuda")
-                            )
-                            dist2 = self._xyz - (
-                                torch.tensor(bounding_box["max"], device="cuda")
-                            )
+                            dist1 = self._xyz - (torch.tensor(bounding_box["min"], device="cuda"))
+                            dist2 = self._xyz - (torch.tensor(bounding_box["max"], device="cuda"))
                             return (dist1 >= 0).all(dim=-1) & (dist2 <= 0).all(dim=-1)
 
                     bounding_box = self.bounding_boxes[key]
@@ -72,35 +64,21 @@ class EditableGaussianModel(GaussianModel):
                                     )
                                 )
                                 dist2 = self._xyz - (torch.tensor(high, device="cuda"))
-                                mask = (dist1 >= 0).all(dim=-1) & (dist2 <= 0).all(
-                                    dim=-1
-                                )
-                                within_bbox &= (
-                                    getattr(self, "_" + prop).mean(dim=-1)
-                                    >= bounding_box[prop][0]
-                                ) | mask
-                                within_bbox &= (
-                                    getattr(self, "_" + prop).mean(dim=-1)
-                                    <= bounding_box[prop][1]
-                                ) | mask
+                                mask = (dist1 >= 0).all(dim=-1) & (dist2 <= 0).all(dim=-1)
+                                within_bbox &= (getattr(self, "_" + prop).mean(dim=-1) >= bounding_box[prop][0]) | mask
+                                within_bbox &= (getattr(self, "_" + prop).mean(dim=-1) <= bounding_box[prop][1]) | mask
                             else:
                                 within_bbox &= (
-                                    getattr(self, "_" + prop).mean(dim=-1)
-                                    >= bounding_box[prop][0]
+                                    getattr(self, "_" + prop).mean(dim=-1) >= bounding_box[prop][0]
                                 )  # | ~mask # being in the mask
                                 within_bbox &= (
-                                    getattr(self, "_" + prop).mean(dim=-1)
-                                    <= bounding_box[prop][1]
+                                    getattr(self, "_" + prop).mean(dim=-1) <= bounding_box[prop][1]
                                 )  # | ~mask
                     if "exclude" in bounding_box:
                         for exclusion in bounding_box["exclude"]:
-                            within_bbox &= compute_bbox_mask(
-                                self.bounding_boxes[exclusion]
-                            ).logical_not()
+                            within_bbox &= compute_bbox_mask(self.bounding_boxes[exclusion]).logical_not()
                     self.selections[key] = within_bbox.unsqueeze(1)
-            self.selections["everything"] = torch.ones(
-                self._xyz.shape[0], 1, device="cuda", dtype=torch.bool
-            )
+            self.selections["everything"] = torch.ones(self._xyz.shape[0], 1, device="cuda", dtype=torch.bool)
 
         self.ready_for_editing = True
         self.previous_edits = None
@@ -119,11 +97,7 @@ class EditableGaussianModel(GaussianModel):
     # ----------------------------------------------------------------
 
     def dirty_check(self, scaling_modifier):
-        if (
-            self.last_edits is None
-            or self.edits != self.last_edits
-            or self.last_scaling_modifier != scaling_modifier
-        ):
+        if self.last_edits is None or self.edits != self.last_edits or self.last_scaling_modifier != scaling_modifier:
             self.last_edits = copy.deepcopy(self.edits)
             self.last_scaling_modifier = scaling_modifier
             self.is_dirty = True
@@ -146,11 +120,7 @@ class EditableGaussianModel(GaussianModel):
             else:
                 base_roughness = roughness
             modified_roughness = (
-                edit.roughness_mult
-                * (
-                    base_roughness
-                    + math.copysign(edit.roughness_shift, edit.roughness_shift**2)
-                )
+                edit.roughness_mult * (base_roughness + math.copysign(edit.roughness_shift, edit.roughness_shift**2))
             ).clamp(0, 1)
             roughness = torch.where(self.selections[key], modified_roughness, roughness)
 
@@ -173,20 +143,11 @@ class EditableGaussianModel(GaussianModel):
                 torch.tensor(edit.diffuse_override)[:3].cuda(),
                 edit.diffuse_override[-1],
             )
-            hsv = kornia.color.rgb_to_hsv(base_diffuse.T[None, :, :, None])[
-                0, :, :, 0
-            ].T
+            hsv = kornia.color.rgb_to_hsv(base_diffuse.T[None, :, :, None])[0, :, :, 0].T
             hsv[:, 0] = (hsv[:, 0] + math.pi * edit.diffuse_hue_shift) % (2 * math.pi)
-            hsv[:, 1] = (
-                edit.diffuse_saturation_mult
-                * (hsv[:, 1] + edit.diffuse_saturation_shift)
-            ).clamp(0, 1)
-            hsv[:, 2] = (
-                edit.diffuse_value_mult * (hsv[:, 2] + edit.diffuse_value_shift)
-            ).clamp(0)
-            modified_diffuse = kornia.color.hsv_to_rgb(hsv.T[None, :, :, None])[
-                0, :, :, 0
-            ].T
+            hsv[:, 1] = (edit.diffuse_saturation_mult * (hsv[:, 1] + edit.diffuse_saturation_shift)).clamp(0, 1)
+            hsv[:, 2] = (edit.diffuse_value_mult * (hsv[:, 2] + edit.diffuse_value_shift)).clamp(0)
+            modified_diffuse = kornia.color.hsv_to_rgb(hsv.T[None, :, :, None])[0, :, :, 0].T
             diffuse = torch.where(self.selections[key], modified_diffuse, diffuse)
 
         self.diffuse = diffuse
@@ -210,12 +171,8 @@ class EditableGaussianModel(GaussianModel):
             )
             hsv = kornia.color.rgb_to_hsv(base_f0.T[None, :, :, None])[0, :, :, 0].T
             hsv[:, 0] = (hsv[:, 0] + math.pi * edit.glossy_hue_shift) % (2 * math.pi)
-            hsv[:, 1] = (
-                edit.glossy_saturation_mult * (hsv[:, 1] + edit.glossy_saturation_shift)
-            ).clamp(0, 1)
-            hsv[:, 2] = (
-                edit.glossy_value_mult * (hsv[:, 2] + edit.glossy_value_shift)
-            ).clamp(0)
+            hsv[:, 1] = (edit.glossy_saturation_mult * (hsv[:, 1] + edit.glossy_saturation_shift)).clamp(0, 1)
+            hsv[:, 2] = (edit.glossy_value_mult * (hsv[:, 2] + edit.glossy_value_shift)).clamp(0)
             modified_f0 = kornia.color.hsv_to_rgb(hsv.T[None, :, :, None])[0, :, :, 0].T
             f0 = torch.where(self.selections[key], modified_f0, f0)
 
@@ -233,13 +190,9 @@ class EditableGaussianModel(GaussianModel):
             return self.normal
 
         for key, edit in self.edits.items():
-            rotation_angles = torch.tensor(
-                [edit.rotate_x, edit.rotate_y, edit.rotate_z], device=normal.device
-            )
+            rotation_angles = torch.tensor([edit.rotate_x, edit.rotate_y, edit.rotate_z], device=normal.device)
             rotation_angles = torch.deg2rad(rotation_angles)
-            rotation_matrix = kornia.geometry.axis_angle_to_rotation_matrix(
-                rotation_angles[None]
-            )[0]
+            rotation_matrix = kornia.geometry.axis_angle_to_rotation_matrix(rotation_angles[None])[0]
 
             normal[self.selections[key].squeeze(1)] = torch.matmul(
                 normal[self.selections[key].squeeze(1)],
@@ -268,10 +221,7 @@ class EditableGaussianModel(GaussianModel):
             )
             bounding_box = self.bounding_boxes[key]
             bbox_center = torch.tensor(
-                [
-                    (bounding_box["min"][i] + bounding_box["max"][i]) / 2
-                    for i in range(3)
-                ],
+                [(bounding_box["min"][i] + bounding_box["max"][i]) / 2 for i in range(3)],
                 device=xyz.device,
             )
             object_center = bbox_center + torch.tensor(
@@ -281,13 +231,9 @@ class EditableGaussianModel(GaussianModel):
             xyz[self.selections[key].squeeze(1)] = (
                 xyz[self.selections[key].squeeze(1)] - object_center
             ) * edit.scale + object_center
-            rotation_angles = torch.tensor(
-                [edit.rotate_x, edit.rotate_y, edit.rotate_z], device=xyz.device
-            )
+            rotation_angles = torch.tensor([edit.rotate_x, edit.rotate_y, edit.rotate_z], device=xyz.device)
             rotation_angles = torch.deg2rad(rotation_angles)
-            rotation_matrix = kornia.geometry.axis_angle_to_rotation_matrix(
-                rotation_angles[None]
-            )[0]
+            rotation_matrix = kornia.geometry.axis_angle_to_rotation_matrix(rotation_angles[None])[0]
 
             xyz[self.selections[key].squeeze(1)] = (
                 torch.matmul(
@@ -338,14 +284,9 @@ class EditableGaussianModel(GaussianModel):
             rotation_matrix = kornia.geometry.conversions.quaternion_to_rotation_matrix(
                 rotation[self.selections[key].squeeze(1)]
             )
-            rotation_matrix = (
-                kornia.geometry.axis_angle_to_rotation_matrix(rotation_angles)[0]
-                @ rotation_matrix
-            )
-            rotation[self.selections[key].squeeze(1)] = (
-                kornia.geometry.conversions.rotation_matrix_to_quaternion(
-                    rotation_matrix
-                )
+            rotation_matrix = kornia.geometry.axis_angle_to_rotation_matrix(rotation_angles)[0] @ rotation_matrix
+            rotation[self.selections[key].squeeze(1)] = kornia.geometry.conversions.rotation_matrix_to_quaternion(
+                rotation_matrix
             )
 
         self.rotation = rotation
@@ -358,9 +299,7 @@ class EditableGaussianModel(GaussianModel):
         target_selection = self.selections[obj_name].squeeze(1).cuda()
         edit = self.edits[obj_name]
 
-        delta_xyz = torch.tensor(
-            [edit.translate_x, edit.translate_y, edit.translate_z], device="cuda"
-        )
+        delta_xyz = torch.tensor([edit.translate_x, edit.translate_y, edit.translate_z], device="cuda")
 
         new_xyz = self._xyz[target_selection].clone() + offset + delta_xyz
         new_rotation = self._rotation[target_selection].clone()
@@ -382,9 +321,7 @@ class EditableGaussianModel(GaussianModel):
         self._normal = torch.cat((self._normal, new_normal), dim=0)
         self._round_counter = torch.cat((self._round_counter, new_round_counter), dim=0)
 
-        self.selections[obj_name + "_copy"] = torch.zeros_like(
-            self.selections[obj_name], dtype=torch.bool
-        )
+        self.selections[obj_name + "_copy"] = torch.zeros_like(self.selections[obj_name], dtype=torch.bool)
         xtra = target_selection[target_selection].unsqueeze(1)
         for key, selection in self.selections.items():
             new_selection = torch.cat(

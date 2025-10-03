@@ -43,11 +43,7 @@ struct Raytracer : torch::CustomClassHolder {
     std::unique_ptr<DenoiserWrapper> denoiser_wrapper;
 
     Raytracer(
-        int64_t width_,
-        int64_t height_,
-        int64_t num_gaussians,
-        int64_t forward_ppl_size,
-        int64_t backward_ppl_size)
+        int64_t width_, int64_t height_, int64_t num_gaussians, int64_t forward_ppl_size, int64_t backward_ppl_size)
         : width(width_), height(height_), camera_data(c10::make_intrusive<CameraDataHolder>()),
           config_data(c10::make_intrusive<ConfigDataHolder>()),
           framebuffer_data(c10::make_intrusive<FramebufferDataHolder>(width, height)),
@@ -55,8 +51,7 @@ struct Raytracer : torch::CustomClassHolder {
           meta_data(c10::make_intrusive<MetaDataHolder>(width, height)),
           stats_data(c10::make_intrusive<StatsDataHolder>(width, height)),
           ppll_forward_data(c10::make_intrusive<PPLLDataHolder>(width, height, forward_ppl_size)),
-          ppll_backward_data(
-              c10::make_intrusive<PPLLDataHolder>(width, height, backward_ppl_size)) {
+          ppll_backward_data(c10::make_intrusive<PPLLDataHolder>(width, height, backward_ppl_size)) {
         if (num_gaussians > 0) {
             gaussian_data->resize(num_gaussians);
         }
@@ -73,19 +68,14 @@ struct Raytracer : torch::CustomClassHolder {
         params_on_host.stats = stats_data->reify();
 
         pipeline_wrapper = std::make_unique<PipelineWrapper>();
-        bvh_wrapper =
-            std::make_unique<BVHWrapper>(pipeline_wrapper->context, *config_data, params_on_host);
-        denoiser_wrapper =
-            std::make_unique<DenoiserWrapper>(pipeline_wrapper->context, params_on_host);
+        bvh_wrapper = std::make_unique<BVHWrapper>(pipeline_wrapper->context, *config_data, params_on_host);
+        denoiser_wrapper = std::make_unique<DenoiserWrapper>(pipeline_wrapper->context, params_on_host);
 
         // * Transfer params to device
         params_on_host.bvh_handle = bvh_wrapper->tlas_handle;
         CUDA_CHECK(cudaMalloc(reinterpret_cast<void **>(&params_on_device), sizeof(Params)));
         CUDA_CHECK(cudaMemcpy(
-            reinterpret_cast<void *>(params_on_device),
-            &params_on_host,
-            sizeof(Params),
-            cudaMemcpyHostToDevice));
+            reinterpret_cast<void *>(params_on_device), &params_on_host, sizeof(Params), cudaMemcpyHostToDevice));
     }
 
     void raytrace() {
@@ -138,24 +128,12 @@ struct Raytracer : torch::CustomClassHolder {
             .def("update_bvh", &Raytracer::update_bvh)
             .def("rebuild_bvh", &Raytracer::rebuild_bvh)
             .def("resize", &Raytracer::resize)
-            .def(
-                "get_camera",
-                [](const c10::intrusive_ptr<Raytracer> &self) { return self->camera_data; })
-            .def(
-                "get_config",
-                [](const c10::intrusive_ptr<Raytracer> &self) { return self->config_data; })
-            .def(
-                "get_framebuffer",
-                [](const c10::intrusive_ptr<Raytracer> &self) { return self->framebuffer_data; })
-            .def(
-                "get_gaussians",
-                [](const c10::intrusive_ptr<Raytracer> &self) { return self->gaussian_data; })
-            .def(
-                "get_metadata",
-                [](const c10::intrusive_ptr<Raytracer> &self) { return self->meta_data; })
-            .def(
-                "get_stats",
-                [](const c10::intrusive_ptr<Raytracer> &self) { return self->stats_data; })
+            .def("get_camera", [](const c10::intrusive_ptr<Raytracer> &self) { return self->camera_data; })
+            .def("get_config", [](const c10::intrusive_ptr<Raytracer> &self) { return self->config_data; })
+            .def("get_framebuffer", [](const c10::intrusive_ptr<Raytracer> &self) { return self->framebuffer_data; })
+            .def("get_gaussians", [](const c10::intrusive_ptr<Raytracer> &self) { return self->gaussian_data; })
+            .def("get_metadata", [](const c10::intrusive_ptr<Raytracer> &self) { return self->meta_data; })
+            .def("get_stats", [](const c10::intrusive_ptr<Raytracer> &self) { return self->stats_data; })
             .def(
                 "get_ppll_forward_data",
                 [](const c10::intrusive_ptr<Raytracer> &self) { return self->ppll_forward_data; })
@@ -166,11 +144,8 @@ struct Raytracer : torch::CustomClassHolder {
             // * Expose constants for access in Python
             .def_static("MAX_BOUNCES", []() { return (int64_t)MAX_BOUNCES; })
             .def_static("MAX_ALPHA", []() { return (double)MAX_ALPHA; })
-            .def_static(
-                "ROUGHNESS_DOWNWEIGHT_GRAD", []() { return (bool)ROUGHNESS_DOWNWEIGHT_GRAD; })
-            .def_static(
-                "ROUGHNESS_DOWNWEIGHT_GRAD_POWER",
-                []() { return (double)ROUGHNESS_DOWNWEIGHT_GRAD_POWER; })
+            .def_static("ROUGHNESS_DOWNWEIGHT_GRAD", []() { return (bool)ROUGHNESS_DOWNWEIGHT_GRAD; })
+            .def_static("ROUGHNESS_DOWNWEIGHT_GRAD_POWER", []() { return (double)ROUGHNESS_DOWNWEIGHT_GRAD_POWER; })
 
             // * Expose all buffer names for easy looping in Python
             .def(

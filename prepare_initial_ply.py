@@ -64,9 +64,7 @@ def main(cfg: Config):
     voxel_coords = (points * cfg.scale).round().int()
 
     # Find unique voxel positions
-    unique_coords, inverse_indices, counts = torch.unique(
-        voxel_coords, dim=0, return_inverse=True, return_counts=True
-    )
+    unique_coords, inverse_indices, counts = torch.unique(voxel_coords, dim=0, return_inverse=True, return_counts=True)
 
     # Accumulate color contributions per voxel
     accum_colors = torch.zeros((unique_coords.shape[0], 3), dtype=colors.dtype)

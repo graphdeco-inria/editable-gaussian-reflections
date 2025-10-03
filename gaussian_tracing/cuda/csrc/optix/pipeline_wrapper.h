@@ -18,8 +18,7 @@ class PipelineWrapper {
 
     void launch(int width, int height, CUdeviceptr params_on_device) {
         assert(params_on_device != 0);
-        OPTIX_CHECK(optixLaunch(
-            pipeline, nullptr, params_on_device, sizeof(Params), &sbt, width, height, 1));
+        OPTIX_CHECK(optixLaunch(pipeline, nullptr, params_on_device, sizeof(Params), &sbt, width, height, 1));
     }
 
     ~PipelineWrapper() {
@@ -49,8 +48,7 @@ class PipelineWrapper {
     OptixProgramGroup hit_pg;
 
     static void context_log_cb(uint32_t level, const char *tag, const char *message, void *) {
-        std::cerr << "[" << std::setw(2) << level << "][" << std::setw(12) << tag
-                  << "]: " << message << "\n";
+        std::cerr << "[" << std::setw(2) << level << "][" << std::setw(12) << tag << "]: " << message << "\n";
     }
 
     static std::string getSharedObjectDir() {
@@ -67,8 +65,7 @@ class PipelineWrapper {
         std::string path = getSharedObjectDir() + "/libgausstracer.ptx";
         std::ifstream file(path.c_str(), std::ios::binary);
         if (file.good()) {
-            std::vector<unsigned char> buffer =
-                std::vector<unsigned char>(std::istreambuf_iterator<char>(file), {});
+            std::vector<unsigned char> buffer = std::vector<unsigned char>(std::istreambuf_iterator<char>(file), {});
             std::string str;
             str.assign(buffer.begin(), buffer.end());
             return str;
@@ -96,8 +93,7 @@ class PipelineWrapper {
 
         pipeline_compile_options.usesMotionBlur = false;
         pipeline_compile_options.traversableGraphFlags =
-            OPTIX_TRAVERSABLE_GRAPH_FLAG_ALLOW_SINGLE_GAS |
-            OPTIX_TRAVERSABLE_GRAPH_FLAG_ALLOW_SINGLE_LEVEL_INSTANCING;
+            OPTIX_TRAVERSABLE_GRAPH_FLAG_ALLOW_SINGLE_GAS | OPTIX_TRAVERSABLE_GRAPH_FLAG_ALLOW_SINGLE_LEVEL_INSTANCING;
         pipeline_compile_options.numPayloadValues = 8;
         pipeline_compile_options.numAttributeValues = 0;
         pipeline_compile_options.exceptionFlags = OPTIX_EXCEPTION_FLAG_NONE;
@@ -124,13 +120,7 @@ class PipelineWrapper {
         raygen_prog_group_desc.raygen.module = module;
         raygen_prog_group_desc.raygen.entryFunctionName = "__raygen__rg";
         OPTIX_CHECK_LOG(optixProgramGroupCreate(
-            context,
-            &raygen_prog_group_desc,
-            1,
-            &program_group_options,
-            LOG,
-            &LOG_SIZE,
-            &raygen_pg));
+            context, &raygen_prog_group_desc, 1, &program_group_options, LOG, &LOG_SIZE, &raygen_pg));
 
         OptixProgramGroupDesc miss_prog_group_desc = {};
         miss_prog_group_desc.kind = OPTIX_PROGRAM_GROUP_KIND_MISS;
@@ -148,13 +138,7 @@ class PipelineWrapper {
         hitgroup_prog_group_desc.hitgroup.moduleIS = module;
         hitgroup_prog_group_desc.hitgroup.entryFunctionNameIS = "__intersection__gaussian";
         OPTIX_CHECK_LOG(optixProgramGroupCreate(
-            context,
-            &hitgroup_prog_group_desc,
-            1,
-            &program_group_options,
-            LOG,
-            &LOG_SIZE,
-            &hit_pg));
+            context, &hitgroup_prog_group_desc, 1, &program_group_options, LOG, &LOG_SIZE, &hit_pg));
     }
 
     void createPipeline() {
@@ -163,9 +147,9 @@ class PipelineWrapper {
         OptixPipelineLinkOptions pipeline_link_options = {};
         pipeline_link_options.maxTraceDepth = max_trace_depth;
         OptixProgramGroup program_groups[] = {raygen_pg, miss_pg, hit_pg};
-        OptixProgramGroup *program_groups_array = reinterpret_cast<OptixProgramGroup *>(
-            &program_groups); // * Safe since OptixProgramGroup typdefs a
-                              // pointer type
+        OptixProgramGroup *program_groups_array =
+            reinterpret_cast<OptixProgramGroup *>(&program_groups); // * Safe since OptixProgramGroup typdefs a
+                                                                    // pointer type
         OPTIX_CHECK_LOG(optixPipelineCreate(
             context,
             &pipeline_compile_options,
@@ -213,21 +197,15 @@ class PipelineWrapper {
         CUdeviceptr d_raygen_rec;
         CUDA_CHECK(cudaMalloc(reinterpret_cast<void **>(&d_raygen_rec), sizeof(raygen_rec)));
         CUDA_CHECK(cudaMemcpy(
-            reinterpret_cast<void *>(d_raygen_rec),
-            &raygen_rec,
-            sizeof(raygen_rec),
-            cudaMemcpyHostToDevice));
+            reinterpret_cast<void *>(d_raygen_rec), &raygen_rec, sizeof(raygen_rec), cudaMemcpyHostToDevice));
         sbt.raygenRecord = d_raygen_rec;
 
         SbtRecord<Empty> miss_rec = {};
         OPTIX_CHECK(optixSbtRecordPackHeader(miss_pg, &miss_rec));
         CUdeviceptr d_miss_rec;
         CUDA_CHECK(cudaMalloc(reinterpret_cast<void **>(&d_miss_rec), sizeof(miss_rec)));
-        CUDA_CHECK(cudaMemcpy(
-            reinterpret_cast<void *>(d_miss_rec),
-            &miss_rec,
-            sizeof(miss_rec),
-            cudaMemcpyHostToDevice));
+        CUDA_CHECK(
+            cudaMemcpy(reinterpret_cast<void *>(d_miss_rec), &miss_rec, sizeof(miss_rec), cudaMemcpyHostToDevice));
         sbt.missRecordBase = d_miss_rec;
         sbt.missRecordStrideInBytes = sizeof(miss_rec);
         sbt.missRecordCount = 1;
@@ -237,10 +215,7 @@ class PipelineWrapper {
         CUdeviceptr d_hitgroup_rec;
         CUDA_CHECK(cudaMalloc(reinterpret_cast<void **>(&d_hitgroup_rec), sizeof(hitgroup_rec)));
         CUDA_CHECK(cudaMemcpy(
-            reinterpret_cast<void *>(d_hitgroup_rec),
-            &hitgroup_rec,
-            sizeof(hitgroup_rec),
-            cudaMemcpyHostToDevice));
+            reinterpret_cast<void *>(d_hitgroup_rec), &hitgroup_rec, sizeof(hitgroup_rec), cudaMemcpyHostToDevice));
         sbt.hitgroupRecordBase = d_hitgroup_rec;
         sbt.hitgroupRecordStrideInBytes = sizeof(hitgroup_rec);
         sbt.hitgroupRecordCount = 1;

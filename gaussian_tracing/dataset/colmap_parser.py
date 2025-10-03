@@ -16,9 +16,7 @@ class ColmapParser:
         colmap_dir = os.path.join(data_dir, "sparse/0/")
         if not os.path.exists(colmap_dir):
             colmap_dir = os.path.join(data_dir, "sparse")
-        assert os.path.exists(colmap_dir), (
-            f"COLMAP directory {colmap_dir} does not exist."
-        )
+        assert os.path.exists(colmap_dir), f"COLMAP directory {colmap_dir} does not exist."
 
         manager = SceneManager(colmap_dir)
         manager.load_cameras()
@@ -37,9 +35,7 @@ class ColmapParser:
                 image_name = image_id_to_name[image_id]
                 point_idx = manager.point3D_id_to_point3D_idx[point_id]
                 point_indices.setdefault(image_name, []).append(point_idx)
-        point_indices = {
-            k: np.array(v).astype(np.int32) for k, v in point_indices.items()
-        }
+        point_indices = {k: np.array(v).astype(np.int32) for k, v in point_indices.items()}
 
         self.points = points  # np.ndarray, (num_points, 3)
         self.points_err = points_err  # np.ndarray, (num_points,)

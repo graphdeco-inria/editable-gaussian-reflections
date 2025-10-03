@@ -14,8 +14,7 @@ struct BVHWrapper {
     OptixTraversableHandle tlas_handle; // * Pass this handle when launching the
                                         // ray tracing pipeline
 
-    BVHWrapper(
-        OptixDeviceContext context_, const ConfigDataHolder &config_, const Params &params_on_host_)
+    BVHWrapper(OptixDeviceContext context_, const ConfigDataHolder &config_, const Params &params_on_host_)
         : context(context_), config(config_), params_on_host(params_on_host_) {
         build_blas();
         build_tlas();
@@ -77,8 +76,7 @@ struct BVHWrapper {
     CUdeviceptr device_instances;
     OptixAccelBufferSizes tlas_buffer_sizes;
     CUdeviceptr device_aabb_buffer;
-    Tensor unit_bbox_tensor =
-        torch::tensor({-1.0, -1.0, -1.0, 1.0, 1.0, 1.0}, torch::device(torch::kCUDA));
+    Tensor unit_bbox_tensor = torch::tensor({-1.0, -1.0, -1.0, 1.0, 1.0, 1.0}, torch::device(torch::kCUDA));
 
     void build_blas() {
         OptixAccelBuildOptions accel_options_blas = {};
@@ -93,16 +91,12 @@ struct BVHWrapper {
         blas_input.customPrimitiveArray.numSbtRecords = 1;
 
         OptixAccelBufferSizes blas_buffer_sizes;
-        OPTIX_CHECK(optixAccelComputeMemoryUsage(
-            context, &accel_options_blas, &blas_input, 1, &blas_buffer_sizes));
+        OPTIX_CHECK(optixAccelComputeMemoryUsage(context, &accel_options_blas, &blas_input, 1, &blas_buffer_sizes));
 
         CUdeviceptr d_temp_blas_buffer_sizes;
-        CUDA_CHECK(cudaMalloc(
-            reinterpret_cast<void **>(&d_temp_blas_buffer_sizes),
-            blas_buffer_sizes.tempSizeInBytes));
-        CUDA_CHECK(cudaMalloc(
-            reinterpret_cast<void **>(&device_blas_output_buffer),
-            blas_buffer_sizes.outputSizeInBytes));
+        CUDA_CHECK(cudaMalloc(reinterpret_cast<void **>(&d_temp_blas_buffer_sizes), blas_buffer_sizes.tempSizeInBytes));
+        CUDA_CHECK(
+            cudaMalloc(reinterpret_cast<void **>(&device_blas_output_buffer), blas_buffer_sizes.outputSizeInBytes));
 
         OPTIX_CHECK(optixAccelBuild(
             context,
@@ -123,8 +117,7 @@ struct BVHWrapper {
 
     void build_tlas() {
         CUDA_CHECK(cudaMalloc(
-            reinterpret_cast<void **>(&device_instances),
-            sizeof(OptixInstance) * params_on_host.gaussians.count));
+            reinterpret_cast<void **>(&device_instances), sizeof(OptixInstance) * params_on_host.gaussians.count));
         populateBVH(
             reinterpret_cast<OptixInstance *>(device_instances),
             blas_handle,
@@ -141,15 +134,12 @@ struct BVHWrapper {
         tlas_input.instanceArray.instances = device_instances;
         tlas_input.instanceArray.numInstances = params_on_host.gaussians.count;
 
-        OPTIX_CHECK(optixAccelComputeMemoryUsage(
-            context, &accel_options_tlas, &tlas_input, 1, &tlas_buffer_sizes));
+        OPTIX_CHECK(optixAccelComputeMemoryUsage(context, &accel_options_tlas, &tlas_input, 1, &tlas_buffer_sizes));
 
-        CUDA_CHECK(cudaMalloc(
-            reinterpret_cast<void **>(&device_temp_tlas_buffer_sizes),
-            tlas_buffer_sizes.tempSizeInBytes));
-        CUDA_CHECK(cudaMalloc(
-            reinterpret_cast<void **>(&device_tlas_output_buffer),
-            tlas_buffer_sizes.outputSizeInBytes));
+        CUDA_CHECK(
+            cudaMalloc(reinterpret_cast<void **>(&device_temp_tlas_buffer_sizes), tlas_buffer_sizes.tempSizeInBytes));
+        CUDA_CHECK(
+            cudaMalloc(reinterpret_cast<void **>(&device_tlas_output_buffer), tlas_buffer_sizes.outputSizeInBytes));
 
         OPTIX_CHECK(optixAccelBuild(
             context,

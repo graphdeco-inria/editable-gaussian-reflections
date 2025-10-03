@@ -1,7 +1,6 @@
 #pragma once
 
-__device__ __host__ float
-compute_scaling_factor(float opacity, float alpha_threshold, float exp_power) {
+__device__ __host__ float compute_scaling_factor(float opacity, float alpha_threshold, float exp_power) {
     float k = 2.0f * exp_power;
     return opacity <= alpha_threshold ? 0.0 : powf(k * log(opacity / alpha_threshold), 1.0f / k);
 }

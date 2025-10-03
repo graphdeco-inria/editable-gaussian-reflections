@@ -31,8 +31,7 @@
 #include <curand.h>
 #include <curand_kernel.h>
 
-template <unsigned int N>
-static __host__ __device__ __inline__ unsigned int tea(unsigned int val0, unsigned int val1) {
+template <unsigned int N> static __host__ __device__ __inline__ unsigned int tea(unsigned int val0, unsigned int val1) {
     unsigned int v0 = val0;
     unsigned int v1 = val1;
     unsigned int s0 = 0;
@@ -60,9 +59,7 @@ static __host__ __device__ __inline__ unsigned int lcg2(unsigned int &prev) {
 }
 
 // Generate random float in [0, 1)
-static __host__ __device__ __inline__ float rnd(unsigned int &prev) {
-    return ((float)lcg(prev) / (float)0x01000000);
-}
+static __host__ __device__ __inline__ float rnd(unsigned int &prev) { return ((float)lcg(prev) / (float)0x01000000); }
 
 static __host__ __device__ __inline__ unsigned int rot_seed(unsigned int seed, unsigned int frame) {
     return seed ^ frame;

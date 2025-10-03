@@ -28,9 +28,7 @@ def PILtoTorch(pil_image, resolution):
         return resized_image.unsqueeze(dim=-1).permute(2, 0, 1)
 
 
-def get_expon_lr_func(
-    lr_init, lr_final, lr_delay_steps=0, lr_delay_mult=1.0, max_steps=1000000
-):
+def get_expon_lr_func(lr_init, lr_final, lr_delay_steps=0, lr_delay_mult=1.0, max_steps=1000000):
     """
     Copied from Plenoxels
 
@@ -81,9 +79,7 @@ def strip_symmetric(sym):
 
 
 def build_rotation(r):
-    norm = torch.sqrt(
-        r[:, 0] * r[:, 0] + r[:, 1] * r[:, 1] + r[:, 2] * r[:, 2] + r[:, 3] * r[:, 3]
-    )
+    norm = torch.sqrt(r[:, 0] * r[:, 0] + r[:, 1] * r[:, 1] + r[:, 2] * r[:, 2] + r[:, 3] * r[:, 3])
 
     q = r / norm[:, None]
 
@@ -144,9 +140,7 @@ def safe_state(silent):
 
 def create_rotation_matrix_from_direction_vector_batch(direction_vectors):
     # Normalize the batch of direction vectors
-    direction_vectors = direction_vectors / torch.norm(
-        direction_vectors, dim=-1, keepdim=True
-    )
+    direction_vectors = direction_vectors / torch.norm(direction_vectors, dim=-1, keepdim=True)
     # Create a batch of arbitrary vectors that are not collinear with the direction vectors
     v1 = (
         torch.tensor([1.0, 0.0, 0.0], dtype=torch.float32)
@@ -155,9 +149,7 @@ def create_rotation_matrix_from_direction_vector_batch(direction_vectors):
         .clone()
     )
     is_collinear = torch.all(torch.abs(direction_vectors - v1) < 1e-5, dim=-1)
-    v1[is_collinear] = torch.tensor([0.0, 1.0, 0.0], dtype=torch.float32).to(
-        direction_vectors.device
-    )
+    v1[is_collinear] = torch.tensor([0.0, 1.0, 0.0], dtype=torch.float32).to(direction_vectors.device)
 
     # Calculate the first orthogonal vectors
     v1 = torch.cross(direction_vectors, v1)

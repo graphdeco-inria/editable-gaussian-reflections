@@ -34,9 +34,7 @@ class BlenderDataset:
             normals=np.zeros_like(self.colmap_parser.points),
         )
 
-        downsampled_cache_dir = data_dir.replace(
-            "/renders/", f"/cache/{self.resolution}/"
-        )
+        downsampled_cache_dir = data_dir.replace("/renders/", f"/cache/{self.resolution}/")
         if os.path.exists(downsampled_cache_dir):
             self.cache_dir = downsampled_cache_dir
         else:
@@ -110,9 +108,7 @@ class BlenderDataset:
 
         # Convert to depth to distance image
         if depth_image is not None:
-            position_image = transform_depth_to_position_image(
-                depth_image[:, :, 0], fovx, fovy
-            )
+            position_image = transform_depth_to_position_image(depth_image[:, :, 0], fovx, fovy)
             distance_image = torch.norm(position_image, dim=-1)
         else:
             distance_image = (position_image - torch.from_numpy(c2w[:3, 3])).norm(dim=-1)

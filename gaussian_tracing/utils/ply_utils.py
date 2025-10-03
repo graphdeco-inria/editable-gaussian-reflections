@@ -7,9 +7,7 @@ def read_ply(ply_path: str):
     plydata = plyfile.PlyData.read(ply_path)
     vertex_data = plydata["vertex"].data
     points = np.vstack([vertex_data["x"], vertex_data["y"], vertex_data["z"]]).T
-    colors = np.vstack(
-        [vertex_data["red"], vertex_data["green"], vertex_data["blue"]]
-    ).T
+    colors = np.vstack([vertex_data["red"], vertex_data["green"], vertex_data["blue"]]).T
     colors = colors / 255.0
     return points, colors
 

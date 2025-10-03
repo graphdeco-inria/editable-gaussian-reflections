@@ -78,10 +78,7 @@ class BlenderPriorDataset:
         image_name = Path(frame_name).stem + ".png"
         image_path = os.path.join(self.data_dir, image_name)
 
-        buffers = {
-            buffer_name: self._get_buffer(frame_name, buffer_name)
-            for buffer_name in self.buffer_names
-        }
+        buffers = {buffer_name: self._get_buffer(frame_name, buffer_name) for buffer_name in self.buffer_names}
         # buffers["brdf"] = torch.zeros_like(buffers["render"])
         # buffers["specular"] = torch.ones_like(buffers["render"]) * 0.5
         # buffers["base_color"] = buffers["albedo"] * (1.0 - buffers["metalness"]) + buffers["metalness"]
@@ -124,9 +121,7 @@ class BlenderPriorDataset:
                 dtype=torch.float32,
             )
             points_tensor = transform_points(points_tensor, w2c_tensor)
-            depth_points_image = project_pointcloud_to_depth_map(
-                points_tensor, fovx, fovy, buffers["depth"].shape[:2]
-            )
+            depth_points_image = project_pointcloud_to_depth_map(points_tensor, fovx, fovy, buffers["depth"].shape[:2])
             valid_mask = depth_points_image != 0
             x = buffers["depth"][:, :, 0][valid_mask].float()
             y = depth_points_image[valid_mask]
@@ -137,9 +132,7 @@ class BlenderPriorDataset:
         buffers["depth"] = buffers["depth"] * a + b
 
         # Convert to depth to distance image
-        position_image = transform_depth_to_position_image(
-            buffers["depth"][:, :, 0], fovx, fovy
-        )
+        position_image = transform_depth_to_position_image(buffers["depth"][:, :, 0], fovx, fovy)
         buffers["distance"] = torch.norm(position_image, dim=-1)
 
         cam_info = CameraInfo(
@@ -170,9 +163,7 @@ class BlenderPriorDataset:
     def _get_buffer(self, frame_name: str, buffer_name: str) -> Tensor:
         file_name = frame_name.split("/")[-1]
         frame_id = file_name.split("_")[-1]
-        buffer_path = os.path.join(
-            self.buffers_dir, buffer_name, f"{buffer_name}_{frame_id}" + ".png"
-        )
+        buffer_path = os.path.join(self.buffers_dir, buffer_name, f"{buffer_name}_{frame_id}" + ".png")
 
         buffer_image = Image.open(buffer_path)
         buffer = from_pil_image(buffer_image)

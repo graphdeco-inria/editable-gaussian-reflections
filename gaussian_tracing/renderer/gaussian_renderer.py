@@ -79,10 +79,7 @@ def render(
         normal=framebuffer.output_normal.clone().detach().moveaxis(-1, 1)
         if framebuffer.output_normal is not None
         else torch.zeros_like(rgb),
-        roughness=framebuffer.output_roughness.clone()
-        .detach()
-        .moveaxis(-1, 1)
-        .repeat(1, 3, 1, 1)
+        roughness=framebuffer.output_roughness.clone().detach().moveaxis(-1, 1).repeat(1, 3, 1, 1)
         if framebuffer.output_roughness is not None
         else torch.zeros_like(rgb),
         F0=framebuffer.output_f0.clone().detach().moveaxis(-1, 1)

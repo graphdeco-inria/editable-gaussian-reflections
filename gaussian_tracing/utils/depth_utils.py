@@ -59,9 +59,7 @@ def transform_depth_to_position_image(depth, fov_x_rad, fov_y_rad):
     return position
 
 
-def transform_points(
-    points: torch.Tensor, transformation_matrix: torch.Tensor
-) -> torch.Tensor:
+def transform_points(points: torch.Tensor, transformation_matrix: torch.Tensor) -> torch.Tensor:
     """
     Apply a 4x4 transformation matrix to 3D points of arbitrary shape ending in 3.
 
@@ -82,9 +80,7 @@ def transform_points(
     points_flat = points.reshape(-1, 3)
 
     # Append homogeneous coordinate
-    ones = torch.ones(
-        (points_flat.shape[0], 1), dtype=points.dtype, device=points.device
-    )
+    ones = torch.ones((points_flat.shape[0], 1), dtype=points.dtype, device=points.device)
     points_homogeneous = torch.cat([points_flat, ones], dim=1)  # shape: (-1, 4)
 
     # Apply transformation
@@ -170,9 +166,7 @@ def linear_least_squares_1d(x: torch.Tensor, y: torch.Tensor):
     return w, b
 
 
-def ransac_linear_fit(
-    x, y, num_iters=100, sample_fraction=0.1, max_sample_size=50, best_fraction=0.1
-):
+def ransac_linear_fit(x, y, num_iters=100, sample_fraction=0.1, max_sample_size=50, best_fraction=0.1):
     """
     Robustly fits y = wx + b using RANSAC,
     keeping only the best `best_fraction` of points (lowest residuals) for scoring and final fit.

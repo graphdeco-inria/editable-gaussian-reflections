@@ -12,8 +12,7 @@ __device__ float D_GGX(float3 N, float3 H, float alpha) {
     return a2 / (M_PI * (denom * denom) + BRDF_EPS);
 }
 
-__device__ void
-D_GGX_derivatives(float3 N, float3 H, float alpha, float &dD_dalpha, float3 &dD_dN, float3 &dD_dH) {
+__device__ void D_GGX_derivatives(float3 N, float3 H, float alpha, float &dD_dalpha, float3 &dD_dN, float3 &dD_dH) {
     float3 Nn = normalize(N);
     float3 Hn = normalize(H);
     float x = fmaxf(dot(Nn, Hn), 0.0f);
@@ -37,14 +36,8 @@ __device__ float G1(float3 N, float3 W, float alpha) {
     return NdotW / (NdotW * (1.0f - k) + k + BRDF_EPS);
 }
 
-__device__ void G1_derivatives(
-    float3 N,
-    float3 W,
-    float alpha,
-    float &dG1_dalpha,
-    float3 &dG1_dN,
-    float3 &dG1_dW,
-    float &G1_out) {
+__device__ void
+G1_derivatives(float3 N, float3 W, float alpha, float &dG1_dalpha, float3 &dG1_dN, float3 &dG1_dW, float &G1_out) {
     float3 Nn = normalize(N);
     float3 Wn = normalize(W);
     float x = fmaxf(dot(Nn, Wn), 0.0f);
@@ -67,19 +60,10 @@ __device__ void G1_derivatives(
     dG1_dW = dG_dx * Nn;
 }
 
-__device__ float G_Smith(float3 N, float3 V, float3 L, float alpha) {
-    return G1(N, V, alpha) * G1(N, L, alpha);
-}
+__device__ float G_Smith(float3 N, float3 V, float3 L, float alpha) { return G1(N, V, alpha) * G1(N, L, alpha); }
 
 __device__ void G_Smith_derivatives(
-    float3 N,
-    float3 V,
-    float3 L,
-    float alpha,
-    float &dG_dalpha,
-    float3 &dG_dN,
-    float3 &dG_dV,
-    float3 &dG_dL) {
+    float3 N, float3 V, float3 L, float alpha, float &dG_dalpha, float3 &dG_dN, float3 &dG_dV, float3 &dG_dL) {
     float dG_dalpha_v, dG_dalpha_l;
     float3 dG_dN_v, dG_dN_l;
     float3 dG_dV_v, dG_dl_l;
@@ -96,9 +80,7 @@ __device__ void G_Smith_derivatives(
     dG_dL = dG_dl_l * Gv;
 }
 
-__device__ float3 fresnel_schlick(float3 F0, float cosTheta) {
-    return F0 + (1.0f - F0) * powf(1.0f - cosTheta, 5.0f);
-}
+__device__ float3 fresnel_schlick(float3 F0, float cosTheta) { return F0 + (1.0f - F0) * powf(1.0f - cosTheta, 5.0f); }
 
 __device__ void fresnel_schlick_backward(
     float3 dl_dF, // ∂L/∂F (incoming gradient)
@@ -167,8 +149,7 @@ __device__ float3 cook_torrance_weight(float3 N, float3 V, float3 L, float rough
     return F * G * VdotH / (NdotH * NdotV + BRDF_EPS);
 }
 
-__device__ float3
-sample_cook_torrance(float3 N, float3 V, float roughness, float2 uniform_samples) {
+__device__ float3 sample_cook_torrance(float3 N, float3 V, float roughness, float2 uniform_samples) {
     // * Walter's trick
     float alpha = roughness * roughness;
     float phi = 2.0f * M_PI * uniform_samples.x;

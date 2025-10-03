@@ -54,8 +54,7 @@ struct ConfigDataHolder : torch::CustomClassHolder {
         return Config{
             .exp_power = reinterpret_cast<float *>(exp_power.data_ptr()),
             .alpha_threshold = reinterpret_cast<float *>(alpha_threshold.data_ptr()),
-            .transmittance_threshold =
-                reinterpret_cast<float *>(transmittance_threshold.data_ptr()),
+            .transmittance_threshold = reinterpret_cast<float *>(transmittance_threshold.data_ptr()),
             .accumulate_samples = reinterpret_cast<bool *>(accumulate_samples.data_ptr()),
             .jitter_primary_rays = reinterpret_cast<bool *>(jitter_primary_rays.data_ptr()),
             .num_bounces = reinterpret_cast<int *>(num_bounces.data_ptr()),
@@ -66,8 +65,7 @@ struct ConfigDataHolder : torch::CustomClassHolder {
             .loss_weight_normal = reinterpret_cast<float *>(loss_weight_normal.data_ptr()),
             .loss_weight_f0 = reinterpret_cast<float *>(loss_weight_f0.data_ptr()),
             .loss_weight_roughness = reinterpret_cast<float *>(loss_weight_roughness.data_ptr()),
-            .eps_forward_normalization =
-                reinterpret_cast<float *>(eps_forward_normalization.data_ptr()),
+            .eps_forward_normalization = reinterpret_cast<float *>(eps_forward_normalization.data_ptr()),
             .eps_scale_grad = reinterpret_cast<float *>(eps_scale_grad.data_ptr()),
             .eps_ray_surface_offset = reinterpret_cast<float *>(eps_ray_surface_offset.data_ptr()),
             .eps_min_roughness = reinterpret_cast<float *>(eps_min_roughness.data_ptr()),
@@ -97,12 +95,8 @@ struct ConfigDataHolder : torch::CustomClassHolder {
             .def_readonly("eps_scale_grad", &ConfigDataHolder::eps_scale_grad)
             .def_readonly("eps_ray_surface_offset", &ConfigDataHolder::eps_ray_surface_offset)
             .def_readonly("eps_min_roughness", &ConfigDataHolder::eps_min_roughness)
-            .def_readonly(
-                "reflection_invalid_normal_threshold",
-                &ConfigDataHolder::reflection_invalid_normal_threshold)
-            .def_readonly(
-                "backfacing_invalid_normal_threshold",
-                &ConfigDataHolder::backfacing_invalid_normal_threshold)
+            .def_readonly("reflection_invalid_normal_threshold", &ConfigDataHolder::reflection_invalid_normal_threshold)
+            .def_readonly("backfacing_invalid_normal_threshold", &ConfigDataHolder::backfacing_invalid_normal_threshold)
             .def_readonly("backfacing_max_dist", &ConfigDataHolder::backfacing_max_dist);
     }
 };

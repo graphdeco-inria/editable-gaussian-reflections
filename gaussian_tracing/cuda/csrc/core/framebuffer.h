@@ -122,32 +122,25 @@ struct Framebuffer {
             accumulated_rgb[pixel.id + num_pixels * step] += pixel.output_rgb[step];
             pixel.output_rgb[step] = (accum_rgb + pixel.output_rgb[step]) / float(accum_count + 1);
             auto accum_transmittance = accumulated_transmittance[pixel.id + num_pixels * step];
-            accumulated_transmittance[pixel.id + num_pixels * step] +=
-                pixel.output_transmittance[step];
+            accumulated_transmittance[pixel.id + num_pixels * step] += pixel.output_transmittance[step];
             pixel.output_transmittance[step] =
                 (accum_transmittance + pixel.output_transmittance[step]) / float(accum_count + 1);
-            auto accum_total_transmittance =
-                accumulated_total_transmittance[pixel.id + num_pixels * step];
-            accumulated_total_transmittance[pixel.id + num_pixels * step] +=
-                pixel.output_total_transmittance[step];
+            auto accum_total_transmittance = accumulated_total_transmittance[pixel.id + num_pixels * step];
+            accumulated_total_transmittance[pixel.id + num_pixels * step] += pixel.output_total_transmittance[step];
             pixel.output_total_transmittance[step] =
-                (accum_total_transmittance + pixel.output_total_transmittance[step]) /
-                float(accum_count + 1);
+                (accum_total_transmittance + pixel.output_total_transmittance[step]) / float(accum_count + 1);
             auto accum_depth = accumulated_depth[pixel.id + num_pixels * step];
             accumulated_depth[pixel.id + num_pixels * step] += pixel.output_depth[step];
-            pixel.output_depth[step] =
-                (accum_depth + pixel.output_depth[step]) / float(accum_count + 1);
+            pixel.output_depth[step] = (accum_depth + pixel.output_depth[step]) / float(accum_count + 1);
             auto accum_normal = accumulated_normal[pixel.id + num_pixels * step];
             accumulated_normal[pixel.id + num_pixels * step] += pixel.output_normal[step];
-            pixel.output_normal[step] =
-                (accum_normal + pixel.output_normal[step]) / float(accum_count + 1);
+            pixel.output_normal[step] = (accum_normal + pixel.output_normal[step]) / float(accum_count + 1);
             auto accum_f0 = accumulated_f0[pixel.id + num_pixels * step];
             accumulated_f0[pixel.id + num_pixels * step] += pixel.output_f0[step];
             pixel.output_f0[step] = (accum_f0 + pixel.output_f0[step]) / float(accum_count + 1);
             auto accum_roughness = accumulated_roughness[pixel.id + num_pixels * step];
             accumulated_roughness[pixel.id + num_pixels * step] += pixel.output_roughness[step];
-            pixel.output_roughness[step] =
-                (accum_roughness + pixel.output_roughness[step]) / float(accum_count + 1);
+            pixel.output_roughness[step] = (accum_roughness + pixel.output_roughness[step]) / float(accum_count + 1);
             pixel.output_final += pixel.output_rgb[step];
         }
     }
@@ -160,8 +153,7 @@ struct Framebuffer {
             output_f0[pixel.id + num_pixels * step] = pixel.output_f0[step];
             output_roughness[pixel.id + num_pixels * step] = pixel.output_roughness[step];
             output_transmittance[pixel.id + num_pixels * step] = pixel.output_transmittance[step];
-            output_total_transmittance[pixel.id + num_pixels * step] =
-                pixel.output_total_transmittance[step];
+            output_total_transmittance[pixel.id + num_pixels * step] = pixel.output_total_transmittance[step];
             output_brdf[pixel.id + num_pixels * step] = pixel.output_brdf[step];
             output_ray_origin[pixel.id + num_pixels * step] = pixel.output_ray_origin[step];
             output_ray_direction[pixel.id + num_pixels * step] = pixel.output_ray_direction[step];
@@ -217,33 +209,21 @@ struct FramebufferDataHolder : torch::CustomClassHolder {
         output_depth = torch::zeros({MAX_BOUNCES + 1, image_height, image_width, 1}, CUDA_FLOAT32);
         output_normal = torch::zeros({MAX_BOUNCES + 1, image_height, image_width, 3}, CUDA_FLOAT32);
         output_f0 = torch::zeros({MAX_BOUNCES + 1, image_height, image_width, 3}, CUDA_FLOAT32);
-        output_roughness =
-            torch::zeros({MAX_BOUNCES + 1, image_height, image_width, 1}, CUDA_FLOAT32);
-        output_transmittance =
-            torch::zeros({MAX_BOUNCES + 1, image_height, image_width, 1}, CUDA_FLOAT32);
-        output_total_transmittance =
-            torch::zeros({MAX_BOUNCES + 1, image_height, image_width, 1}, CUDA_FLOAT32);
+        output_roughness = torch::zeros({MAX_BOUNCES + 1, image_height, image_width, 1}, CUDA_FLOAT32);
+        output_transmittance = torch::zeros({MAX_BOUNCES + 1, image_height, image_width, 1}, CUDA_FLOAT32);
+        output_total_transmittance = torch::zeros({MAX_BOUNCES + 1, image_height, image_width, 1}, CUDA_FLOAT32);
         output_brdf = torch::zeros({MAX_BOUNCES + 1, image_height, image_width, 3}, CUDA_FLOAT32);
-        output_ray_origin =
-            torch::zeros({MAX_BOUNCES + 1, image_height, image_width, 3}, CUDA_FLOAT32);
-        output_ray_direction =
-            torch::zeros({MAX_BOUNCES + 1, image_height, image_width, 3}, CUDA_FLOAT32);
+        output_ray_origin = torch::zeros({MAX_BOUNCES + 1, image_height, image_width, 3}, CUDA_FLOAT32);
+        output_ray_direction = torch::zeros({MAX_BOUNCES + 1, image_height, image_width, 3}, CUDA_FLOAT32);
         output_final = torch::zeros({1, image_height, image_width, 3}, CUDA_FLOAT32);
 
-        accumulated_rgb =
-            torch::zeros({MAX_BOUNCES + 1, image_height, image_width, 3}, CUDA_FLOAT32);
-        accumulated_transmittance =
-            torch::zeros({MAX_BOUNCES + 1, image_height, image_width, 1}, CUDA_FLOAT32);
-        accumulated_total_transmittance =
-            torch::zeros({MAX_BOUNCES + 1, image_height, image_width, 1}, CUDA_FLOAT32);
-        accumulated_depth =
-            torch::zeros({MAX_BOUNCES + 1, image_height, image_width, 1}, CUDA_FLOAT32);
-        accumulated_normal =
-            torch::zeros({MAX_BOUNCES + 1, image_height, image_width, 3}, CUDA_FLOAT32);
-        accumulated_f0 =
-            torch::zeros({MAX_BOUNCES + 1, image_height, image_width, 3}, CUDA_FLOAT32);
-        accumulated_roughness =
-            torch::zeros({MAX_BOUNCES + 1, image_height, image_width, 1}, CUDA_FLOAT32);
+        accumulated_rgb = torch::zeros({MAX_BOUNCES + 1, image_height, image_width, 3}, CUDA_FLOAT32);
+        accumulated_transmittance = torch::zeros({MAX_BOUNCES + 1, image_height, image_width, 1}, CUDA_FLOAT32);
+        accumulated_total_transmittance = torch::zeros({MAX_BOUNCES + 1, image_height, image_width, 1}, CUDA_FLOAT32);
+        accumulated_depth = torch::zeros({MAX_BOUNCES + 1, image_height, image_width, 1}, CUDA_FLOAT32);
+        accumulated_normal = torch::zeros({MAX_BOUNCES + 1, image_height, image_width, 3}, CUDA_FLOAT32);
+        accumulated_f0 = torch::zeros({MAX_BOUNCES + 1, image_height, image_width, 3}, CUDA_FLOAT32);
+        accumulated_roughness = torch::zeros({MAX_BOUNCES + 1, image_height, image_width, 1}, CUDA_FLOAT32);
         accumulated_sample_count = torch::zeros({1}, CUDA_INT32);
 
         target_diffuse = torch::zeros({image_height, image_width, 3}, CUDA_FLOAT32);
@@ -262,23 +242,19 @@ struct FramebufferDataHolder : torch::CustomClassHolder {
             .output_f0 = reinterpret_cast<float3 *>(output_f0.data_ptr()),
             .output_roughness = reinterpret_cast<float *>(output_roughness.data_ptr()),
             .output_transmittance = reinterpret_cast<float *>(output_transmittance.data_ptr()),
-            .output_total_transmittance =
-                reinterpret_cast<float *>(output_total_transmittance.data_ptr()),
+            .output_total_transmittance = reinterpret_cast<float *>(output_total_transmittance.data_ptr()),
             .output_brdf = reinterpret_cast<float3 *>(output_brdf.data_ptr()),
             .output_ray_origin = reinterpret_cast<float3 *>(output_ray_origin.data_ptr()),
             .output_ray_direction = reinterpret_cast<float3 *>(output_ray_direction.data_ptr()),
             .output_final = reinterpret_cast<float3 *>(output_final.data_ptr()),
             .accumulated_rgb = reinterpret_cast<float3 *>(accumulated_rgb.data_ptr()),
-            .accumulated_transmittance =
-                reinterpret_cast<float *>(accumulated_transmittance.data_ptr()),
-            .accumulated_total_transmittance =
-                reinterpret_cast<float *>(accumulated_total_transmittance.data_ptr()),
+            .accumulated_transmittance = reinterpret_cast<float *>(accumulated_transmittance.data_ptr()),
+            .accumulated_total_transmittance = reinterpret_cast<float *>(accumulated_total_transmittance.data_ptr()),
             .accumulated_depth = reinterpret_cast<float *>(accumulated_depth.data_ptr()),
             .accumulated_normal = reinterpret_cast<float3 *>(accumulated_normal.data_ptr()),
             .accumulated_f0 = reinterpret_cast<float3 *>(accumulated_f0.data_ptr()),
             .accumulated_roughness = reinterpret_cast<float *>(accumulated_roughness.data_ptr()),
-            .accumulated_sample_count =
-                reinterpret_cast<int *>(accumulated_sample_count.data_ptr()),
+            .accumulated_sample_count = reinterpret_cast<int *>(accumulated_sample_count.data_ptr()),
             .target_diffuse = reinterpret_cast<float3 *>(target_diffuse.data_ptr()),
             .target_glossy = reinterpret_cast<float3 *>(target_glossy.data_ptr()),
             .target_depth = reinterpret_cast<float *>(target_depth.data_ptr()),
@@ -308,24 +284,19 @@ struct FramebufferDataHolder : torch::CustomClassHolder {
             .def_readonly("output_f0", &FramebufferDataHolder::output_f0)
             .def_readonly("output_roughness", &FramebufferDataHolder::output_roughness)
             .def_readonly("output_transmittance", &FramebufferDataHolder::output_transmittance)
-            .def_readonly(
-                "output_total_transmittance", &FramebufferDataHolder::output_total_transmittance)
+            .def_readonly("output_total_transmittance", &FramebufferDataHolder::output_total_transmittance)
             .def_readonly("output_brdf", &FramebufferDataHolder::output_brdf)
             .def_readonly("output_ray_origin", &FramebufferDataHolder::output_ray_origin)
             .def_readonly("output_ray_direction", &FramebufferDataHolder::output_ray_direction)
             .def_readonly("output_final", &FramebufferDataHolder::output_final)
             .def_readonly("accumulated_rgb", &FramebufferDataHolder::accumulated_rgb)
-            .def_readonly(
-                "accumulated_transmittance", &FramebufferDataHolder::accumulated_transmittance)
-            .def_readonly(
-                "accumulated_total_transmittance",
-                &FramebufferDataHolder::accumulated_total_transmittance)
+            .def_readonly("accumulated_transmittance", &FramebufferDataHolder::accumulated_transmittance)
+            .def_readonly("accumulated_total_transmittance", &FramebufferDataHolder::accumulated_total_transmittance)
             .def_readonly("accumulated_depth", &FramebufferDataHolder::accumulated_depth)
             .def_readonly("accumulated_normal", &FramebufferDataHolder::accumulated_normal)
             .def_readonly("accumulated_f0", &FramebufferDataHolder::accumulated_f0)
             .def_readonly("accumulated_roughness", &FramebufferDataHolder::accumulated_roughness)
-            .def_readonly(
-                "accumulated_sample_count", &FramebufferDataHolder::accumulated_sample_count)
+            .def_readonly("accumulated_sample_count", &FramebufferDataHolder::accumulated_sample_count)
             .def_readonly("target_diffuse", &FramebufferDataHolder::target_diffuse)
             .def_readonly("target_glossy", &FramebufferDataHolder::target_glossy)
             .def_readonly("target_depth", &FramebufferDataHolder::target_depth)

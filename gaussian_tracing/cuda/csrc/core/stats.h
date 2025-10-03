@@ -19,8 +19,7 @@ struct StatsDataHolder : torch::CustomClassHolder {
 
     Stats reify() {
         return Stats{
-            .num_accumulated_per_pixel =
-                reinterpret_cast<int *>(num_accumulated_per_pixel.data_ptr()),
+            .num_accumulated_per_pixel = reinterpret_cast<int *>(num_accumulated_per_pixel.data_ptr()),
             .num_traversed_per_pixel = reinterpret_cast<int *>(num_traversed_per_pixel.data_ptr())};
     }
 

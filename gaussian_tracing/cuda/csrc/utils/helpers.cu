@@ -36,18 +36,14 @@ __device__ inline auto read_roughness(const Params &params, int gaussian_id) {
 __device__ inline auto backward_act_for_opacity(auto dL_dvalue, auto value) {
     return backward_sigmoid_act(dL_dvalue, value);
 }
-__device__ inline auto backward_act_for_scale(auto dL_dvalue, auto value) {
-    return backward_exp_act(dL_dvalue, value);
-}
+__device__ inline auto backward_act_for_scale(auto dL_dvalue, auto value) { return backward_exp_act(dL_dvalue, value); }
 __device__ inline auto backward_act_for_mean(auto dL_dvalue, auto value) {
     return backward_identity_act(dL_dvalue, value);
 }
 __device__ inline auto backward_act_for_rotation(auto dL_dvalue, auto value) {
     return backward_normalize_act(dL_dvalue, value);
 }
-__device__ inline auto backward_act_for_rgb(auto dL_dvalue, auto value) {
-    return backward_relu_act(dL_dvalue, value);
-}
+__device__ inline auto backward_act_for_rgb(auto dL_dvalue, auto value) { return backward_relu_act(dL_dvalue, value); }
 __device__ inline auto backward_act_for_normal(auto dL_dvalue, auto value) {
     return backward_identity_act(dL_dvalue, value);
 }

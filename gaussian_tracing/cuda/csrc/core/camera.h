@@ -14,8 +14,8 @@ struct Camera {
     const float *zfar;
 
 #ifdef __CUDACC__
-    __device__ float3 compute_primary_ray_direction(
-        const bool jitter, const uint3 idx, const uint3 dim, unsigned int &seed) {
+    __device__ float3
+    compute_primary_ray_direction(const bool jitter, const uint3 idx, const uint3 dim, unsigned int &seed) {
         // * Get camera intrinsics
         float view_size = tan(*vertical_fov_radians / 2);
         float aspect_ratio = float(dim.x) / float(dim.y);
@@ -29,8 +29,7 @@ struct Camera {
 
         // * Convert to NDC
         float y = view_size * (1.0f - 2.0f * (idxf.y + 1.0f / 2.0f) / (float(dim.y)));
-        float x =
-            aspect_ratio * view_size * (2.0f * (idxf.x + 1.0f / 2.0f) / (float(dim.x)) - 1.0f);
+        float x = aspect_ratio * view_size * (2.0f * (idxf.x + 1.0f / 2.0f) / (float(dim.x)) - 1.0f);
 
         // * Rotate to world and normalize (n.b. multiplies by *transposed* w2c)
         return normalize(rotation_w2c[0] * x + rotation_w2c[1] * y - rotation_w2c[2]);

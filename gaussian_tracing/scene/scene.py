@@ -9,7 +9,6 @@
 # For inquiries contact  george.drettakis@inria.fr
 #
 
-import math
 import os
 import random
 
@@ -47,9 +46,7 @@ class Scene:
 
         if load_iteration:
             if load_iteration == -1:
-                self.loaded_iter = searchForMaxIteration(
-                    os.path.join(self.model_path, "point_cloud")
-                )
+                self.loaded_iter = searchForMaxIteration(os.path.join(self.model_path, "point_cloud"))
             else:
                 self.loaded_iter = load_iteration
             print("Loading trained model at iteration {}".format(self.loaded_iter))
@@ -61,9 +58,7 @@ class Scene:
         scene_info = readSceneInfo(cfg, data_dir)
 
         if shuffle:
-            random.shuffle(
-                scene_info.train_cameras
-            )  # Multi-res consistent random shuffling
+            random.shuffle(scene_info.train_cameras)  # Multi-res consistent random shuffling
 
         self.cameras_extent = scene_info.nerf_normalization["radius"]
 
@@ -109,9 +104,7 @@ class Scene:
                 T = torch.from_numpy(camera.camera_center)
 
             points_dist_to_camera = (points - T).norm(dim=1)
-            too_close = (
-                points_dist_to_camera < camera.znear
-            )
+            too_close = points_dist_to_camera < camera.znear
 
             points_to_prune |= too_close
 
@@ -131,16 +124,12 @@ class Scene:
             assert camera.image_height == first_train_camera.image_height, (
                 "All train cameras must have the same image_height"
             )
-            assert camera.FoVy == first_train_camera.FoVy, (
-                "All train cameras must have the same FoVy"
-            )
+            assert camera.FoVy == first_train_camera.FoVy, "All train cameras must have the same FoVy"
 
         self.max_zfar = max([x.zfar for x in self.train_cameras[1.0]]).item()
 
     def save(self, iteration):
-        point_cloud_path = os.path.join(
-            self.model_path, "point_cloud/iteration_{}".format(iteration)
-        )
+        point_cloud_path = os.path.join(self.model_path, "point_cloud/iteration_{}".format(iteration))
         self.gaussians.save_ply(os.path.join(point_cloud_path, "point_cloud.ply"))
 
     def getTrainCameras(self, scale=1.0):

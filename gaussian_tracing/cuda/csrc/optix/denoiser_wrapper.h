@@ -32,10 +32,7 @@ class DenoiserWrapper {
 
         OptixDenoiserSizes denoiser_sizes;
         OPTIX_CHECK(optixDenoiserComputeMemoryResources(
-            optix_denoiser,
-            params_on_host.image_width,
-            params_on_host.image_height,
-            &denoiser_sizes));
+            optix_denoiser, params_on_host.image_width, params_on_host.image_height, &denoiser_sizes));
         scratch_size = static_cast<uint32_t>(denoiser_sizes.withoutOverlapScratchSizeInBytes);
         overlap = 0;
         CUDA_CHECK(cudaMalloc(reinterpret_cast<void **>(&hdrAverageColor), 3 * sizeof(float)));
@@ -106,8 +103,7 @@ class DenoiserWrapper {
     }
 
   private:
-    static OptixImage2D
-    createOptixImage2D(unsigned int width, unsigned int height, CUdeviceptr tensor_data) {
+    static OptixImage2D createOptixImage2D(unsigned int width, unsigned int height, CUdeviceptr tensor_data) {
         OptixImage2D oi;
         oi.data = tensor_data;
         oi.width = width;

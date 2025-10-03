@@ -135,9 +135,7 @@ def readSceneInfo(cfg: TyroConfig, data_dir: str) -> SceneInfo:
         colors=colors,
         normals=np.zeros_like(points),
     )
-    extra_point_cloud = make_random_point_cloud(
-        cfg.init_num_pts_farfield, cfg.init_diffuse_farfield
-    )
+    extra_point_cloud = make_random_point_cloud(cfg.init_num_pts_farfield, cfg.init_diffuse_farfield)
 
     scene_info = SceneInfo(
         point_cloud=point_cloud,

@@ -1,12 +1,7 @@
 
 #pragma inline
 __device__ void backward_pass(
-    const int step,
-    Pixel &pixel,
-    float3 ray_origin,
-    float3 ray_direction,
-    float3 throughput,
-    const int num_hits) {
+    const int step, Pixel &pixel, float3 ray_origin, float3 ray_direction, float3 throughput, const int num_hits) {
     // * Preload config parameters
     const float alpha_threshold = *params.config.alpha_threshold;
     const float exp_power = *params.config.exp_power;
@@ -79,8 +74,8 @@ __device__ void backward_pass(
         // * Fetch the transform matrices
         const float4 *world_to_local = optixGetInstanceInverseTransformFromHandle(
             optixGetInstanceTraversableFromIAS(params.bvh_handle, gaussian_id));
-        const float4 *local_to_world = optixGetInstanceTransformFromHandle(
-            optixGetInstanceTraversableFromIAS(params.bvh_handle, gaussian_id));
+        const float4 *local_to_world =
+            optixGetInstanceTransformFromHandle(optixGetInstanceTraversableFromIAS(params.bvh_handle, gaussian_id));
 
         // * Output buffer gradient
         int num_pixels = 1; // * Deliberately avoid averaging over all pixels (seemed more stable)
@@ -98,10 +93,9 @@ __device__ void backward_pass(
                                *params.config.loss_weight_depth / num_pixels;
             dL_doutput_normal = 2.0f / 3.0f * sign(pixel.output_normal[0] - pixel.target_normal) *
                                 *params.config.loss_weight_normal / num_pixels;
-            dL_doutput_f0 = 2.0f / 3.0f * sign(pixel.output_f0[0] - pixel.target_f0) *
-                            *params.config.loss_weight_f0 / num_pixels;
-            dL_doutput_roughness = 2.0f / 1.0f *
-                                   sign(pixel.output_roughness[0] - pixel.target_roughness) *
+            dL_doutput_f0 =
+                2.0f / 3.0f * sign(pixel.output_f0[0] - pixel.target_f0) * *params.config.loss_weight_f0 / num_pixels;
+            dL_doutput_roughness = 2.0f / 1.0f * sign(pixel.output_roughness[0] - pixel.target_roughness) *
                                    *params.config.loss_weight_roughness / num_pixels;
         } else {
             float3 output_glossy = make_float3(0.0f, 0.0f, 0.0f);
@@ -109,19 +103,16 @@ __device__ void backward_pass(
                 output_glossy += pixel.output_rgb[j];
             }
             dL_doutput_rgb = 2.0f / 3.0f * sign(output_glossy - pixel.target_glossy) *
-                             *params.config.loss_weight_glossy / num_pixels *
-                             roughness_downweighting;
+                             *params.config.loss_weight_glossy / num_pixels * roughness_downweighting;
             dL_doutput_rgb *= throughput;
         }
 
         // * Color gradient
         float weight = transmittance / (1.0 - alpha) * alpha;
         float3 dL_dgaussian_rgb = backward_act_for_rgb(dL_doutput_rgb * weight, gaussian_rgb);
-        float3 dL_dgaussian_normal =
-            backward_act_for_normal(dL_doutput_normal * weight, gaussian_normal);
+        float3 dL_dgaussian_normal = backward_act_for_normal(dL_doutput_normal * weight, gaussian_normal);
         float3 dL_dgaussian_f0 = backward_act_for_f0(dL_doutput_f0 * weight, gaussian_f0);
-        float dL_dgaussian_roughness =
-            backward_act_for_roughness(dL_doutput_roughness * weight, gaussian_roughness);
+        float dL_dgaussian_roughness = backward_act_for_roughness(dL_doutput_roughness * weight, gaussian_roughness);
 
         // * Flow gradients from previous gaussian behind this one
         if (step == 0) {
@@ -131,8 +122,7 @@ __device__ void backward_pass(
             prev_gaussian_normal = gaussian_normal;
             weighted_f0_deltas += (gaussian_f0 - prev_gaussian_f0) * transmittance;
             prev_gaussian_f0 = gaussian_f0;
-            weighted_roughness_deltas +=
-                (gaussian_roughness - prev_gaussian_roughness) * transmittance;
+            weighted_roughness_deltas += (gaussian_roughness - prev_gaussian_roughness) * transmittance;
             prev_gaussian_roughness = gaussian_roughness;
             weighted_depth_deltas += (gaussian_depth - prev_gaussian_depth) * transmittance;
             prev_gaussian_depth = gaussian_depth;
@@ -150,9 +140,7 @@ __device__ void backward_pass(
         dL_dalpha += (weighted_roughness_deltas * tmp1) * dL_doutput_roughness;
         dL_dalpha += (weighted_depth_deltas * tmp1) * dL_doutput_depth;
 
-        float tmp2 =
-            -((pixel.output_transmittance[step] - pixel.output_total_transmittance[step]) /
-              (1.0 - alpha));
+        float tmp2 = -((pixel.output_transmittance[step] - pixel.output_total_transmittance[step]) / (1.0 - alpha));
         dL_dalpha += tmp2 * dot(pixel.remaining_rgb[step], dL_doutput_rgb);
         dL_dalpha += tmp2 * dot(pixel.remaining_normal[step], dL_doutput_normal);
         dL_dalpha += tmp2 * dot(pixel.remaining_f0[step], dL_doutput_f0);
@@ -173,12 +161,9 @@ __device__ void backward_pass(
         float scaling_factor = compute_scaling_factor(opacity, alpha_threshold, exp_power);
         float3 dL_dx_world =
             make_float3(
-                dot(make_float3(world_to_local[0].x, world_to_local[1].x, world_to_local[2].x),
-                    dL_dx_local),
-                dot(make_float3(world_to_local[0].y, world_to_local[1].y, world_to_local[2].y),
-                    dL_dx_local),
-                dot(make_float3(world_to_local[0].z, world_to_local[1].z, world_to_local[2].z),
-                    dL_dx_local)) *
+                dot(make_float3(world_to_local[0].x, world_to_local[1].x, world_to_local[2].x), dL_dx_local),
+                dot(make_float3(world_to_local[0].y, world_to_local[1].y, world_to_local[2].y), dL_dx_local),
+                dot(make_float3(world_to_local[0].z, world_to_local[1].z, world_to_local[2].z), dL_dx_local)) *
             scaling_factor;
 
         // * Local to world matrix gradient
@@ -218,8 +203,8 @@ __device__ void backward_pass(
         float dL_dz =
             (2.f * x * (dL_drot_0.z + dL_drot_2.x) + 2.f * y * (dL_drot_1.z + dL_drot_2.y) -
              4.f * z * (dL_drot_0.x + dL_drot_1.y) + 2.f * r * (dL_drot_1.x - dL_drot_0.y));
-        float4 dL_dgaussian_rotation = backward_normalize_act(
-            make_float4(dL_dr, dL_dx, dL_dy, dL_dz), rotation_unnormalized, rotation);
+        float4 dL_dgaussian_rotation =
+            backward_normalize_act(make_float4(dL_dr, dL_dx, dL_dy, dL_dz), rotation_unnormalized, rotation);
 
         // * Flush to memory
         atomicAddX(&params.gaussians.dL_dopacity[gaussian_id], dL_dgaussian_opacity);

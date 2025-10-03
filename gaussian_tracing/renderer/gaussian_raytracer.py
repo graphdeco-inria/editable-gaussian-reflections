@@ -24,9 +24,7 @@ class GaussianRaytracer:
     def __init__(self, pc: GaussianModel, image_width: int, image_height: int):
         self.image_width: int = image_width
         self.image_height: int = image_height
-        self.cuda_module = make_raytracer(
-            image_width, image_height, pc.get_scaling.shape[0]
-        )
+        self.cuda_module = make_raytracer(image_width, image_height, pc.get_scaling.shape[0])
 
         config = self.cuda_module.get_config()
         config.loss_weight_diffuse.fill_(pc.cfg.loss_weight_diffuse)
@@ -42,21 +40,21 @@ class GaussianRaytracer:
         self.pc = pc
 
         self._export_param_values()
-        torch.cuda.synchronize()  
+        torch.cuda.synchronize()
         self.cuda_module.rebuild_bvh()
-        torch.cuda.synchronize()  
+        torch.cuda.synchronize()
 
     @torch.no_grad()
     def rebuild_bvh(self):
         new_size = self.pc._xyz.shape[0]
 
-        torch.cuda.synchronize()  
+        torch.cuda.synchronize()
         self.cuda_module.resize(new_size)
-        torch.cuda.synchronize()  
+        torch.cuda.synchronize()
         self._export_param_values()
-        torch.cuda.synchronize()  
+        torch.cuda.synchronize()
         self.cuda_module.rebuild_bvh()
-        torch.cuda.synchronize()  
+        torch.cuda.synchronize()
 
     @torch.no_grad()
     def _export_param_values(self):
@@ -122,12 +120,8 @@ class GaussianRaytracer:
             camera = self.cuda_module.get_camera()
             camera.znear.fill_(float(os.getenv("ZNEAR", 0.01)))
             camera.zfar.fill_(float(os.getenv("ZFAR", 999.9)))
-            camera.vertical_fov_radians.fill_(
-                torch.tensor(viewpoint_camera.FoVy, device="cuda")
-            )
-            camera.set_pose(
-                viewpoint_camera.camera_center.contiguous(), R_c2w_blender.contiguous()
-            )
+            camera.vertical_fov_radians.fill_(torch.tensor(viewpoint_camera.FoVy, device="cuda"))
+            camera.set_pose(viewpoint_camera.camera_center.contiguous(), R_c2w_blender.contiguous())
 
             self._export_param_values()
 
@@ -174,5 +168,5 @@ class GaussianRaytracer:
             self._import_param_gradients()
 
         return {
-            "render": framebuffer.output_rgb.clone(), 
+            "render": framebuffer.output_rgb.clone(),
         }

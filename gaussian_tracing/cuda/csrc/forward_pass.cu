@@ -1,11 +1,7 @@
 
 #pragma inline
-__device__ void forward_pass(
-    const int step,
-    Pixel &pixel,
-    const float3 ray_origin,
-    const float3 ray_direction,
-    int &num_hits) {
+__device__ void
+forward_pass(const int step, Pixel &pixel, const float3 ray_origin, const float3 ray_direction, int &num_hits) {
     bool grads_enabled = *params.metadata.grads_enabled;
     float transmittance_threshold = *params.config.transmittance_threshold;
 
@@ -148,22 +144,16 @@ __device__ void forward_pass(
     params.stats.num_accumulated_per_pixel[pixel.id] = total_accumulated;
 
     // * Approximate the contribution of truncated gaussians & update output
-    float remaining_transmittance =
-        pixel.output_transmittance[step] - pixel.output_total_transmittance[step];
-    float normalization =
-        max((1.0f - pixel.output_transmittance[step]), *params.config.eps_forward_normalization);
+    float remaining_transmittance = pixel.output_transmittance[step] - pixel.output_total_transmittance[step];
+    float normalization = max((1.0f - pixel.output_transmittance[step]), *params.config.eps_forward_normalization);
     pixel.remaining_rgb[step] = pixel.output_rgb[step] / normalization;
-    pixel.output_rgb[step] =
-        pixel.output_rgb[step] + remaining_transmittance * pixel.remaining_rgb[step];
+    pixel.output_rgb[step] = pixel.output_rgb[step] + remaining_transmittance * pixel.remaining_rgb[step];
     pixel.remaining_depth[step] = pixel.output_depth[step] / normalization;
-    pixel.output_depth[step] =
-        pixel.output_depth[step] + remaining_transmittance * pixel.remaining_depth[step];
+    pixel.output_depth[step] = pixel.output_depth[step] + remaining_transmittance * pixel.remaining_depth[step];
     pixel.remaining_normal[step] = pixel.output_normal[step] / normalization;
-    pixel.output_normal[step] =
-        pixel.output_normal[step] + remaining_transmittance * pixel.remaining_normal[step];
+    pixel.output_normal[step] = pixel.output_normal[step] + remaining_transmittance * pixel.remaining_normal[step];
     pixel.remaining_f0[step] = pixel.output_f0[step] / normalization;
-    pixel.output_f0[step] =
-        pixel.output_f0[step] + remaining_transmittance * pixel.remaining_f0[step];
+    pixel.output_f0[step] = pixel.output_f0[step] + remaining_transmittance * pixel.remaining_f0[step];
     pixel.remaining_roughness[step] = pixel.output_roughness[step] / normalization;
     pixel.output_roughness[step] =
         pixel.output_roughness[step] + remaining_transmittance * pixel.remaining_roughness[step];

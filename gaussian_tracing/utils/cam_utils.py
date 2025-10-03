@@ -22,9 +22,7 @@ def compute_center_of_attention(c2ws: np.ndarray):
     return totp[..., None]  # 3, 1
 
 
-def closest_point_2_lines(
-    oa: np.ndarray, da: np.ndarray, ob: np.ndarray, db: np.ndarray
-):
+def closest_point_2_lines(oa: np.ndarray, da: np.ndarray, ob: np.ndarray, db: np.ndarray):
     # Returns point closest to both rays of form o+t*d, and a weight factor that goes to 0 if the lines are parallel
     da = da / np.linalg.norm(da)
     db = db / np.linalg.norm(db)
@@ -36,9 +34,7 @@ def closest_point_2_lines(
     return (oa + ta * da + ob + tb * db) * 0.5, denom
 
 
-def average_c2ws(
-    c2ws: np.ndarray, align_cameras: bool = True, look_at_center: bool = True
-) -> np.ndarray:
+def average_c2ws(c2ws: np.ndarray, align_cameras: bool = True, look_at_center: bool = True) -> np.ndarray:
     """
     Calculate the average pose, which is then used to center all poses
     using @center_poses. Its computation is as follows:
@@ -114,15 +110,10 @@ def generate_spiral_path(
 
     # Find a reasonable "focus depth" for this dataset as a weighted average
     # of near and far bounds in disparity space.
-    focal = focal_offset + np.linalg.norm(
-        compute_center_of_attention(c2ws)[..., 0] - c2w_avg[..., 3]
-    )  # (3)
+    focal = focal_offset + np.linalg.norm(compute_center_of_attention(c2ws)[..., 0] - c2w_avg[..., 3])  # (3)
 
     # Get radii for spiral path using 70th percentile of camera origins.
-    radii = (
-        np.percentile(np.abs(c2ws[:, :3, 3] - c2w_avg[..., 3]), percentile, 0)
-        * radius_ratio
-    )  # N, 3
+    radii = np.percentile(np.abs(c2ws[:, :3, 3] - c2w_avg[..., 3]), percentile, 0) * radius_ratio  # N, 3
     radii = np.concatenate([xyz_ratio * radii, [1.0]])  # 4,
 
     # Generate c2ws for spiral path.

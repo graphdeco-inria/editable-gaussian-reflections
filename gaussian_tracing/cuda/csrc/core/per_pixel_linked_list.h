@@ -58,22 +58,16 @@ struct PerPixelLinkedList {
             return *this;
         }
 
-        __device__ bool operator!=(const PixelIterator &other) const {
-            return hit_idx != other.hit_idx;
-        }
+        __device__ bool operator!=(const PixelIterator &other) const { return hit_idx != other.hit_idx; }
     };
 
     struct PixelView {
         const PerPixelLinkedList *parent;
         uint32_t pixel_id;
 
-        __device__ PixelIterator begin() const {
-            return PixelIterator{parent, parent->head_per_pixel[pixel_id]};
-        }
+        __device__ PixelIterator begin() const { return PixelIterator{parent, parent->head_per_pixel[pixel_id]}; }
 
-        __device__ PixelIterator end() const {
-            return PixelIterator{parent, PerPixelLinkedList::NULL_PTR};
-        }
+        __device__ PixelIterator end() const { return PixelIterator{parent, PerPixelLinkedList::NULL_PTR}; }
     };
 
     __device__ PixelView pixel_view(uint32_t pixel_id) const { return PixelView{this, pixel_id}; }

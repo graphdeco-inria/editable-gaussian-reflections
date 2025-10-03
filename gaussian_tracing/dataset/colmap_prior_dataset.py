@@ -67,13 +67,9 @@ class ColmapPriorDataset:
         keys = list(sorted(list(self.cam_extrinsics.keys())))
         if self.do_eval:
             if split == "train":
-                self.keys = [
-                    key for i, key in enumerate(keys) if i % self.llffhold != 0
-                ]
+                self.keys = [key for i, key in enumerate(keys) if i % self.llffhold != 0]
             else:
-                self.keys = [
-                    key for i, key in enumerate(keys) if i % self.llffhold == 0
-                ]
+                self.keys = [key for i, key in enumerate(keys) if i % self.llffhold == 0]
         else:
             if split == "train":
                 self.keys = keys
@@ -83,12 +79,7 @@ class ColmapPriorDataset:
             self.keys = self.keys[: self.max_images]
 
         if "MANUAL_FILTER" in os.environ:
-            self.best_frames = (
-                open(os.path.join(data_dir, "best_frames.txt"), "r")
-                .read()
-                .strip()
-                .split(" ")
-            )
+            self.best_frames = open(os.path.join(data_dir, "best_frames.txt"), "r").read().strip().split(" ")
             self.keys = [k for k in self.keys if k in self.best_frames]
 
     def __len__(self) -> int:
@@ -152,9 +143,7 @@ class ColmapPriorDataset:
                 dtype=torch.float32,
             )
             points_tensor = transform_points(points_tensor, w2c_tensor)
-            depth_points_image = project_pointcloud_to_depth_map(
-                points_tensor, fovx, fovy, depth_image.shape[:2]
-            )
+            depth_points_image = project_pointcloud_to_depth_map(points_tensor, fovx, fovy, depth_image.shape[:2])
             valid_mask = depth_points_image != 0
             x = depth_image[:, :, 0][valid_mask].float()
             y = depth_points_image[valid_mask]
@@ -165,9 +154,7 @@ class ColmapPriorDataset:
         depth_image = depth_image * a + b
 
         # Convert to depth to distance image
-        position_image = transform_depth_to_position_image(
-            depth_image[:, :, 0], fovx, fovy
-        )
+        position_image = transform_depth_to_position_image(depth_image[:, :, 0], fovx, fovy)
         distance_image = torch.norm(position_image, dim=-1)
 
         cam_info = CameraInfo(
@@ -200,9 +187,7 @@ class ColmapPriorDataset:
 
         buffer_image = Image.open(buffer_path)
         buffer_height = self.resolution
-        buffer_width = int(
-            buffer_height * (buffer_image.size[0] / buffer_image.size[1])
-        )
+        buffer_width = int(buffer_height * (buffer_image.size[0] / buffer_image.size[1]))
         buffer_image = buffer_image.resize((buffer_width, buffer_height))
         buffer = from_pil_image(buffer_image)
 

@@ -61,8 +61,7 @@ extern "C" __global__ void __intersection__gaussian() {
     }
 
     // * Compute alpha value
-    float3 local_hit =
-        local_hit_unscaled * compute_scaling_factor(opacity, alpha_threshold, exp_power);
+    float3 local_hit = local_hit_unscaled * compute_scaling_factor(opacity, alpha_threshold, exp_power);
     float gaussval = eval_gaussian(local_hit, exp_power);
     float alpha = compute_alpha(gaussval, opacity, alpha_threshold);
 
@@ -72,8 +71,7 @@ extern "C" __global__ void __intersection__gaussian() {
     optixSetPayload_1(__float_as_uint(full_T));
 
     // * Log all hits to per-pixel linked list
-    params.ppll_forward.insert(
-        grads_enabled, pixel_id, gaussian_id, world_distance, local_hit, gaussval, alpha);
+    params.ppll_forward.insert(grads_enabled, pixel_id, gaussian_id, world_distance, local_hit, gaussval, alpha);
 }
 
 extern "C" __global__ void __raygen__rg() {
@@ -91,8 +89,8 @@ extern "C" __global__ void __raygen__rg() {
 
     // * Compute the ray coordinates
     float3 ray_origin = *params.camera.origin;
-    float3 ray_direction = params.camera.compute_primary_ray_direction(
-        *params.config.jitter_primary_rays, idx, dim, seed);
+    float3 ray_direction =
+        params.camera.compute_primary_ray_direction(*params.config.jitter_primary_rays, idx, dim, seed);
 
     // * Init output buffers for all bounces (steps)
     Pixel pixel(pixel_id);
@@ -118,7 +116,8 @@ extern "C" __global__ void __raygen__rg() {
         // * Post-process accumulated normal and roughness
         float3 unnormalized_normal = pixel.output_normal[step];
         float3 effective_normal = normalize(unnormalized_normal);
-        float effective_roughness = max(pixel.output_roughness[step], eps_min_roughness); // * For stability avoid exactly 0 roughness
+        float effective_roughness =
+            max(pixel.output_roughness[step], eps_min_roughness); // * For stability avoid exactly 0 roughness
 
         // * Terminate path if the accumulated normal is invalid
         if (length(unnormalized_normal) < reflection_invalid_normal_threshold) {
@@ -128,10 +127,7 @@ extern "C" __global__ void __raygen__rg() {
         // * Compute reflection ray for the following step
         float3 effective_position = ray_origin + pixel.output_depth[step] * ray_direction;
         float3 next_direction = sample_cook_torrance(
-            effective_normal,
-            -ray_direction,
-            effective_roughness,
-            make_float2(rnd(seed), rnd(seed)));
+            effective_normal, -ray_direction, effective_roughness, make_float2(rnd(seed), rnd(seed)));
         float3 next_origin = effective_position + eps_ray_surface_offset * next_direction;
 
         // * Update throughput in a cumulative product
@@ -140,8 +136,8 @@ extern "C" __global__ void __raygen__rg() {
             pixel.output_throughput[step] = pixel.output_throughput[step - 1];
         }
 
-        pixel.output_throughput[step] *= cook_torrance_weight(
-            effective_normal, -ray_direction, next_direction, effective_roughness, effective_F0);
+        pixel.output_throughput[step] *=
+            cook_torrance_weight(effective_normal, -ray_direction, next_direction, effective_roughness, effective_F0);
 
         // * Update ray and log it for debugging
         ray_origin = next_origin;
@@ -160,8 +156,7 @@ extern "C" __global__ void __raygen__rg() {
         params.framebuffer.fetch_targets(pixel);
         for (int step = total_effective_steps - 1; step >= 0; step--) {
             if (num_hits[step] > 0) {
-                float3 throughput =
-                    step == 0 ? make_float3(1.0f) : pixel.output_throughput[step - 1];
+                float3 throughput = step == 0 ? make_float3(1.0f) : pixel.output_throughput[step - 1];
                 backward_pass(step, pixel, ray_origin, ray_direction, throughput, num_hits[step]);
             }
         }

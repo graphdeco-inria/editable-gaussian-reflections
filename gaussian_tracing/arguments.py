@@ -9,11 +9,10 @@
 # For inquiries contact  george.drettakis@inria.fr
 #
 
-import os
 from dataclasses import dataclass, field
-from typing import Annotated, List, Optional, Literal
-from tyro.conf import arg
+from typing import Annotated, Literal
 
+from tyro.conf import arg
 
 
 @dataclass
@@ -23,14 +22,10 @@ class TyroConfig:
     detect_anomaly: bool = False
     flip_camera: bool = False
     val_views: list[int] = field(default_factory=lambda: [75, 175])
-    test_iterations: list[int] = field(
-        default_factory=lambda: [4, 6_000, 12_000, 18_000, 24_000, 32_000]
-    )
-    save_iterations: list[int] = field(
-        default_factory=lambda: [4, 6_000, 12_000, 18_000, 24_000, 32_000]
-    )
+    test_iterations: list[int] = field(default_factory=lambda: [4, 6_000, 12_000, 18_000, 24_000, 32_000])
+    save_iterations: list[int] = field(default_factory=lambda: [4, 6_000, 12_000, 18_000, 24_000, 32_000])
     quiet: bool = False
-    
+
     iterations: int = 32_000
 
     # * Dataset params
@@ -108,4 +103,3 @@ class TyroConfig:
     pruning_interval: int = 500
     beta_1: float = 0.9
     beta_2: float = 0.999
-
