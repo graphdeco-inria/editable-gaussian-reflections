@@ -192,16 +192,14 @@ class TyroConfig:
     # Denoise
     denoise: bool = True
     # Rendering modes
-    modes: list[str] = field(
-        default_factory=lambda: ["regular", "env_rot_1", "env_move_1", "env_move_2"]
+    modes: list[Literal["regular", "env_rot_1", "env_move_1", "env_move_2"]] = field(
+        default_factory=lambda: ["regular"]
     )
     # Skip video
     skip_video: bool = False
     # Skip save frames
     skip_save_frames: bool = False
 
-    # Initialization strategy
-    init_type: str = "sfm" #!!!!
     # Initial number of GSs. Ignored if using sfm
     init_num_pts: int = 100_000
     # Initial number of farfield GSs.

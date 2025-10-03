@@ -67,7 +67,7 @@ class BlenderDataset:
                 diffuse_image,
                 glossy_image,
                 normal_image,
-                _,
+                position_image,
                 roughness_image,
                 specular_image,
                 metalness_image,
@@ -109,10 +109,13 @@ class BlenderDataset:
         T = w2c[:3, 3]
 
         # Convert to depth to distance image
-        position_image = transform_depth_to_position_image(
-            depth_image[:, :, 0], fovx, fovy
-        )
-        distance_image = torch.norm(position_image, dim=-1)
+        if depth_image is not None:
+            position_image = transform_depth_to_position_image(
+                depth_image[:, :, 0], fovx, fovy
+            )
+            distance_image = torch.norm(position_image, dim=-1)
+        else:
+            distance_image = (position_image - torch.from_numpy(c2w[:3, 3])).norm(dim=-1)
 
         cam_info = CameraInfo(
             uid=idx,

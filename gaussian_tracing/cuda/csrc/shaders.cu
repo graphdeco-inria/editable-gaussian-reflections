@@ -143,13 +143,23 @@ extern "C" __global__ void __raygen__rg() {
             pixel.output_throughput[step] = pixel.output_throughput[step - 1];
         }
 
-        pixel.output_throughput[step] *= principled_specular(effective_normal, -ray_direction, next_direction, effective_F0, effective_roughness) / fmaxf(sample_vndf_pdf(effective_normal, -ray_direction, next_direction, effective_roughness), 1e-12f); 
+        pixel.output_throughput[step] *= vndf_sampling_final_weight(
+            effective_normal,
+            -ray_direction,
+            next_direction,
+            effective_F0,
+            effective_roughness
+        ); 
 
         // * Update ray and log it for debugging
         ray_origin = next_origin;
         ray_direction = next_direction;
         pixel.output_ray_origin[step] = ray_origin;
         pixel.output_ray_direction[step] = ray_direction;
+
+        if (pixel.output_throughput[step].x < 0.0f || pixel.output_throughput[step].y < 0.0f || pixel.output_throughput[step].z < 0.0f) {
+            printf("Error: Negative throughput at pixel %u, step %d: (%f, %f, %f)\n", pixel_id, step, pixel.output_throughput[step].x, pixel.output_throughput[step].y, pixel.output_throughput[step].z);
+        }
     }
 
     // * Total all rgb passes into the final image (on which denoising is applied)

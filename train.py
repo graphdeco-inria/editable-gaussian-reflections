@@ -34,12 +34,7 @@ from gaussian_tracing.utils.image_utils import psnr
 from gaussian_tracing.utils.loss_utils import l1_loss
 from gaussian_tracing.utils.tonemapping import tonemap
 
-try:
-    from torch.utils.tensorboard import SummaryWriter
-
-    TENSORBOARD_FOUND = True
-except ImportError:
-    TENSORBOARD_FOUND = False
+from torch.utils.tensorboard import SummaryWriter
 
 
 def prepare_output_and_logger(cfg: TyroConfig):
@@ -55,13 +50,7 @@ def prepare_output_and_logger(cfg: TyroConfig):
     with open(f"{cfg.model_path}/cfg.yml", "w") as f:
         yaml.dump(vars(cfg), f)
 
-    # Create Tensorboard writer
-    tb_writer = None
-    if TENSORBOARD_FOUND:
-        tb_writer = SummaryWriter(cfg.model_path)
-    else:
-        print("Tensorboard not available: not logging progress")
-    return tb_writer
+    return SummaryWriter(cfg.model_path)
 
 
 @torch.no_grad()
@@ -102,7 +91,7 @@ def training_report(
                     package = render(
                         viewpoint,
                         raytracer,
-                        denoise=False
+                        denoise=True
                     )
 
                     os.makedirs(
@@ -112,7 +101,6 @@ def training_report(
 
                     diffuse_image = tonemap(package.rgb[0]).clamp(0, 1)
                     glossy_image = tonemap(package.rgb[1:].sum(dim=0)).clamp(0, 1)
-                    print(package.final.amin(), package.final.sum())
                     pred_image = tonemap(package.final[0]).clamp(0, 1)
                     pred_image_without_denoising = tonemap(package.rgb.sum(dim=0))
                     diffuse_gt_image = tonemap(viewpoint.diffuse_image).clamp(0, 1)

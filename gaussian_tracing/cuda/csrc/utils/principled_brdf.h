@@ -7,45 +7,6 @@ __device__ float3 fresnel_schlick(float3 F0, float cosTheta) {
     return F0 + (1.0f - F0) * powf(1.0f - cosTheta, 5.0f);
 }
 
-__device__ float3 exact_fresnel(const float3 wi,
-    const float3 H,
-    const float3 f0) {
-    auto fresnel_dielectric_cos = [] __device__ (float cosi, float3 eta) {
-        float c = fabsf(cosi);
-        float3 g2 = eta * eta - 1.0f + c * c;
-        float3 g  = make_float3(sqrtf(g2.x), sqrtf(g2.y), sqrtf(g2.z));
-        float3 A  = (g - c) / (g + c);
-        float3 B  = (c * (g + c) - 1.0f) / (c * (g - c) + 1.0f);
-        float3 result = 0.5f * A * A * (1.0f + B * B);
-        if (g2.x <= 0.0f) result.x = 1.0f;
-        if (g2.y <= 0.0f) result.y = 1.0f;
-        if (g2.z <= 0.0f) result.z = 1.0f;
-        return result;
-    };
-
-    auto inverse_lerp = [] __device__ (float3 a, float b, float3 x) {
-        return (x - a) / (b - a);
-    };
-
-    auto lerp3 = [] __device__ (const float3& a, const float3& b, float3 t) {
-        return a + (b - a) * t;
-    };
-
-    float3 ior = (2.0f / (1.0f - make_float3(sqrtf(f0.x), sqrtf(f0.y), sqrtf(f0.z)))) - 1.0f; 
-    const float3 real_F  = fresnel_dielectric_cos(dot(wi, H), ior);
-    const float3 real_F0 = fresnel_dielectric_cos(1.0f, ior);
-    return lerp3(f0, make_float3(1.0f), inverse_lerp(real_F0, 1.0f, real_F));
-}
-
-__device__ inline float D_GGX(float3 N, float3 H, float alpha) {
-    float a2 = alpha * alpha;                 
-    float Nh = fmaxf(dot(N, H), 0.0f);
-    if (Nh <= 0.0f) return 0.0f;
-    float Nh2   = Nh * Nh;
-    float denom = fmaf((a2 - 1.0f), Nh2, 1.0f); // 1 + (a^2-1)*(N·H)^2
-    return a2 / (M_PI * denom * denom);
-}
-
 __device__ inline float lambda_GGX(float3 N, float3 W, float alpha) {
     float c = dot(N, W);                       
     if (c <= 0.0f) return 0.0f;                
@@ -60,26 +21,6 @@ __device__ inline float G_Smith(float3 N, float3 V, float3 L, float alpha) {
     float lv = lambda_GGX(N, V, alpha);
     float ll = lambda_GGX(N, L, alpha);
     return 1.0f / (1.0f + lv + ll);
-}
-
-__device__ float3 principled_specular(float3 N, float3 V, float3 L, float3 f0, float roughness) {
-    float alpha = roughness * roughness;
-    if (alpha * alpha < 5e-7f) {
-        return make_float3(0.0f);
-    }
-
-    float3 H = normalize(V + L);
-
-    float D = D_GGX(N, H, alpha);
-    float3 F = exact_fresnel(V, H, f0);
-    float G = G_Smith(N, V, L, alpha); 
-
-    float NoL = dot(N, L);
-    if (NoL <= 0.0f) return make_float3(0.0f);
-    float NoV = dot(N, V);
-    if (NoV <= 0.0f) return make_float3(0.0f);
-
-    return D * F * G / (4.0f * NoV);
 }
 
 __device__ inline float3 safe_normalize(const float3& v) {
@@ -162,7 +103,7 @@ __device__ float G1(float3 N, float3 W, float alpha) {
     return 1.0f / (1.0f + lambda_GGX(N, W, alpha));
 }
 
-__device__ float sample_vndf_pdf( // VNDF PDF, solid angle
+__device__ float vndf_sampling_pdf( // VNDF PDF, solid angle
     float3 N, float3 V, float3 L, float roughness)
 {
     float NoV = fminf(dot(N, V), 1.0f);
@@ -182,4 +123,20 @@ __device__ float sample_vndf_pdf( // VNDF PDF, solid angle
 
     float G1v = G1(N, V, a);
     return D * G1v / (4.0f * NoV);
+}
+
+__device__ float3 vndf_sampling_final_weight(
+    float3 N, float3 V, float3 L, float3 f0, float roughness)
+{
+    float alpha = roughness * roughness;
+    if (alpha < 5e-7f) return make_float3(0.0f);
+
+    float3 H = safe_normalize(V + L);
+    // float3 F = exact_fresnel(V, H, f0);
+    float3 F = fresnel_schlick(f0, fmaxf(dot(V, H), 0.0f)); 
+
+    float lv = lambda_GGX(N, V, alpha);
+    float ll = lambda_GGX(N, L, alpha);
+
+    return F * (1.0f + lv) / (1.0f + lv + ll);
 }
