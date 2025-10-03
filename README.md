@@ -25,6 +25,23 @@ bash ./scripts/test.sh
 bash ./scripts/dryrun.sh
 ```
 
+## Create dense point clouds for initialization 
+```bash
+bash ./scripts/prepare_initial_plys.sh
+```
+
+## Run on synthetic scenes
+```bash
+bash ./scripts/download/download_renders_compressed.sh
+bash ./scripts/benchmark/benchmark_renders_compressed.sh
+```
+
+## Run on real scenes
+```bash
+bash ./scripts/download/download_real_scenes.sh
+bash ./scripts/benchmark/benchmark_real_scenes.sh
+```
+
 ## Debugging
 
 If you run into cmake or gcc version issues, try using conda to install newer versions.

@@ -1,42 +1,28 @@
-import argparse
 import os
-from dataclasses import dataclass
 
+import numpy as np
 import torch
 import tyro
 from tqdm import tqdm
 
-from gaussian_tracing.arguments import ModelParams
-from gaussian_tracing.scene.dataset.colmap_parser import ColmapParser
+from gaussian_tracing.arguments import TyroConfig
+from gaussian_tracing.dataset.colmap_parser import ColmapParser
 from gaussian_tracing.scene.dataset_readers import get_dataset
-from gaussian_tracing.scene.tonemapping import tonemap
+from gaussian_tracing.utils.depth_utils import (
+    transform_distance_to_position_image,
+    transform_points,
+)
 from gaussian_tracing.utils.ply_utils import save_ply
+from gaussian_tracing.utils.tonemapping import tonemap
 
 
-@dataclass
-class Config:
-    # Path to scene
-    source_path: str = "data/renders/shiny_kitchen"
-    # Path to output
-    output_dir: str = "output/plys/shiny_kitchen"
-    # Scale to bin
-    scale: float = 50.0
-    # Resolution
-    resolution: int = 128
-
-
-def main(cfg: Config):
-    if not os.path.isdir(cfg.output_dir):
-        os.makedirs(cfg.output_dir, exist_ok=True)
-
-    model_params = ModelParams(parser=argparse.ArgumentParser())
-    model_params.resolution = cfg.resolution
+def main(cfg: TyroConfig):
     colmap_parser = ColmapParser(cfg.source_path)
     print("SFM Point Cloud:", colmap_parser.points.shape)
-    ply_path = os.path.join(cfg.output_dir, "point_cloud_sfm.ply")
+    ply_path = os.path.join(cfg.source_path, "point_cloud_sfm.ply")
     save_ply(ply_path, colmap_parser.points, colmap_parser.points_rgb)
 
-    dataset = get_dataset(model_params, cfg.source_path, split="train")
+    dataset = get_dataset(cfg, cfg.source_path, split="train")
     dataloader = torch.utils.data.DataLoader(
         dataset,
         batch_size=1,
@@ -50,7 +36,17 @@ def main(cfg: Config):
 
     for idx, cam_info_batch in enumerate(tqdm(dataloader)):
         cam_info = cam_info_batch[0]
-        points = cam_info.position_image.reshape(-1, 3)
+        w2c = np.eye(4)
+        w2c[:3, :3] = np.transpose(cam_info.R)
+        w2c[:3, 3] = cam_info.T
+        c2w = np.linalg.inv(w2c)
+
+        distance_image = cam_info.depth_image
+        position_image = transform_distance_to_position_image(
+            distance_image, cam_info.FovX, cam_info.FovY
+        )
+        points = position_image.reshape(-1, 3)
+        points = transform_points(points, c2w)
         colors = tonemap(cam_info.diffuse_image.reshape(-1, 3))
 
         points_all.append(points.cpu())
@@ -61,7 +57,7 @@ def main(cfg: Config):
     colors = torch.cat(colors_all)  # (N, 3)
 
     # Compute voxel indices
-    voxel_coords = (points * cfg.scale).round().int()
+    voxel_coords = (points * cfg.voxel_scale).round().int()
 
     # Find unique voxel positions
     unique_coords, inverse_indices, counts = torch.unique(
@@ -83,13 +79,13 @@ def main(cfg: Config):
     avg_colors = avg_colors[mask]
 
     # Extract points and colors
-    points_np = (unique_coords.float() / cfg.scale).numpy()  # (n, 3)
+    points_np = (unique_coords.float() / cfg.voxel_scale).numpy()  # (n, 3)
     colors_np = avg_colors.numpy()  # (n, 3)
     print("Dense Point Cloud:", points_np.shape)
-    ply_path = os.path.join(cfg.output_dir, "point_cloud_dense.ply")
+    ply_path = os.path.join(cfg.source_path, "point_cloud_dense.ply")
     save_ply(ply_path, points_np, colors_np)
 
 
 if __name__ == "__main__":
-    cfg = tyro.cli(Config)
+    cfg = tyro.cli(TyroConfig)
     main(cfg)
