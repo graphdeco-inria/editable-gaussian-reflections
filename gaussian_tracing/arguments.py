@@ -36,7 +36,7 @@ class TyroConfig:
     # * Dataset params
     source_path: Annotated[str, arg(aliases=["-s"])] = ""
     model_path: Annotated[str, arg(aliases=["-m"])] = ""
-    resolution: int = 512
+    resolution: Annotated[int, arg(aliases=["-r"])] = 512
     eval: bool = False
     max_images: int | None = None
     do_depth_fit: bool = False
