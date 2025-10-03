@@ -299,18 +299,9 @@ def splat_render(cam_blender, target=None, start_event=None, end_event=None):
         start_event.record()
     package = render(viewpoint_cam, pc, torch.tensor([0.0, 0.0, 0.0], device="cuda"))
     if target is not None:
-        if "OG_LOSS" in os.environ:
-            image = package["render"]
-            target = target.moveaxis(-1, 0)
-            Ll1 = l1_loss_gs(image, target)
-            ssim_value = ssim_gs(image, target)
-            lambda_dssim = 0.2
-            loss = (1.0 - lambda_dssim) * Ll1 + lambda_dssim * (1.0 - ssim_value)
-            loss.backward()
-        else:
-            image = package["render"].moveaxis(0, -1)
-            loss = torch.nn.functional.mse_loss(image, target)
-            loss.backward()
+        image = package["render"].moveaxis(0, -1)
+        loss = torch.nn.functional.mse_loss(image, target)
+        loss.backward()
     else:
         loss = None
     if end_event is not None:

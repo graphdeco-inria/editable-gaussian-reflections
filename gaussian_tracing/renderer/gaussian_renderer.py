@@ -52,11 +52,6 @@ def render(
     _target_f0 = target_f0
     _target_depth = target_depth
 
-    if raytracer.pc.model_params.use_diffuse_target:
-        _target = _target_diffuse
-    if raytracer.pc.model_params.use_glossy_target:
-        _target = _target_diffuse
-
     with torch.set_grad_enabled(do_backprop):
         raytracer(
             camera,

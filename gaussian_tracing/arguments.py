@@ -24,9 +24,6 @@ class ModelParams:
 
         self.raytracer_version = ""  # "build_v0.1_attached_brdf"
 
-        self.disable_bounce_grads = False
-
-        self.keep_every_kth_view = 1
         self.max_images = 9999999
 
         self.min_opacity = 0.005
@@ -35,30 +32,11 @@ class ModelParams:
         self.znear_scaledown = 0.8
         self.zfar_scaleup = 1.5
 
-        self.downsampling_mode = "area"
-
-        self.raytrace_primal = False
-
-        self.f0_decay = False
-
-        self.opacity_pruning_threshold = 0.005  # 0.051 #
-        self.cap_max = -1  # for mcmc
-
-        self.use_opacity_resets = False
-
-        self.warmup_loss_weight_diffuse = 10000.0
-
         self.transmittance_threshold = 0.01
         self.alpha_threshold = 0.005
         self.exp_power = 3
 
-        self.use_diffuse_target = False
-        self.use_glossy_target = False
-
         self.no_bounces_until_iter = 3_000
-        self.max_one_bounce_until_iter = -1
-
-        self.skip_n_images = 0
 
 
 class OptimizationParams:
@@ -82,20 +60,9 @@ class OptimizationParams:
         self.scaling_lr = 0.005
         self.rotation_lr = 0.001
         self.percent_dense = 0.01
-        self.lambda_dssim = 0.2
-        self.lambda_dist = 0.0
-        self.lambda_normal = 0.05
-        self.opacity_cull = 0.05
-
-        self.noise_lr = 5e5
-        self.scale_reg = 0.0  # 0.01 in mcmc
-        self.opacity_reg = 0.0  # 0.01 in mcmc
 
         self.scale_decay = 0.9999
         self.opacity_decay = 1.0
-
-        self.densif_scaledown_clones = False
-        self.densif_jitter_clones = False
 
         self.densification_interval = 500
         self.opacity_reset_interval = (
@@ -105,26 +72,7 @@ class OptimizationParams:
         self.densify_until_iter = 15_000  # was 25k in mcmc
         self.densify_grad_threshold = 0.0002
 
-        self.densif_use_top_k = True
-        self.densif_final_num_gaussians = 800_000
-        self.densif_size_ranking_weight = 0.0
-        self.densif_opacity_ranking_weight = 0.0
-        self.densif_no_pruning_large_radii = False
-        self.densif_use_fixed_split_clone_ratio = True
-        self.densif_split_clone_ratio = 0.5
-        self.densif_num_gaussians_per_step = 1_000
-
         self.prune_even_without_densification = True
-
-        self.densif_no_pruning = False
-        self.densif_no_cloning = False
-        self.densif_no_splitting = True
-        self.densif_pruning_only = False
-
-        self.densif_skip_big_points_ws = False
-
-        self.sh_slowdown_factor = 20.0
-        self.random_background = False
 
         self.beta_1 = 0.9
         self.beta_2 = 0.999  # important to be lower than 0.999
@@ -137,29 +85,17 @@ class TyroConfig:
     # Optimization params
     opt_params: OptimizationParams = field(default_factory=lambda: OptimizationParams())
 
-    # IP address
-    ip: str = "127.0.0.1"
-    # Port
-    port: int = 8000
-    # Enable viewer
     viewer: bool = False
-    # Viewer mode
     viewer_mode: str = "local"
-    # Detect anomaly
     detect_anomaly: bool = False
-    # Flip camera
     flip_camera: bool = False
-    # Validation views
     val_views: list[int] = field(default_factory=lambda: [75, 175])
-    # Test iterations
     test_iterations: list[int] = field(
         default_factory=lambda: [4, 6_000, 12_000, 18_000, 24_000, 32_000]
     )
-    # Save iterations
     save_iterations: list[int] = field(
         default_factory=lambda: [4, 6_000, 12_000, 18_000, 24_000, 32_000]
     )
-    # Quiet
     quiet: bool = False
     # Checkpoint iterations
     checkpoint_iterations: list[int] = field(default_factory=lambda: [])
@@ -168,55 +104,35 @@ class TyroConfig:
     # Total iterations
     iterations: int = 32_000
 
-    # Source path
+    # * Dataset params
     source_path: Annotated[str, arg(aliases=["-s"])] = ""
-    # Model path
     model_path: Annotated[str, arg(aliases=["-m"])] = ""
-    # Resolution
     resolution: int = 512
-    # Evaluation
     eval: bool = False
-    # Max images
     max_images: int | None = None
-    # Fit depth images to colmap point cloud
     do_depth_fit: bool = False
 
-    # Iteration
+    # * Render params
     iteration: int = -1
-    # Maximum number of bounces
     max_bounces: int = 2
-    # Samples per pixel
     spp: int = 128
-    # Use train views
     train_views: bool = False
-    # Denoise
     denoise: bool = True
-    # Rendering modes
     modes: list[Literal["regular", "env_rot_1", "env_move_1", "env_move_2"]] = field(
         default_factory=lambda: ["regular"]
     )
-    # Skip video
     skip_video: bool = False
-    # Skip save frames
     skip_save_frames: bool = False
 
-    # Initial number of GSs. Ignored if using sfm
+    # * Init params
     init_num_pts: int = 100_000
-    # Initial number of farfield GSs.
     init_num_pts_farfield = 75_000
-    # Initial opacity of GS
     init_opa: float = 0.1
-    # Initial opacity of farfield GS
     init_opa_farfield: float = 0.1
-    # Initial scale of GS
     init_scale: float = 0.1  # 1.0 for 3dgs, 0.1 for mcmc
-    # Initial scale of farfield GS
     init_scale_farfield: float = 0.1
-    # Initial roughness of GS
     init_roughness: float = 0.1
-    # Initial f0 of GS
     init_f0: float = 0.04
-    # Initial diffuse of farfield GS
     init_diffuse_farfield: float = 0.2
 
     # * Loss weights
@@ -227,5 +143,5 @@ class TyroConfig:
     loss_weight_f0: float = 1.0
     loss_weight_roughness: float = 1.0
 
-    # Disable z-near pruning
+    # 
     disable_znear_densif_pruning: bool = False

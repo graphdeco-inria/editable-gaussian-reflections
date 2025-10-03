@@ -470,17 +470,6 @@ def main(cfg: TyroConfig):
             denoise=cfg.denoise,
         )
 
-        if opt_params.opacity_reg > 0:
-            gaussians._opacity.grad += torch.autograd.grad(
-                cfg.opacity_reg * torch.abs(gaussians.get_opacity).mean(),
-                gaussians._opacity,
-            )[0]
-        if opt_params.scale_reg > 0:
-            gaussians._scaling.grad += torch.autograd.grad(
-                cfg.scale_reg * torch.abs(gaussians.get_scaling).mean(),
-                gaussians._scaling,
-            )[0]
-
         with torch.no_grad():
             if opt_params.opacity_decay < 1.0:
                 gaussians._opacity.copy_(
@@ -616,10 +605,7 @@ def main(cfg: TyroConfig):
             raytracer.rebuild_bvh()
             torch.cuda.synchronize()
 
-        if iteration == 1 and (
-            model_params.no_bounces_until_iter in [-1, 0]
-            or model_params.no_bounces_until_iter > 900_000
-        ):
+        if iteration == 1 and model_params.no_bounces_until_iter in [-1, 0]:
             gaussians.add_farfield_points(scene)
             raytracer.rebuild_bvh()
             torch.cuda.synchronize()
@@ -645,9 +631,6 @@ if __name__ == "__main__":
     if cfg.opt_params.timestretch != 1:
         cfg.model_params.no_bounces_until_iter = int(
             cfg.model_params.no_bounces_until_iter * cfg.opt_params.timestretch
-        )
-        cfg.model_params.max_one_bounce_until_iter = int(
-            cfg.model_params.max_one_bounce_until_iter * cfg.opt_params.timestretch
         )
         cfg.test_iterations = [
             int(x * cfg.opt_params.timestretch) for x in cfg.test_iterations

@@ -60,13 +60,6 @@ class Scene:
 
         data_dir = self.cfg.source_path
         scene_info = readSceneInfo(cfg, data_dir)
-        scene_info.train_cameras = scene_info.train_cameras[
-            :: self.model_params.keep_every_kth_view
-        ]
-
-        scene_info.train_cameras = scene_info.train_cameras[
-            self.model_params.skip_n_images :
-        ]
 
         if shuffle:
             random.shuffle(
