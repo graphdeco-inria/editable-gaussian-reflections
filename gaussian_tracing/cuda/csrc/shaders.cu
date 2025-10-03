@@ -78,7 +78,6 @@ extern "C" __global__ void __intersection__gaussian() {
 
 extern "C" __global__ void __raygen__rg() {
     // * Compute pixel index
-    int num_pixels = params.image_width * params.image_height;
     uint3 idx = optixGetLaunchIndex();
     uint3 dim = optixGetLaunchDimensions();
     uint32_t pixel_id = idx.y * params.image_width + idx.x;

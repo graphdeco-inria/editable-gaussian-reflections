@@ -21,8 +21,6 @@ __device__ void backward_pass(
 #endif
 
     // * Init variables used to flow gradient from back to front
-    float prev_gaussian_opacity = 0.0f;
-    float weighted_opacity_deltas = 0.0f;
     float3 prev_gaussian_scale = make_float3(0.0f, 0.0f, 0.0f);
     float3 weighted_scale_deltas = make_float3(0.0f, 0.0f, 0.0f);
     float3 prev_gaussian_mean = make_float3(0.0f, 0.0f, 0.0f);
