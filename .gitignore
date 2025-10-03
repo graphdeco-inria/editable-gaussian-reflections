@@ -66,6 +66,7 @@ coverage.xml
 *.log
 *.stdout 
 *.stderr
+*.out
 
 # Mac and Linux file cruft
 .DS_Store
