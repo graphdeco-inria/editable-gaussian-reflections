@@ -118,9 +118,7 @@ extern "C" __global__ void __raygen__rg() {
         // * Post-process accumulated normal and roughness
         float3 unnormalized_normal = pixel.output_normal[step];
         float3 effective_normal = normalize(unnormalized_normal);
-        float effective_roughness =
-            max(pixel.output_roughness[step],
-                eps_min_roughness); // * For stability avoid exactly 0 roughness
+        float effective_roughness = max(pixel.output_roughness[step], eps_min_roughness); // * For stability avoid exactly 0 roughness
 
         // * Terminate path if the accumulated normal is invalid
         if (length(unnormalized_normal) < reflection_invalid_normal_threshold) {
@@ -129,7 +127,7 @@ extern "C" __global__ void __raygen__rg() {
 
         // * Compute reflection ray for the following step
         float3 effective_position = ray_origin + pixel.output_depth[step] * ray_direction;
-        float3 next_direction = sample_vndf(
+        float3 next_direction = sample_cook_torrance(
             effective_normal,
             -ray_direction,
             effective_roughness,
@@ -142,23 +140,14 @@ extern "C" __global__ void __raygen__rg() {
             pixel.output_throughput[step] = pixel.output_throughput[step - 1];
         }
 
-        pixel.output_throughput[step] *= vndf_sampling_final_weight(
-            effective_normal,
-            -ray_direction,
-            next_direction,
-            effective_F0,
-            effective_roughness
-        ); 
+        pixel.output_throughput[step] *= cook_torrance_weight(
+            effective_normal, -ray_direction, next_direction, effective_roughness, effective_F0);
 
         // * Update ray and log it for debugging
         ray_origin = next_origin;
         ray_direction = next_direction;
         pixel.output_ray_origin[step] = ray_origin;
         pixel.output_ray_direction[step] = ray_direction;
-
-        if (pixel.output_throughput[step].x < 0.0f || pixel.output_throughput[step].y < 0.0f || pixel.output_throughput[step].z < 0.0f) {
-            printf("Error: Negative throughput at pixel %u, step %d: (%f, %f, %f)\n", pixel_id, step, pixel.output_throughput[step].x, pixel.output_throughput[step].y, pixel.output_throughput[step].z);
-        }
     }
 
     // * Total all rgb passes into the final image (on which denoising is applied)

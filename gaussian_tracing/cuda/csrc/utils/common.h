@@ -1,7 +1,7 @@
 
 
 #include "activations.cu"
-#include "principled_brdf.h"
+#include "ggx_brdf.h"
 #include "kernel.cu"
 #include "misc.cu"
 #include "random.h"
