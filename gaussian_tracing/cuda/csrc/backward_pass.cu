@@ -140,7 +140,7 @@ __device__ void backward_pass(
         dL_dalpha += (weighted_roughness_deltas * tmp1) * dL_doutput_roughness;
         dL_dalpha += (weighted_depth_deltas * tmp1) * dL_doutput_depth;
 
-        float tmp2 = -((pixel.output_transmittance[step] - pixel.output_total_transmittance[step]) / (1.0 - alpha));
+        float tmp2 = -((pixel.output_transmittance[step] - pixel.output_total_transmittance[step]) / (1.0f - alpha));
         dL_dalpha += tmp2 * dot(pixel.remaining_rgb[step], dL_doutput_rgb);
         dL_dalpha += tmp2 * dot(pixel.remaining_normal[step], dL_doutput_normal);
         dL_dalpha += tmp2 * dot(pixel.remaining_f0[step], dL_doutput_f0);

@@ -21,6 +21,7 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 import torchvision
+from torchvision.utils import save_image
 import tyro
 from tyro.conf import arg
 from tqdm import tqdm
@@ -41,7 +42,7 @@ class RenderCLI:
     iteration: int = -1
     spp: int = 128
     train_views: bool = False
-    denoise: bool = False
+    denoise: bool = True
     modes: list[Literal["regular", "env_rot_1", "env_move_1", "env_move_2"]] = field(
         default_factory=lambda: ["regular"]
     )
@@ -222,12 +223,15 @@ def render_set(
             if cli.spp > 1:
                 config.accumulate_samples.copy_(True)
                 raytracer.cuda_module.reset_accumulators()
-                for i in range(cli.spp):
+                for _ in range(cli.spp):
                     package = render(
                         view,
                         raytracer,
-                        denoise=cli.denoise,
-                    ) #!!!!!!!
+                        denoise=False,
+                    ) 
+                if cli.denoise:
+                    raytracer.cuda_module.denoise()
+                    package.final = raytracer.cuda_module.get_framebuffer().output_denoised.clone().detach().moveaxis(-1, 1)
             else:
                 package = render(
                     view,

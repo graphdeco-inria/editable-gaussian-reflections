@@ -48,7 +48,7 @@ class DenoiserWrapper {
         layer.output = createOptixImage2D(
             params_on_host.image_width,
             params_on_host.image_height,
-            reinterpret_cast<CUdeviceptr>(params_on_host.framebuffer.output_final));
+            reinterpret_cast<CUdeviceptr>(params_on_host.framebuffer.output_denoised));
         layers.push_back(layer);
 
         // * Use normals as guide
@@ -80,6 +80,13 @@ class DenoiserWrapper {
             &layers[0].input,
             hdrIntensity,
             scratch,
+            scratch_size));
+        OPTIX_CHECK(optixDenoiserComputeAverageColor(
+            optix_denoiser,
+            /* stream */ nullptr,
+            &layers[0].input,               // same OptixImage2D you denoise
+            hdrAverageColor,                // device ptr to 3 floats (R,G,B)
+            scratch, 
             scratch_size));
         OPTIX_CHECK(optixDenoiserInvoke(
             optix_denoiser,

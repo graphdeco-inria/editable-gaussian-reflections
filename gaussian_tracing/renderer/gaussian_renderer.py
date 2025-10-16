@@ -17,7 +17,6 @@ from gaussian_tracing.renderer.gaussian_raytracer import GaussianRaytracer
 from gaussian_tracing.scene.cameras import Camera
 
 
-# todo use dicts here instead of manually repeated code
 def render(
     camera: Camera,
     raytracer: GaussianRaytracer,
@@ -72,7 +71,7 @@ def render(
     # todo clean this up
     return SimpleNamespace(
         rgb=rgb,
-        final=framebuffer.output_final.clone().detach().moveaxis(-1, 1),
+        final=framebuffer.output_denoised.clone().detach().moveaxis(-1, 1) if denoise else framebuffer.output_final.clone().detach().moveaxis(-1, 1),
         depth=framebuffer.output_depth.clone().detach().moveaxis(-1, 1)
         if hasattr(framebuffer, "output_depth") and framebuffer.output_depth is not None
         else torch.zeros_like(rgb).mean(dim=1, keepdim=True),
