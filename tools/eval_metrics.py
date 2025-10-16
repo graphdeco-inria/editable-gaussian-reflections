@@ -17,25 +17,20 @@ from torchvision.transforms.functional import to_tensor
 @dataclass
 class Conf:
     scenes: List[int] = tuple([
-        # "multichromeball_identical_kitchen_v2", 
-        # "multichromeball_kitchen_v2", 
-        # "multichromeball_tint_kitchen_v2", 
-        # "multichromeball_value_kitchen_v2",
-        "shiny_bedroom", 
         "shiny_kitchen", 
         "shiny_livingroom", 
         "shiny_office"
     ])
     methods: List[int] = tuple([
-        "3dgs",
-        "2dgs",
-        "gaussian_shader", 
-        "3dgs_dr", 
-        "ref_gaussian", 
-        # "priors",
-        "envgs_network",
-        "envgs_gt",
-        "ours_network",
+        # "3dgs",
+        # "2dgs",
+        # "gaussian_shader", 
+        # "3dgs_dr", 
+        # "ref_gaussian", 
+        # # "priors",
+        # "envgs_network",
+        # "envgs_gt",
+        # "ours_network",
         "ours",
     ])
     render_passes: List[int] = tuple([
@@ -45,22 +40,23 @@ class Conf:
         "render", 
     ])
 
-    ground_truth_pattern: str = "gts/{scene}/test/tonemapped_{render_pass}/render_{i:04d}.png"
+    ground_truth_pattern: str = "../data/renders/{scene}/test/tonemapped_{render_pass}/render_{i:04d}.png"
     predictions_path_pattern = {
-        "3dgs": "3dgs_results_v2/{scene}/test/ours_30000/{render_pass}/{i:05d}.png",
-        "2dgs": "2dgs_results_v2/{scene}/test/ours_30000/{render_pass}/{i:05d}.png",
-        "gaussian_shader": "gaussian_shader_results_v2/{scene}/test/ours_30000/{render_pass}/{i:05d}.png",
-        "3dgs_dr": "3dgs_dr_results_v2/{scene}/test/ours_97000/renders/{render_pass}/{i:05d}.png", 
-        "ref_gaussian": "ref_gaussian_results_v2/{scene}/test/renders/{render_pass}/{i:05d}.png",
+        # "3dgs": "3dgs_results_v2/{scene}/test/ours_30000/{render_pass}/{i:05d}.png",
+        # "2dgs": "2dgs_results_v2/{scene}/test/ours_30000/{render_pass}/{i:05d}.png",
+        # "gaussian_shader": "gaussian_shader_results_v2/{scene}/test/ours_30000/{render_pass}/{i:05d}.png",
+        # "3dgs_dr": "3dgs_dr_results_v2/{scene}/test/ours_97000/renders/{render_pass}/{i:05d}.png", 
+        # "ref_gaussian": "ref_gaussian_results_v2/{scene}/test/renders/{render_pass}/{i:05d}.png",
         
-        "envgs_network" : "envgs/renders_prnormals/envgs_{scene}/{render_pass}/frame0000_camera{i:04d}.png",
-        "envgs_gt" : "envgs/renders_gtnormals/envgs_{scene}/{render_pass}/frame0000_camera{i:04d}.png",
+        # "envgs_network" : "envgs/renders_prnormals/envgs_{scene}/{render_pass}/frame0000_camera{i:04d}.png",
+        # "envgs_gt" : "envgs/renders_gtnormals/envgs_{scene}/{render_pass}/frame0000_camera{i:04d}.png",
 
-        "priors" : "real_datasets_v3_filmic/{scene}/test/{render_pass}/render_{i:04d}.png",
+        # "priors" : "real_datasets_v3_filmic/{scene}/test/{render_pass}/render_{i:04d}.png",
 
-        "ours_network" : "ours_results_from_priors_final_v1/{scene}/test/ours_8000/{render_pass}/{i:05d}_{render_pass}.png",
+        # "ours_network" : "ours_results_from_priors_final_v1/{scene}/test/ours_8000/{render_pass}/{i:05d}_{render_pass}.png",
         
-        "ours" : "our_results_v4/{scene}/test/ours_8000/{render_pass}/{i:05d}_{render_pass}.png",
+        # "ours" : "our_results_v4/{scene}/test/ours_8000/{render_pass}/{i:05d}_{render_pass}.png",
+        "ours" : "../tmp_init_scale_1.0/{scene}/test/ours_8000/{render_pass}/{i:05d}_{render_pass}.png",
     }
     render_pass_naming_schemes = {
         "3dgs": {
@@ -143,8 +139,8 @@ if __name__ == "__main__":
 
     metrics = dict(
         psnr=PeakSignalNoiseRatio(data_range=(0.0, 1.0)).to(device), 
-        lpips=LearnedPerceptualImagePatchSimilarity(normalize=True).to(device),
-        ssim=StructuralSimilarityIndexMeasure(data_range=(0.0, 1.0)).to(device)
+        # lpips=LearnedPerceptualImagePatchSimilarity(normalize=True).to(device),
+        # ssim=StructuralSimilarityIndexMeasure(data_range=(0.0, 1.0)).to(device)
     )
 
     base_path = os.path.dirname(os.path.abspath(__file__))

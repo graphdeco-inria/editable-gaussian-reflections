@@ -13,7 +13,7 @@ dist/
 .eggs/
 *.egg
 MANIFEST
-tmp/
+tmp*/
 
 # Editable install egg-link file
 *.egg-link
@@ -96,6 +96,7 @@ config.local.*
 /gaussian_tracing/cuda/data
 /output
 /results*
+*.ignore.*
 
 # Local files
 /.bash_history

@@ -214,12 +214,7 @@ class GaussianModel:
             torch.ones((fused_point_cloud.shape[0], 1), device="cuda") * self.cfg.init_roughness
         )
         self._f0 = nn.Parameter(torch.ones((fused_point_cloud.shape[0], 3), device="cuda") * self.cfg.init_f0)
-        if "SKIP_TONEMAPPING" not in os.environ and "DIRECT_INIT" not in os.environ:
-            self._diffuse = nn.Parameter(
-                untonemap(fused_color.clone()).clamp(0, 1) * 0.2
-            )  # should be used even when targets aren't tonemapped, since colmap was run on tonemapped
-        else:
-            self._diffuse = nn.Parameter(fused_color.clone())
+        self._diffuse = nn.Parameter(fused_color.clone())
         self._scaling = nn.Parameter(scales.requires_grad_(True))
         self._rotation = nn.Parameter(rots.requires_grad_(True))
         self._opacity = nn.Parameter(opacities.requires_grad_(True))

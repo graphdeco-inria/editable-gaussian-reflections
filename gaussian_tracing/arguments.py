@@ -31,7 +31,7 @@ class TyroConfig:
     # * Dataset params
     source_path: Annotated[str, arg(aliases=["-s"])] = ""
     model_path: Annotated[str, arg(aliases=["-m"])] = ""
-    resolution: Annotated[int, arg(aliases=["-r"])] = 512
+    resolution: Annotated[int, arg(aliases=["-r"])] = 768
     eval: bool = False
     max_images: int | None = None
     do_depth_fit: bool = False
@@ -53,17 +53,6 @@ class TyroConfig:
     alpha_threshold: float = 0.005
     exp_power: int = 3
     no_bounces_until_iter: int = 3_000
-
-    # * Render params
-    iteration: int = -1
-    spp: int = 128
-    train_views: bool = False
-    denoise: bool = True
-    modes: list[Literal["regular", "env_rot_1", "env_move_1", "env_move_2"]] = field(
-        default_factory=lambda: ["regular"]
-    )
-    skip_video: bool = False
-    skip_save_frames: bool = False
 
     # * Init params
     init_num_pts: int = 100_000

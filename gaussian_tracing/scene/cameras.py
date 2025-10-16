@@ -55,7 +55,7 @@ class Camera(nn.Module):
         self.image_width = diffuse_image.shape[2]
         self.image_height = diffuse_image.shape[1]
 
-        image_holding_device = os.getenv("IMAGE_HOLDING_DEVICE", "cuda")
+        image_holding_device = os.getenv("IMAGE_HOLDING_DEVICE", "cpu")
 
         EXPOSURE = float(os.getenv("EXPOSURE", 3.5))
         self._original_image = (diffuse_image + glossy_image).half().to(image_holding_device)

@@ -50,6 +50,8 @@ class DenoiserWrapper {
             params_on_host.image_height,
             reinterpret_cast<CUdeviceptr>(params_on_host.framebuffer.output_final));
         layers.push_back(layer);
+
+        // * Use normals as guide
         guideLayer.normal = createOptixImage2D(
             params_on_host.image_width,
             params_on_host.image_height,

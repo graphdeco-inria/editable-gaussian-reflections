@@ -23,12 +23,12 @@ def render_set(
 
     start_event.record()
     for view in tqdm(views, desc="Rendering progress"):
-        _ = render(
+        render(
             view,
             raytracer,
             force_update_bvh=False,
             targets_available=False,
-            denoise=cfg.denoise,
+            denoise=False
         )
     end_event.record()
 

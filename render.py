@@ -13,12 +13,16 @@ import math
 import os
 import shutil
 from os import makedirs
+from dataclasses import dataclass, field
+from typing import Annotated, Literal
+import json 
 
 import numpy as np
 import torch
 import torch.nn.functional as F
 import torchvision
 import tyro
+from tyro.conf import arg
 from tqdm import tqdm
 
 from gaussian_tracing.arguments import (
@@ -30,10 +34,25 @@ from gaussian_tracing.utils.general_utils import safe_state
 from gaussian_tracing.utils.image_utils import psnr
 from gaussian_tracing.utils.tonemapping import tonemap
 
+@dataclass
+class RenderCLI:
+    model_path: Annotated[str, arg(aliases=["-m"])]
+
+    iteration: int = -1
+    spp: int = 128
+    train_views: bool = False
+    denoise: bool = False
+    modes: list[Literal["regular", "env_rot_1", "env_move_1", "env_move_2"]] = field(
+        default_factory=lambda: ["regular"]
+    )
+    skip_video: bool = False
+    skip_save_frames: bool = False
+
 
 @torch.no_grad()
 def render_set(
-    cfg,
+    cli: RenderCLI,
+    cfg: TyroConfig,
     scene,
     split,
     iteration,
@@ -42,7 +61,7 @@ def render_set(
 ):
     model_path = cfg.model_path
 
-    for mode in cfg.modes:
+    for mode in cli.modes:
         render_path = os.path.join(model_path, split, "ours_{}".format(iteration), "render")
         gts_path = os.path.join(model_path, split, "ours_{}".format(iteration), "render_gt")
         diffuse_render_path = os.path.join(model_path, split, "ours_{}".format(iteration), "diffuse")
@@ -199,23 +218,21 @@ def render_set(
                 view.update()
 
             config = raytracer.cuda_module.get_config()
-            if cfg.max_bounces > -1:
-                config.num_bounces.copy_(cfg.max_bounces)
 
-            if cfg.spp > 1:
+            if cli.spp > 1:
                 config.accumulate_samples.copy_(True)
                 raytracer.cuda_module.reset_accumulators()
-                for i in range(cfg.spp):
+                for i in range(cli.spp):
                     package = render(
                         view,
                         raytracer,
-                        denoise=cfg.denoise,
-                    )
+                        denoise=cli.denoise,
+                    ) #!!!!!!!
             else:
                 package = render(
                     view,
                     raytracer,
-                    denoise=cfg.denoise,
+                    denoise=cli.denoise,
                 )
 
             diffuse_gt_image = tonemap(view.diffuse_image).clamp(0.0, 1.0)
@@ -239,7 +256,7 @@ def render_set(
             diffuse_psnr_test += psnr(diffuse_image, diffuse_gt_image).mean() / len(views)
             diffuse_l1_test += F.l1_loss(diffuse_image, diffuse_gt_image) / len(views)
 
-            if not cfg.skip_save_frames and mode == "regular":
+            if not cli.skip_save_frames and mode == "regular":
                 torchvision.utils.save_image(
                     glossy_image,
                     os.path.join(glossy_render_path, "{0:05d}".format(idx) + "_glossy.png"),
@@ -336,9 +353,9 @@ def render_set(
         video_dir = f"videos_{mode}".replace("_normal", "")
         os.makedirs(os.path.join(cfg.model_path, video_dir), exist_ok=True)
 
-        if not cfg.skip_video:
+        if not cli.skip_video:
             print("Writing videos...")
-            path = os.path.join(cfg.model_path, f"{{dir}}{split}_{{name}}.mp4")
+            path = os.path.join(cfg.model_path, f"{{dir}}", f"{split}_{{name}}.mp4")
 
             for label, quality in [("hq", "18"), ("lq", "30")]:
                 kwargs = dict(fps=30, options={"crf": quality})
@@ -504,19 +521,24 @@ def render_set(
             f.write(f"{psnr_test}\n")
 
 
-def main(cfg: TyroConfig):
-    # Initialize system state (RNG)
+
+if __name__ == "__main__":
+    cli, unknown_args = tyro.cli(RenderCLI, return_unknown_args=True)
+    saved_cli_path = os.path.join(cli.model_path, "cfg.json")
+    cfg = tyro.cli(TyroConfig, args=unknown_args, default=TyroConfig(**json.load(open(saved_cli_path, "r"))))
+    
     safe_state(cfg.quiet)
     torch.autograd.set_detect_anomaly(cfg.detect_anomaly)
 
     gaussians = GaussianModel(cfg)
-    scene = Scene(cfg, gaussians, load_iteration=cfg.iteration, shuffle=False)
+    scene = Scene(cfg, gaussians, load_iteration=cli.iteration, shuffle=False)
 
     viewpoint_stack = scene.getTrainCameras().copy()
     raytracer = GaussianRaytracer(gaussians, viewpoint_stack[0].image_width, viewpoint_stack[0].image_height)
 
-    if cfg.train_views:
+    if cli.train_views:
         render_set(
+            cli,
             cfg,
             scene,
             "train",
@@ -526,6 +548,7 @@ def main(cfg: TyroConfig):
         )
     else:
         render_set(
+            cli,
             cfg,
             scene,
             "test",
@@ -533,8 +556,3 @@ def main(cfg: TyroConfig):
             scene.getTestCameras(),
             raytracer,
         )
-
-
-if __name__ == "__main__":
-    cfg = tyro.cli(TyroConfig)
-    main(cfg)

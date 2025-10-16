@@ -439,16 +439,16 @@ def main(cfg: TyroConfig):
         if cfg.viewer:
             viewer.gaussian_lock.acquire()
 
-        _ = gaussians.update_learning_rate(iteration)
+        gaussians.update_learning_rate(iteration)
         if not viewpoint_stack:
             viewpoint_stack = scene.getTrainCameras().copy()
         viewpoint_cam = viewpoint_stack.pop(randint(0, len(viewpoint_stack) - 1))
 
         torch.cuda.synchronize()
-        _ = render(
+        render(
             viewpoint_cam,
             raytracer,
-            denoise=cfg.denoise,
+            denoise=False
         )
 
         with torch.no_grad():
@@ -578,6 +578,7 @@ if __name__ == "__main__":
     if cfg.viewer:
         cfg.test_iterations = []
 
+    # todo hardcode this
     if cfg.timestretch != 1:
         cfg.no_bounces_until_iter = int(cfg.no_bounces_until_iter * cfg.timestretch)
         cfg.test_iterations = [int(x * cfg.timestretch) for x in cfg.test_iterations]
