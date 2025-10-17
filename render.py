@@ -114,17 +114,6 @@ def render_set(
         all_F0_renders = []
         all_F0_gts = []
 
-        #
-
-        l1_test = 0.0
-        psnr_test = 0.0
-
-        glossy_l1_test = 0.0
-        glossy_psnr_test = 0.0
-
-        diffuse_l1_test = 0.0
-        diffuse_psnr_test = 0.0
-
         for idx, view in enumerate(tqdm(views, desc="Rendering progress")):
             if "env" in mode:
                 if idx == 0:
@@ -250,15 +239,6 @@ def render_set(
             diffuse_image = tonemap(package.rgb[0]).clamp(0, 1)
             glossy_image = tonemap(package.rgb[1:].sum(dim=0)).clamp(0, 1)
             pred_image = tonemap(package.final.squeeze(0)).clamp(0, 1)
-
-            psnr_test += psnr(pred_image, gt_image).mean() / len(views)
-            l1_test += F.l1_loss(pred_image, gt_image) / len(views)
-
-            glossy_psnr_test += psnr(glossy_image, glossy_gt_image).mean() / len(views)
-            glossy_l1_test += F.l1_loss(glossy_image, glossy_gt_image) / len(views)
-
-            diffuse_psnr_test += psnr(diffuse_image, diffuse_gt_image).mean() / len(views)
-            diffuse_l1_test += F.l1_loss(diffuse_image, diffuse_gt_image) / len(views)
 
             if not cli.skip_save_frames and mode == "regular":
                 torchvision.utils.save_image(
@@ -518,12 +498,6 @@ def render_set(
                     path.format(name="comparison_hq", dir=video_dir),
                     path.format(name=f"comparison_hq_{mode}", dir=""),
                 )
-
-    if mode == "regular":
-        print(f"PSNR: {psnr_test}")
-        with open(os.path.join(model_path, split, "psnr.txt"), "w") as f:
-            f.write(f"{psnr_test}\n")
-
 
 
 if __name__ == "__main__":
