@@ -40,21 +40,15 @@ class GaussianRaytracer:
         self.pc = pc
 
         self._export_param_values()
-        torch.cuda.synchronize()
         self.cuda_module.rebuild_bvh()
-        torch.cuda.synchronize()
 
     @torch.no_grad()
     def rebuild_bvh(self):
         new_size = self.pc._xyz.shape[0]
 
-        torch.cuda.synchronize()
         self.cuda_module.resize(new_size)
-        torch.cuda.synchronize()
         self._export_param_values()
-        torch.cuda.synchronize()
         self.cuda_module.rebuild_bvh()
-        torch.cuda.synchronize()
 
     @torch.no_grad()
     def _export_param_values(self):

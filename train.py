@@ -164,7 +164,7 @@ def main(cfg: Config):
     raytracer = GaussianRaytracer(gaussians, viewpoint_stack[0].image_width, viewpoint_stack[0].image_height)
 
     if cfg.viewer:
-        from gaussianviewer import GaussianViewer
+        from gaussian_viewer import GaussianViewer
         from viewer.types import ViewerMode
 
         mode = ViewerMode.LOCAL if cfg.viewer_mode == "local" else ViewerMode.SERVER
@@ -196,7 +196,6 @@ def main(cfg: Config):
             viewpoint_stack = scene.getTrainCameras().copy()
         viewpoint_cam = viewpoint_stack.pop(randint(0, len(viewpoint_stack) - 1))
 
-        torch.cuda.synchronize()
         render(viewpoint_cam, raytracer, denoise=False)
 
         with torch.no_grad():
@@ -208,7 +207,6 @@ def main(cfg: Config):
         with torch.no_grad():
             if iteration in cfg.test_iterations:
                 training_report(cfg, scene, raytracer, tb_writer, iteration, start_time)
-            torch.cuda.synchronize()  # not sure if needed
 
             if iteration in cfg.save_iterations:
                 print("\n[ITER {}] Saving Gaussians".format(iteration))
@@ -221,7 +219,6 @@ def main(cfg: Config):
                     gaussians.prune_znear_only(scene)
                 raytracer.cuda_module.get_gaussians().total_weight.zero_()
 
-                torch.cuda.synchronize()
                 raytracer.rebuild_bvh()
 
             gaussians.optimizer.step()
@@ -236,15 +233,12 @@ def main(cfg: Config):
         if iteration == cfg.no_bounces_until_iter:
             config.num_bounces.copy_(MAX_BOUNCES)
 
-            torch.cuda.synchronize()
             gaussians.add_farfield_points(scene)
             raytracer.rebuild_bvh()
-            torch.cuda.synchronize()
 
         if iteration == 1 and cfg.no_bounces_until_iter in [-1, 0]:
             gaussians.add_farfield_points(scene)
             raytracer.rebuild_bvh()
-            torch.cuda.synchronize()
 
         if cfg.viewer:
             viewer.gaussian_lock.release()

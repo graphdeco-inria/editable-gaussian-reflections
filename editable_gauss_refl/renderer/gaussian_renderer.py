@@ -73,7 +73,6 @@ def render(
     # All of these results are reshaped to (C, H, W)
     framebuffer = raytracer.cuda_module.get_framebuffer()
     rgb = framebuffer.output_rgb.clone().detach().moveaxis(-1, 1)
-    # todo clean this up
     return SimpleNamespace(
         rgb=rgb,
         final=framebuffer.output_denoised.clone().detach().moveaxis(-1, 1) if denoise else framebuffer.output_final.clone().detach().moveaxis(-1, 1),

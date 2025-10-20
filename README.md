@@ -76,7 +76,7 @@ python measure_fps.py -s $SCENE -m $OUTDIR
 <!-- todo -->
 ```bash 
 OUTDIR=out/shiny_kitchen
-python gaussianviewer.py local $OUTDIR 8000
+python gaussian_viewer.py local $OUTDIR 8000
 ```
 
 ## Creating the dense init point cloud
