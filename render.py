@@ -9,23 +9,21 @@
 # For inquiries contact  george.drettakis@inria.fr
 #
 
+import json
 import math
 import os
-import shutil
-from os import makedirs
+import warnings
 from dataclasses import dataclass, field
+from os import makedirs
 from typing import Annotated, Literal, Optional
-import json 
 
 import numpy as np
 import torch
 import torch.nn.functional as F
 import torchvision
-from torchvision.utils import save_image
 import tyro
-from tyro.conf import arg
 from tqdm import tqdm
-import warnings
+from tyro.conf import arg
 
 from gaussian_tracing.arguments import (
     TyroConfig,
@@ -33,9 +31,9 @@ from gaussian_tracing.arguments import (
 from gaussian_tracing.renderer import GaussianRaytracer, render
 from gaussian_tracing.scene import GaussianModel, Scene
 from gaussian_tracing.utils.general_utils import set_seeds
-from gaussian_tracing.utils.image_utils import psnr
-from gaussian_tracing.utils.tonemapping import tonemap
 from gaussian_tracing.utils.system_utils import searchForMaxIteration
+from gaussian_tracing.utils.tonemapping import tonemap
+
 
 @dataclass
 class RenderCLI:
@@ -45,14 +43,14 @@ class RenderCLI:
     spp: int = 128
     split: Literal["train", "test"] = "test"
     denoise: bool = True
-    modes: list[Literal["regular", "env_rot_1", "env_move_1", "env_move_2"]] = field(
-        default_factory=lambda: ["regular"]
-    )
+    modes: list[Literal["regular", "env_rot_1", "env_move_1", "env_move_2"]] = field(default_factory=lambda: ["regular"])
     skip_video: bool = False
     skip_save_frames: bool = False
     znear: float = 0.01
 
+
 warnings.filterwarnings("ignore", category=UserWarning, module="torchvision.io")
+
 
 @torch.no_grad()
 def render_set(
@@ -64,7 +62,6 @@ def render_set(
     views,
     raytracer,
 ):
-
     for mode in cli.modes:
         render_path = os.path.join(cli.model_path, split, "ours_{}".format(iteration), "render")
         gts_path = os.path.join(cli.model_path, split, "ours_{}".format(iteration), "render_gt")
@@ -221,7 +218,7 @@ def render_set(
                         raytracer,
                         denoise=False,
                         znear=cli.znear,
-                    ) 
+                    )
                 if cli.denoise:
                     raytracer.cuda_module.denoise()
                     package.final = raytracer.cuda_module.get_framebuffer().output_denoised.clone().detach().moveaxis(-1, 1)
@@ -311,7 +308,7 @@ def render_set(
 
             def format_image(image):
                 # * Enforce even dimensions for video encoding
-                rounded_size = (image.shape[-2] // 2 * 2, image.shape[-1] // 2 * 2) 
+                rounded_size = (image.shape[-2] // 2 * 2, image.shape[-1] // 2 * 2)
                 if rounded_size != (image.shape[-2], image.shape[-1]):
                     image = F.interpolate(
                         image[None],
@@ -347,17 +344,17 @@ def render_set(
 
         if not cli.skip_video:
             print("Writing videos...")
-            path = os.path.join(cli.model_path, f"{{dir}}", f"{split}_{{name}}.mp4")
+            path = os.path.join(cli.model_path, "{dir}", f"{split}_{{name}}.mp4")
 
-            kwargs = {"fps": 30, "options":{"crf": "30"}}
+            kwargs = {"fps": 30, "options": {"crf": "30"}}
 
             torchvision.io.write_video(
-                path.format(name=f"final", dir=video_dir),
+                path.format(name="final", dir=video_dir),
                 torch.cat([torch.stack(all_renders), torch.stack(all_gts)], dim=2),
                 **kwargs,
             )
             torchvision.io.write_video(
-                path.format(name=f"diffuse", dir=video_dir),
+                path.format(name="diffuse", dir=video_dir),
                 torch.cat(
                     [
                         torch.stack(all_diffuse_renders),
@@ -368,7 +365,7 @@ def render_set(
                 **kwargs,
             )
             torchvision.io.write_video(
-                path.format(name=f"glossy", dir=video_dir),
+                path.format(name="glossy", dir=video_dir),
                 torch.cat(
                     [
                         torch.stack(all_glossy_renders),
@@ -379,7 +376,7 @@ def render_set(
                 **kwargs,
             )
             torchvision.io.write_video(
-                path.format(name=f"depth", dir=video_dir),
+                path.format(name="depth", dir=video_dir),
                 torch.cat(
                     [
                         torch.stack(all_depth_renders),
@@ -390,7 +387,7 @@ def render_set(
                 **kwargs,
             )
             torchvision.io.write_video(
-                path.format(name=f"normal", dir=video_dir),
+                path.format(name="normal", dir=video_dir),
                 torch.cat(
                     [
                         torch.stack(all_normal_renders),
@@ -401,7 +398,7 @@ def render_set(
                 **kwargs,
             )
             torchvision.io.write_video(
-                path.format(name=f"roughness", dir=video_dir),
+                path.format(name="roughness", dir=video_dir),
                 torch.cat(
                     [
                         torch.stack(all_roughness_renders),
@@ -412,7 +409,7 @@ def render_set(
                 **kwargs,
             )
             torchvision.io.write_video(
-                path.format(name=f"f0", dir=video_dir),
+                path.format(name="f0", dir=video_dir),
                 torch.cat(
                     [torch.stack(all_f0_renders), torch.stack(all_f0_gts)],
                     dim=2,
@@ -425,11 +422,17 @@ if __name__ == "__main__":
     cli, unknown_args = tyro.cli(RenderCLI, return_unknown_args=True)
     saved_cli_path = os.path.join(cli.model_path, "cfg.json")
     cfg = tyro.cli(TyroConfig, args=unknown_args, default=TyroConfig(**json.load(open(saved_cli_path, "r"))))
-    
+
     set_seeds()
 
+    if cli.iteration is None:
+        load_iteration = searchForMaxIteration(os.path.join(cli.model_path, "point_cloud"))
+    else:
+        load_iteration = cli.iteration
+    print("Loading trained model at iteration {}".format(load_iteration))
+
     gaussians = GaussianModel(cfg)
-    scene = Scene(cfg, gaussians, load_iteration=cli.iteration, shuffle=False, model_path=cli.model_path)
+    scene = Scene(cfg, gaussians, load_iteration=load_iteration, shuffle=False, model_path=cli.model_path)
 
     viewpoint_stack = scene.getTrainCameras().copy()
     raytracer = GaussianRaytracer(gaussians, viewpoint_stack[0].image_width, viewpoint_stack[0].image_height)

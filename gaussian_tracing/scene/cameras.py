@@ -62,7 +62,7 @@ class Camera(nn.Module):
         if normal_image.dtype == torch.uint8:
             normal_image = normal_image.half() / 255.0 * 2.0 - 1.0
         if depth_image.dtype == torch.uint8:
-            assert False 
+            assert False
         if roughness_image.dtype == torch.uint8:
             roughness_image = roughness_image.half() / 255.0
         if f0_image.dtype == torch.uint8:
@@ -113,7 +113,7 @@ class Camera(nn.Module):
             depth_image=cam_info.depth_image.moveaxis(-1, 0),
             normal_image=cam_info.normal_image.moveaxis(-1, 0),
             roughness_image=cam_info.roughness_image.moveaxis(-1, 0),
-            f0_image=cam_info.f0_image.moveaxis(-1, 0)
+            f0_image=cam_info.f0_image.moveaxis(-1, 0),
         )
 
     @property
@@ -145,15 +145,9 @@ class Camera(nn.Module):
         return self._f0_image.float().cuda()
 
     def update(self):
-        self.world_view_transform = (
-            torch.tensor(getWorld2View2(self.R, self.T, self.trans, self.scale)).transpose(0, 1).cuda()
-        )
-        self.projection_matrix = (
-            getProjectionMatrix(znear=0.01, zfar=100.0, fovX=self.FoVx, fovY=self.FoVy).transpose(0, 1).cuda()
-        )
-        self.full_proj_transform = (
-            self.world_view_transform.unsqueeze(0).bmm(self.projection_matrix.unsqueeze(0))
-        ).squeeze(0)
+        self.world_view_transform = torch.tensor(getWorld2View2(self.R, self.T, self.trans, self.scale)).transpose(0, 1).cuda()
+        self.projection_matrix = getProjectionMatrix(znear=0.01, zfar=100.0, fovX=self.FoVx, fovY=self.FoVy).transpose(0, 1).cuda()
+        self.full_proj_transform = (self.world_view_transform.unsqueeze(0).bmm(self.projection_matrix.unsqueeze(0))).squeeze(0)
         self.camera_center = self.world_view_transform.cpu().inverse().cuda()[3, :3]
 
 

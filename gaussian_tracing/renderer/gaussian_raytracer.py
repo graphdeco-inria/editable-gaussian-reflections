@@ -111,11 +111,7 @@ class GaussianRaytracer:
         """
         # *** time lost due to copies: 30s for 30000k iterations (~260k gaussians)
         with torch.no_grad():
-            R = (
-                torch.from_numpy(viewpoint_camera.R).cuda().float()
-                if isinstance(viewpoint_camera.R, np.ndarray)
-                else viewpoint_camera.R.cuda()
-            )
+            R = torch.from_numpy(viewpoint_camera.R).cuda().float() if isinstance(viewpoint_camera.R, np.ndarray) else viewpoint_camera.R.cuda()
             R_c2w_blender = -R
             R_c2w_blender[:, 0] = -R_c2w_blender[:, 0]
 
@@ -128,7 +124,7 @@ class GaussianRaytracer:
             self._export_param_values()
 
             framebuffer = self.cuda_module.get_framebuffer()
-    
+
             if target_diffuse is not None:
                 framebuffer.target_diffuse.copy_(target_diffuse.moveaxis(0, -1))
             else:

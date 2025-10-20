@@ -44,9 +44,7 @@ class CustomBuildExtension(BuildExtension):
         if not os.path.exists(pkg_target):
             os.makedirs(pkg_target, exist_ok=True)
 
-        os.system(
-            f"mkdir -p {pkg_source}/gaussian_tracing/cuda/build && cd {pkg_source}/gaussian_tracing/cuda/build && cmake .. && make"
-        )
+        os.system(f"mkdir -p {pkg_source}/gaussian_tracing/cuda/build && cd {pkg_source}/gaussian_tracing/cuda/build && cmake .. && make")
 
 
 setup(

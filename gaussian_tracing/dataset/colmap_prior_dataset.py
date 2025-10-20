@@ -118,9 +118,7 @@ class ColmapPriorDataset:
             fovy = focal2fov(focal_length_y, height)
             fovx = focal2fov(focal_length_x, width)
         else:
-            assert False, (
-                "Colmap camera model not handled: only undistorted datasets (PINHOLE or SIMPLE_PINHOLE cameras) supported!"
-            )
+            assert False, "Colmap camera model not handled: only undistorted datasets (PINHOLE or SIMPLE_PINHOLE cameras) supported!"
 
         # Camera extrinsics
         w2c = np.eye(4)

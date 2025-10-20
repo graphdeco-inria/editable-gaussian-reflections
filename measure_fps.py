@@ -23,13 +23,7 @@ def render_set(
 
     start_event.record()
     for view in tqdm(views, desc="Rendering progress"):
-        render(
-            view,
-            raytracer,
-            force_update_bvh=False,
-            targets_available=False,
-            denoise=False
-        )
+        render(view, raytracer, force_update_bvh=False, targets_available=False, denoise=False)
     end_event.record()
 
     torch.cuda.synchronize()

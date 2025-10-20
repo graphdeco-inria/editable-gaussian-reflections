@@ -50,9 +50,7 @@ def get_expon_lr_func(lr_init, lr_final, lr_delay_steps=0, lr_delay_mult=1.0, ma
             return 0.0
         if lr_delay_steps > 0:
             # A kind of reverse cosine decay.
-            delay_rate = lr_delay_mult + (1 - lr_delay_mult) * np.sin(
-                0.5 * np.pi * np.clip(step / lr_delay_steps, 0, 1)
-            )
+            delay_rate = lr_delay_mult + (1 - lr_delay_mult) * np.sin(0.5 * np.pi * np.clip(step / lr_delay_steps, 0, 1))
         else:
             delay_rate = 1.0
         t = np.clip(step / max_steps, 0, 1)
@@ -125,12 +123,7 @@ def create_rotation_matrix_from_direction_vector_batch(direction_vectors):
     # Normalize the batch of direction vectors
     direction_vectors = direction_vectors / torch.norm(direction_vectors, dim=-1, keepdim=True)
     # Create a batch of arbitrary vectors that are not collinear with the direction vectors
-    v1 = (
-        torch.tensor([1.0, 0.0, 0.0], dtype=torch.float32)
-        .to(direction_vectors.device)
-        .expand(direction_vectors.shape[0], -1)
-        .clone()
-    )
+    v1 = torch.tensor([1.0, 0.0, 0.0], dtype=torch.float32).to(direction_vectors.device).expand(direction_vectors.shape[0], -1).clone()
     is_collinear = torch.all(torch.abs(direction_vectors - v1) < 1e-5, dim=-1)
     v1[is_collinear] = torch.tensor([0.0, 1.0, 0.0], dtype=torch.float32).to(direction_vectors.device)
 

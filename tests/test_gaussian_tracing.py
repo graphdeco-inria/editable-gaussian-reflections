@@ -10,9 +10,7 @@ def test_raytracer_init():
     num_gaussians = 1
     ppll_forward_size = 300_000_000
     ppll_backward_size = 200_000_000
-    raytracer = torch.classes.raytracer.Raytracer(
-        image_width, image_height, num_gaussians, ppll_forward_size, ppll_backward_size
-    )
+    raytracer = torch.classes.raytracer.Raytracer(image_width, image_height, num_gaussians, ppll_forward_size, ppll_backward_size)
 
     rot = torch.eye(3)
     pos = torch.ones(3)

@@ -78,14 +78,7 @@ def eval_sh(deg, sh, dirs):
         if deg > 1:
             xx, yy, zz = x * x, y * y, z * z
             xy, yz, xz = x * y, y * z, x * z
-            result = (
-                result
-                + C2[0] * xy * sh[..., 4]
-                + C2[1] * yz * sh[..., 5]
-                + C2[2] * (2.0 * zz - xx - yy) * sh[..., 6]
-                + C2[3] * xz * sh[..., 7]
-                + C2[4] * (xx - yy) * sh[..., 8]
-            )
+            result = result + C2[0] * xy * sh[..., 4] + C2[1] * yz * sh[..., 5] + C2[2] * (2.0 * zz - xx - yy) * sh[..., 6] + C2[3] * xz * sh[..., 7] + C2[4] * (xx - yy) * sh[..., 8]
 
             if deg > 2:
                 result = (

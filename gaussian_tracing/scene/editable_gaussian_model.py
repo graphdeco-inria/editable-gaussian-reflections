@@ -68,12 +68,8 @@ class EditableGaussianModel(GaussianModel):
                                 within_bbox &= (getattr(self, "_" + prop).mean(dim=-1) >= bounding_box[prop][0]) | mask
                                 within_bbox &= (getattr(self, "_" + prop).mean(dim=-1) <= bounding_box[prop][1]) | mask
                             else:
-                                within_bbox &= (
-                                    getattr(self, "_" + prop).mean(dim=-1) >= bounding_box[prop][0]
-                                )  # | ~mask # being in the mask
-                                within_bbox &= (
-                                    getattr(self, "_" + prop).mean(dim=-1) <= bounding_box[prop][1]
-                                )  # | ~mask
+                                within_bbox &= getattr(self, "_" + prop).mean(dim=-1) >= bounding_box[prop][0]  # | ~mask # being in the mask
+                                within_bbox &= getattr(self, "_" + prop).mean(dim=-1) <= bounding_box[prop][1]  # | ~mask
                     if "exclude" in bounding_box:
                         for exclusion in bounding_box["exclude"]:
                             within_bbox &= compute_bbox_mask(self.bounding_boxes[exclusion]).logical_not()
@@ -119,9 +115,7 @@ class EditableGaussianModel(GaussianModel):
                 base_roughness = roughness * 0 + edit.roughness_override**2
             else:
                 base_roughness = roughness
-            modified_roughness = (
-                edit.roughness_mult * (base_roughness + math.copysign(edit.roughness_shift, edit.roughness_shift**2))
-            ).clamp(0, 1)
+            modified_roughness = (edit.roughness_mult * (base_roughness + math.copysign(edit.roughness_shift, edit.roughness_shift**2))).clamp(0, 1)
             roughness = torch.where(self.selections[key], modified_roughness, roughness)
 
         self.roughness = roughness
@@ -228,9 +222,7 @@ class EditableGaussianModel(GaussianModel):
                 [edit.translate_x, edit.translate_y, edit.translate_z],
                 device=xyz.device,
             )
-            xyz[self.selections[key].squeeze(1)] = (
-                xyz[self.selections[key].squeeze(1)] - object_center
-            ) * edit.scale + object_center
+            xyz[self.selections[key].squeeze(1)] = (xyz[self.selections[key].squeeze(1)] - object_center) * edit.scale + object_center
             rotation_angles = torch.tensor([edit.rotate_x, edit.rotate_y, edit.rotate_z], device=xyz.device)
             rotation_angles = torch.deg2rad(rotation_angles)
             rotation_matrix = kornia.geometry.axis_angle_to_rotation_matrix(rotation_angles[None])[0]
@@ -257,9 +249,7 @@ class EditableGaussianModel(GaussianModel):
             return self.scaling
 
         for key, edit in self.edits.items():
-            scaling[self.selections[key].squeeze(1)] *= (
-                edit.scale
-            )  # torch.tensor([edit.scale_x, edit.scale_y, edit.scale_z], device=scaling.device)
+            scaling[self.selections[key].squeeze(1)] *= edit.scale  # torch.tensor([edit.scale_x, edit.scale_y, edit.scale_z], device=scaling.device)
 
         self.scaling = torch.log(scaling)
         return self.scaling
@@ -281,13 +271,9 @@ class EditableGaussianModel(GaussianModel):
                     device=rotation.device,
                 )
             ).unsqueeze(0)
-            rotation_matrix = kornia.geometry.conversions.quaternion_to_rotation_matrix(
-                rotation[self.selections[key].squeeze(1)]
-            )
+            rotation_matrix = kornia.geometry.conversions.quaternion_to_rotation_matrix(rotation[self.selections[key].squeeze(1)])
             rotation_matrix = kornia.geometry.axis_angle_to_rotation_matrix(rotation_angles)[0] @ rotation_matrix
-            rotation[self.selections[key].squeeze(1)] = kornia.geometry.conversions.rotation_matrix_to_quaternion(
-                rotation_matrix
-            )
+            rotation[self.selections[key].squeeze(1)] = kornia.geometry.conversions.rotation_matrix_to_quaternion(rotation_matrix)
 
         self.rotation = rotation
         return rotation

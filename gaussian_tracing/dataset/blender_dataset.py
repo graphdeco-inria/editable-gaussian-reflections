@@ -4,13 +4,12 @@ from pathlib import Path
 
 import cv2
 import numpy as np
+import tifffile
 import torch
 from einops import rearrange
-import tifffile
 from torchvision.io import read_image
 
 from gaussian_tracing.utils.graphics_utils import focal2fov, fov2focal
-from gaussian_tracing.utils.tonemapping import untonemap
 
 from .camera_info import CameraInfo
 
@@ -52,6 +51,7 @@ class BlenderDataset:
 
         if "safetensors" in self.data_dir:
             import safetensors.torch
+
             st_path = os.path.join(self.data_dir, frame_name.replace("render/render_", "buffers_") + ".safetensors")
             st = safetensors.torch.load_file(st_path)
             image = st["render"].moveaxis(0, -1)
@@ -69,7 +69,7 @@ class BlenderDataset:
             normal_image = self._get_buffer(frame_name, "normal")
             depth_image = self._get_buffer(frame_name, "depth")
             f0_image = self._get_buffer(frame_name, "f0")
-        
+
         # Camera intrinsics
         height, width = image.shape[0], image.shape[1]
         fovx = self.contents["camera_angle_x"]
@@ -102,7 +102,7 @@ class BlenderDataset:
             depth_image=depth_image,
             normal_image=normal_image,
             roughness_image=roughness_image,
-            f0_image=f0_image
+            f0_image=f0_image,
         )
         return cam_info
 
@@ -125,6 +125,7 @@ class BlenderDataset:
         if self.resolution is not None and image.shape[0] != self.resolution:
             image = _resize_image_tensor(image, self.resolution)
         return image
+
 
 def _resize_image_tensor(image, resolution):
     height = image.shape[0]

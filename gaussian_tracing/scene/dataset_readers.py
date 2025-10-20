@@ -20,7 +20,6 @@ from tqdm import tqdm
 from gaussian_tracing.arguments import TyroConfig
 from gaussian_tracing.dataset import (
     BlenderDataset,
-    BlenderPriorDataset,
     ColmapPriorDataset,
 )
 from gaussian_tracing.dataset.points_utils import make_random_point_cloud

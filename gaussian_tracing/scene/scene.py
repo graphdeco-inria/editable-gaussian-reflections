@@ -19,7 +19,6 @@ from gaussian_tracing.scene.dataset_readers import (
     readSceneInfo,
 )
 from gaussian_tracing.scene.gaussian_model import GaussianModel
-from gaussian_tracing.utils.system_utils import searchForMaxIteration
 
 
 class Scene:
@@ -34,7 +33,7 @@ class Scene:
         resolution_scales=[1.0],
         glossy=False,
         extend_point_cloud=None,
-        model_path=None
+        model_path=None,
     ):
         """b
         :param path: Path to colmap scene main folder.
@@ -44,12 +43,8 @@ class Scene:
         self.gaussians = gaussians
         self.glossy = glossy
 
-        if load_iteration == None:
-            self.loaded_iter = searchForMaxIteration(os.path.join(self.model_path, "point_cloud"))
-        else:
-            self.loaded_iter = load_iteration
-        print("Loading trained model at iteration {}".format(load_iteration))
-        
+        self.loaded_iter = load_iteration
+
         self.train_cameras = {}
         self.test_cameras = {}
 
@@ -120,9 +115,7 @@ class Scene:
         train_cameras = self.train_cameras[1.0]
         first_train_camera = train_cameras[0]
         for camera in train_cameras:
-            assert camera.image_height == first_train_camera.image_height, (
-                "All train cameras must have the same image_height"
-            )
+            assert camera.image_height == first_train_camera.image_height, "All train cameras must have the same image_height"
             assert camera.FoVy == first_train_camera.FoVy, "All train cameras must have the same FoVy"
 
         self.max_zfar = max([x.zfar for x in self.train_cameras[1.0]]).item()

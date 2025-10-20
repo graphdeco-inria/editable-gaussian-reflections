@@ -26,7 +26,6 @@ from gaussian_tracing.utils.general_utils import (
 )
 from gaussian_tracing.utils.graphics_utils import BasicPointCloud
 from gaussian_tracing.utils.system_utils import mkdir_p
-from gaussian_tracing.utils.tonemapping import untonemap
 
 
 class GaussianModel:
@@ -202,17 +201,13 @@ class GaussianModel:
         scales = torch.log(torch.sqrt(dist2) * self.cfg.init_scale)[..., None].repeat(1, 3)
         rots = torch.zeros((fused_point_cloud.shape[0], 4), device="cuda")
         rots[:, 0] = 1
-        opacities = inverse_sigmoid(
-            self.cfg.init_opa * torch.ones((fused_point_cloud.shape[0], 1), dtype=torch.float, device="cuda")
-        )
+        opacities = inverse_sigmoid(self.cfg.init_opa * torch.ones((fused_point_cloud.shape[0], 1), dtype=torch.float, device="cuda"))
 
         print("Number of points at initialisation : ", fused_point_cloud.shape[0])
 
         self._xyz = nn.Parameter(fused_point_cloud.requires_grad_(True))
         self._normal = nn.Parameter(fused_normal.clone())
-        self._roughness = nn.Parameter(
-            torch.ones((fused_point_cloud.shape[0], 1), device="cuda") * self.cfg.init_roughness
-        )
+        self._roughness = nn.Parameter(torch.ones((fused_point_cloud.shape[0], 1), device="cuda") * self.cfg.init_roughness)
         self._f0 = nn.Parameter(torch.ones((fused_point_cloud.shape[0], 3), device="cuda") * self.cfg.init_f0)
         self._diffuse = nn.Parameter(fused_color.clone())
         self._scaling = nn.Parameter(scales.requires_grad_(True))
@@ -235,22 +230,14 @@ class GaussianModel:
     @torch.no_grad()
     def add_farfield_points(self, scene):
         print(f"Generating random point cloud ({self.cfg.init_num_pts_farfield})...")
-        new_xyz = (
-            torch.randn(self.cfg.init_num_pts_farfield, 3, device="cuda").clamp(-3, 3)
-            * scene.cameras_extent
-            * self.cfg.scene_extent_init_radius
-        )
+        new_xyz = torch.randn(self.cfg.init_num_pts_farfield, 3, device="cuda").clamp(-3, 3) * scene.cameras_extent * self.cfg.scene_extent_init_radius
         mask = scene.select_points_to_prune_near_cameras(new_xyz, torch.zeros_like(new_xyz))
         new_xyz = new_xyz[~mask]
 
-        add_book_points = (
-            "shiny_office_with_book" in self.cfg.source_path and "SKIP_BOOK_EXTRA_POINTS" not in os.environ
-        )
+        add_book_points = "shiny_office_with_book" in self.cfg.source_path and "SKIP_BOOK_EXTRA_POINTS" not in os.environ
         if add_book_points:
             num_book_pts = int(os.getenv("NUM_BOOK_PTS", 5000))
-            extra_pts = torch.rand(num_book_pts, 3, device="cuda") * 0.3 + torch.tensor(
-                [-0.15, -0.10, -0.15], device="cuda"
-            )
+            extra_pts = torch.rand(num_book_pts, 3, device="cuda") * 0.3 + torch.tensor([-0.15, -0.10, -0.15], device="cuda")
             new_xyz = torch.cat([new_xyz, extra_pts])
             print("ADDED EXTRA POINTS FOR BOOK")
 
@@ -265,9 +252,7 @@ class GaussianModel:
             new_scaling[-new_xyz.shape[0] :] = torch.log(torch.tensor(book_pts_scale, device="cuda"))
         new_rotation = torch.zeros((new_xyz.shape[0], 4), device="cuda")
         new_rotation[:, 0] = 1
-        new_opacity = inverse_sigmoid(
-            self.cfg.init_opa_farfield * torch.ones((new_xyz.shape[0], 1), dtype=torch.float, device="cuda")
-        )
+        new_opacity = inverse_sigmoid(self.cfg.init_opa_farfield * torch.ones((new_xyz.shape[0], 1), dtype=torch.float, device="cuda"))
         new_diffuse = torch.ones_like(new_xyz) * self.cfg.init_diffuse_farfield
         if add_book_points:
             new_diffuse[-new_xyz.shape[0] :] = torch.rand_like(new_diffuse[-new_xyz.shape[0] :])
@@ -422,9 +407,7 @@ class GaussianModel:
         PlyData([el]).write(path)
 
     def reset_opacity(self):
-        opacities_new = inverse_sigmoid(
-            torch.min(self.get_opacity, torch.ones_like(self.get_opacity) * 0.1)
-        )  #! was 0.01
+        opacities_new = inverse_sigmoid(torch.min(self.get_opacity, torch.ones_like(self.get_opacity) * 0.1))  #! was 0.01
         optimizable_tensors = self.replace_tensor_to_optimizer(opacities_new, "opacity")
         self._opacity = optimizable_tensors["opacity"]
         self._opacity.grad = torch.zeros_like(self._opacity)
@@ -561,25 +544,19 @@ class GaussianModel:
             extension_tensor = tensors_dict[group["name"]]
             stored_state = self.optimizer.state.get(group["params"][0], None)
             if stored_state is not None:
-                stored_state["exp_avg"] = torch.cat(
-                    (stored_state["exp_avg"], torch.zeros_like(extension_tensor)), dim=0
-                )
+                stored_state["exp_avg"] = torch.cat((stored_state["exp_avg"], torch.zeros_like(extension_tensor)), dim=0)
                 stored_state["exp_avg_sq"] = torch.cat(
                     (stored_state["exp_avg_sq"], torch.zeros_like(extension_tensor)),
                     dim=0,
                 )
 
                 del self.optimizer.state[group["params"][0]]
-                group["params"][0] = nn.Parameter(
-                    torch.cat((group["params"][0], extension_tensor), dim=0).requires_grad_(True)
-                )
+                group["params"][0] = nn.Parameter(torch.cat((group["params"][0], extension_tensor), dim=0).requires_grad_(True))
                 self.optimizer.state[group["params"][0]] = stored_state
 
                 optimizable_tensors[group["name"]] = group["params"][0]
             else:
-                group["params"][0] = nn.Parameter(
-                    torch.cat((group["params"][0], extension_tensor), dim=0).requires_grad_(True)
-                )
+                group["params"][0] = nn.Parameter(torch.cat((group["params"][0], extension_tensor), dim=0).requires_grad_(True))
                 optimizable_tensors[group["name"]] = group["params"][0]
 
         return optimizable_tensors

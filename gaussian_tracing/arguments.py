@@ -10,7 +10,7 @@
 #
 
 from dataclasses import dataclass, field
-from typing import Annotated, Literal
+from typing import Annotated
 
 from tyro.conf import arg
 
@@ -19,9 +19,9 @@ from tyro.conf import arg
 class TyroConfig:
     viewer: bool = False
     viewer_mode: str = "local"
-    val_views: list[int] = field(default_factory=lambda: [75, 175])
-    test_iterations: list[int] = field(default_factory=lambda: [750, 4000, 8000])
-    save_iterations: list[int] = field(default_factory=lambda: [750, 4000, 8000])
+    val_view: int = 75
+    test_iterations: list[int] = field(default_factory=lambda: [1, 750, 4000, 8000])
+    save_iterations: list[int] = field(default_factory=lambda: [1, 750, 4000, 8000])
     iterations: int = 8000
 
     # * Dataset params

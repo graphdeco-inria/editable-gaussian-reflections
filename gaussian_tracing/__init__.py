@@ -18,6 +18,4 @@ def make_raytracer(
         torch.classes.load_library(GAUSS_TRACER_PATH)
         LOADED = True
 
-    return torch.classes.raytracer.Raytracer(
-        image_width, image_height, num_gaussians, ppll_forward_size, ppll_backward_size
-    )
+    return torch.classes.raytracer.Raytracer(image_width, image_height, num_gaussians, ppll_forward_size, ppll_backward_size)

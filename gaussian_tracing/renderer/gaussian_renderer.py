@@ -80,15 +80,9 @@ def render(
         depth=framebuffer.output_depth.clone().detach().moveaxis(-1, 1)
         if hasattr(framebuffer, "output_depth") and framebuffer.output_depth is not None
         else torch.zeros_like(rgb).mean(dim=1, keepdim=True),
-        normal=framebuffer.output_normal.clone().detach().moveaxis(-1, 1)
-        if framebuffer.output_normal is not None
-        else torch.zeros_like(rgb),
-        roughness=framebuffer.output_roughness.clone().detach().moveaxis(-1, 1)
-        if framebuffer.output_roughness is not None
-        else torch.zeros_like(rgb),
-        f0=framebuffer.output_f0.clone().detach().moveaxis(-1, 1)
-        if framebuffer.output_f0 is not None
-        else torch.zeros_like(rgb),
+        normal=framebuffer.output_normal.clone().detach().moveaxis(-1, 1) if framebuffer.output_normal is not None else torch.zeros_like(rgb),
+        roughness=framebuffer.output_roughness.clone().detach().moveaxis(-1, 1) if framebuffer.output_roughness is not None else torch.zeros_like(rgb),
+        f0=framebuffer.output_f0.clone().detach().moveaxis(-1, 1) if framebuffer.output_f0 is not None else torch.zeros_like(rgb),
         target=_target,
         target_diffuse=_target_diffuse,
         target_glossy=_target_glossy,
