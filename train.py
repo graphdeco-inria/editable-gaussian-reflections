@@ -344,7 +344,6 @@ def training_report(
 
 def main(cfg: TyroConfig):
     safe_state(cfg.quiet)
-    torch.autograd.set_detect_anomaly(cfg.detect_anomaly)
 
     tb_writer = prepare_output_and_logger(cfg)
     gaussians = GaussianModel(cfg)

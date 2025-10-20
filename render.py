@@ -511,7 +511,6 @@ if __name__ == "__main__":
     cfg = tyro.cli(TyroConfig, args=unknown_args, default=TyroConfig(**json.load(open(saved_cli_path, "r"))))
     
     safe_state(cfg.quiet)
-    torch.autograd.set_detect_anomaly(cfg.detect_anomaly)
 
     gaussians = GaussianModel(cfg)
     scene = Scene(cfg, gaussians, load_iteration=cli.iteration, shuffle=False, model_path=cli.model_path)

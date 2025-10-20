@@ -90,7 +90,6 @@ def render_set(
 def main(cfg: TyroConfig):
     # Initialize system state (RNG)
     safe_state(cfg.quiet)
-    torch.autograd.set_detect_anomaly(cfg.detect_anomaly)
 
     gaussians = GaussianModel(cfg)
     scene = Scene(cfg, gaussians, load_iteration=cfg.iteration, shuffle=False)
