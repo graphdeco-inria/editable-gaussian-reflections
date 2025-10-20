@@ -25,9 +25,7 @@ import tyro
 from tqdm import tqdm
 from tyro.conf import arg
 
-from gaussian_tracing.arguments import (
-    Config,
-)gaussian_tracing.cfg
+from gaussian_tracing.cfg import Config
 from gaussian_tracing.renderer import GaussianRaytracer, render
 from gaussian_tracing.scene import GaussianModel, Scene
 from gaussian_tracing.utils.general_utils import set_seeds

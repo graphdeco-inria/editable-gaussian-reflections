@@ -84,9 +84,9 @@ class DenoiserWrapper {
         OPTIX_CHECK(optixDenoiserComputeAverageColor(
             optix_denoiser,
             /* stream */ nullptr,
-            &layers[0].input,               // same OptixImage2D you denoise
-            hdrAverageColor,                // device ptr to 3 floats (R,G,B)
-            scratch, 
+            &layers[0].input, // same OptixImage2D you denoise
+            hdrAverageColor,  // device ptr to 3 floats (R,G,B)
+            scratch,
             scratch_size));
         OPTIX_CHECK(optixDenoiserInvoke(
             optix_denoiser,

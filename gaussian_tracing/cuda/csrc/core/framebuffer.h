@@ -121,15 +121,17 @@ struct Framebuffer {
             accumulated_normal[pixel.id + num_pixels * step] += pixel.output_normal[step];
             accumulated_f0[pixel.id + num_pixels * step] += pixel.output_f0[step];
             accumulated_roughness[pixel.id + num_pixels * step] += pixel.output_roughness[step];
-            
+
             pixel.output_rgb[step] = accumulated_rgb[pixel.id + num_pixels * step] / float(accum_count + 1);
-            pixel.output_transmittance[step] = accumulated_transmittance[pixel.id + num_pixels * step] / float(accum_count + 1);
-            pixel.output_total_transmittance[step] = accumulated_total_transmittance[pixel.id + num_pixels * step] / float(accum_count + 1);
+            pixel.output_transmittance[step] =
+                accumulated_transmittance[pixel.id + num_pixels * step] / float(accum_count + 1);
+            pixel.output_total_transmittance[step] =
+                accumulated_total_transmittance[pixel.id + num_pixels * step] / float(accum_count + 1);
             pixel.output_depth[step] = accumulated_depth[pixel.id + num_pixels * step] / float(accum_count + 1);
             pixel.output_normal[step] = accumulated_normal[pixel.id + num_pixels * step] / float(accum_count + 1);
             pixel.output_f0[step] = accumulated_f0[pixel.id + num_pixels * step] / float(accum_count + 1);
             pixel.output_roughness[step] = accumulated_roughness[pixel.id + num_pixels * step] / float(accum_count + 1);
-            
+
             pixel.output_final += pixel.output_rgb[step];
         }
     }

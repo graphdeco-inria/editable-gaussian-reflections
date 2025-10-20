@@ -30,6 +30,7 @@ from gaussian_tracing.utils.general_utils import (
 from gaussian_tracing.utils.image_utils import psnr
 from gaussian_tracing.utils.tonemapping import tonemap
 
+
 def prepare_output_and_logger(cfg: Config):
     if not cfg.model_path:
         cfg.model_path = os.path.join("output", datetime.now().isoformat(timespec="seconds"))
@@ -224,7 +225,7 @@ def main(cfg: Config):
                 scene.save(iteration)
 
             if iteration % cfg.pruning_interval == 0:
-                if iteration > cfg.no_bounces_until_iter + 500 and cfg.min_weight > 0:
+                if iteration > cfg.no_bounces_until_iter + 500 and cfg.min_weight > 0: # todo make this an option
                     gaussians.prune_points((raytracer.cuda_module.get_gaussians().total_weight / cfg.pruning_interval < cfg.min_weight).squeeze(1))
                 if not cfg.disable_znear_densif_pruning:
                     gaussians.prune_znear_only(scene)

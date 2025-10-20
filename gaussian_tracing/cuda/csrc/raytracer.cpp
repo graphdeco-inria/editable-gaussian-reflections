@@ -93,9 +93,7 @@ struct Raytracer : torch::CustomClassHolder {
         }
     }
 
-    void denoise() { 
-        denoiser_wrapper->run(); 
-    }
+    void denoise() { denoiser_wrapper->run(); }
 
     void reset_accumulators() { framebuffer_data->reset_accumulators(); }
 
