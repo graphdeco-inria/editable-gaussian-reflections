@@ -10,8 +10,8 @@ The default installation is as follows:
 git clone git@gitlab.inria.fr:ypoirier/gaussian-splatting-raytraced.git --recursive
 cd gaussian-splatting-raytraced
 
-conda create -n gausstracer python=3.12
-conda activate gausstracer
+conda create -n editable_raytraced_gaussians python=3.12
+conda activate editable_raytraced_gaussians
 
 pip install torch==2.5.1 torchvision==0.20.1 torchaudio==2.5.1 --index-url https://download.pytorch.org/whl/cu121
 pip install -r requirements.txt

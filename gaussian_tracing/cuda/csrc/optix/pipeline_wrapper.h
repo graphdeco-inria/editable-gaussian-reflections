@@ -62,7 +62,7 @@ class PipelineWrapper {
     }
 
     static std::string loadPtxFile() {
-        std::string path = getSharedObjectDir() + "/libgausstracer.ptx";
+        std::string path = getSharedObjectDir() + "/libraytracer.ptx";
         std::ifstream file(path.c_str(), std::ios::binary);
         if (file.good()) {
             std::vector<unsigned char> buffer = std::vector<unsigned char>(std::istreambuf_iterator<char>(file), {});

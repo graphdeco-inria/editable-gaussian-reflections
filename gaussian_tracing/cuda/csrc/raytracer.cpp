@@ -207,7 +207,7 @@ struct Raytracer : torch::CustomClassHolder {
     }
 };
 
-TORCH_LIBRARY(gausstracer, m) {
+TORCH_LIBRARY(raytracer, m) {
     CameraDataHolder::bind(m);
     ConfigDataHolder::bind(m);
     FramebufferDataHolder::bind(m);

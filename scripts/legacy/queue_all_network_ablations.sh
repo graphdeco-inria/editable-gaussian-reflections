@@ -13,7 +13,7 @@ for scene in shiny_livingroom shiny_bedroom shiny_kitchen shiny_office; do
             fi
         done
         echo $ablations $ablated_passes
-        q a6000 -t 1:00:00 -n ${scene}_ablate_$ablations <<< "ABLATION=$ablated_passes bash run.sh -s priors/real_datasets_v3_filmic/renders_priors/${scene}_768 -m output_network_ablations_final_v2/${scene}_ablate_${ablations//,/+} -r 768 --raytracer_version /home/ypoirier/optix/gausstracer/build/v100-submit-nohack ${@:3}"
+        q a6000 -t 1:00:00 -n ${scene}_ablate_$ablations <<< "ABLATION=$ablated_passes bash run.sh -s priors/real_datasets_v3_filmic/renders_priors/${scene}_768 -m output_network_ablations_final_v2/${scene}_ablate_${ablations//,/+} -r 768 --raytracer_version /home/ypoirier/optix/raytracer/build/v100-submit-nohack ${@:3}"
     done
 done
 

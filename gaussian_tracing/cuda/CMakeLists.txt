@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.18)
-project (gausstracer LANGUAGES CXX CUDA)
+project (raytracer LANGUAGES CXX CUDA)
 
 # Set default build type to 'Release'
 if(NOT CMAKE_BUILD_TYPE)
@@ -28,12 +28,12 @@ find_package(Torch REQUIRED)
 
 # === Source Files ===
 set(SOURCES
-    csrc/gausstracer.cpp
+    csrc/raytracer.cpp
     csrc/optix/bvh_wrapper.cu
 )
 
 # === Main Shared Library Target ===
-add_library(gausstracer SHARED ${SOURCES})
+add_library(raytracer SHARED ${SOURCES})
 
 # === OptiX PTX Target ===
 add_library(optix_program OBJECT csrc/shaders.cu)
@@ -43,7 +43,7 @@ set_target_properties(optix_program PROPERTIES
 )
 
 # === Include Directories ===
-target_include_directories(gausstracer PRIVATE
+target_include_directories(raytracer PRIVATE
     ${CUDA_INCLUDE_DIRS}
     ${PYTHON_INCLUDE_DIRS}
     ${OptiX8_INCLUDE_DIRS}
@@ -55,16 +55,16 @@ target_include_directories(optix_program PRIVATE
 )
 
 # === Definitions ===
-target_compile_definitions(gausstracer PRIVATE
+target_compile_definitions(raytracer PRIVATE
     ENABLE_OPTIX
     CMAKE_BINARY_DIR="${CMAKE_BINARY_DIR}"
     CMAKE_CURRENT_LIST_DIR="${CMAKE_CURRENT_LIST_DIR}"
-    OPTIX_SAMPLE_NAME_DEFINE=gausstracer
-    OPTIX_SAMPLE_DIR_DEFINE=gausstracer
+    OPTIX_SAMPLE_NAME_DEFINE=raytracer
+    OPTIX_SAMPLE_DIR_DEFINE=raytracer
 )
 
 # === Compile Options ===
-target_compile_options(gausstracer PRIVATE
+target_compile_options(raytracer PRIVATE
     -Wno-everything
     -Wno-macro-redefined
     $<$<COMPILE_LANGUAGE:CUDA>:-ffast-math -ftz=true -prec-div=false -prec-sqrt=false>
@@ -75,7 +75,7 @@ target_compile_options(optix_program PRIVATE
 )
 
 # === Link Libraries ===
-target_link_libraries(gausstracer PRIVATE
+target_link_libraries(raytracer PRIVATE
     ${TORCH_LIBRARIES}
     ${PYTHON_LIBRARIES}
     ${CUDA_LIBRARIES}
@@ -89,12 +89,12 @@ target_link_libraries(optix_program PRIVATE
 
 # === Custom: copy the .ptx next to the .so ===
 set(PTX_SOURCE "${CMAKE_CURRENT_BINARY_DIR}/CMakeFiles/optix_program.dir/csrc/shaders.ptx")
-set(PTX_DEST "${CMAKE_CURRENT_BINARY_DIR}/libgausstracer.ptx")
+set(PTX_DEST "${CMAKE_CURRENT_BINARY_DIR}/libraytracer.ptx")
 add_custom_command(
     OUTPUT ${PTX_DEST}
     DEPENDS ${PTX_SOURCE}
     COMMAND ${CMAKE_COMMAND} -E copy_if_different "${PTX_SOURCE}" "${PTX_DEST}"
-    COMMENT "Copying PTX to gausstracer output directory"
+    COMMENT "Copying PTX to raytracer output directory"
 )
 add_custom_target(copy_optix_ptx ALL DEPENDS ${PTX_DEST})
 add_dependencies(copy_optix_ptx optix_program)

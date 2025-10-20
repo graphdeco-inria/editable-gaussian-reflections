@@ -1,1 +1,1 @@
-bash run.sh -s renders/$scene -m output_v99_figure_try3/${scene}_sanity_check -r 768 --raytracer_version /home/ypoirier/optix/gausstracer/build/v99_sanity_check_should_be_unchanged
+bash run.sh -s renders/$scene -m output_v99_figure_try3/${scene}_sanity_check -r 768 --raytracer_version /home/ypoirier/optix/raytracer/build/v99_sanity_check_should_be_unchanged
