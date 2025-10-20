@@ -412,7 +412,6 @@ def main(cfg: TyroConfig):
         iter_end.record()
 
         with torch.no_grad():
-            # Log and save
             NOW = time.time()
 
             training_report(cfg, scene, raytracer, tb_writer, iteration)
