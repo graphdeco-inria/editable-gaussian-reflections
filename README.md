@@ -15,19 +15,18 @@ conda activate editable_gauss_refl
 
 pip install torch==2.5.1 torchvision==0.20.1 torchaudio==2.5.1 --index-url https://download.pytorch.org/whl/cu121
 pip install -r requirements.txt
-
-pip install -v -e .[dev]
 ```
+
+To build the cuda raytracer run
+```bash
+bash make.sh
+```
+alternatively you can pip install the project.
 
 To test if installed correctly, run
 ```bash
 bash ./scripts/test.sh
 bash ./scripts/dryrun.sh
-```
-
-If you are modifying the raytracer you cna rebuild easily with
-```bash
-bash make.sh
 ```
 
 ### Troubleshooting
@@ -84,6 +83,4 @@ python gaussianviewer.py local $OUTDIR 8000
 <!-- todo -->
 
 <!-- todo note that the specular pass is called glossy -->
-
-<!-- ------------------------------------------ -->
 

@@ -20,8 +20,8 @@ class Config:
     viewer: bool = False
     viewer_mode: str = "local"
     val_view: int = 75
-    test_iterations: list[int] = field(default_factory=lambda: [1, 750, 4000, 8000])
-    save_iterations: list[int] = field(default_factory=lambda: [1, 750, 4000, 8000])
+    test_iterations: list[int] = field(default_factory=lambda: [1, 750, 3000, 8000])
+    save_iterations: list[int] = field(default_factory=lambda: [1, 750, 3000, 8000])
     iterations: int = 8000
 
     # * Dataset params
