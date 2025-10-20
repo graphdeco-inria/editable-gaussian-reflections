@@ -17,6 +17,7 @@ from gaussian_tracing.renderer.gaussian_raytracer import GaussianRaytracer
 from gaussian_tracing.scene.cameras import Camera
 
 
+# todo remove this
 def render(
     camera: Camera,
     raytracer: GaussianRaytracer,
@@ -31,8 +32,8 @@ def render(
         target_diffuse = camera.diffuse_image
         target_glossy = camera.glossy_image
         target_normal = camera.normal_image
-        target_f0 = camera.F0_image
-        target_roughness = camera.roughness_image.mean(dim=0, keepdim=True)
+        target_f0 = camera.f0_image
+        target_roughness = camera.roughness_image
         target_depth = camera.depth_image
     else:
         target = None
@@ -78,7 +79,7 @@ def render(
         normal=framebuffer.output_normal.clone().detach().moveaxis(-1, 1)
         if framebuffer.output_normal is not None
         else torch.zeros_like(rgb),
-        roughness=framebuffer.output_roughness.clone().detach().moveaxis(-1, 1).repeat(1, 3, 1, 1)
+        roughness=framebuffer.output_roughness.clone().detach().moveaxis(-1, 1)
         if framebuffer.output_roughness is not None
         else torch.zeros_like(rgb),
         F0=framebuffer.output_f0.clone().detach().moveaxis(-1, 1)

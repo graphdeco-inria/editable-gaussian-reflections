@@ -234,7 +234,7 @@ def render_set(
             normal_gt_image = view.normal_image
             roughness_gt_image = view.roughness_image
             depth_gt_image = view.depth_image.unsqueeze(0)
-            F0_gt_image = view.F0_image
+            F0_gt_image = view.f0_image
 
             diffuse_image = tonemap(package.rgb[0]).clamp(0, 1)
             glossy_image = tonemap(package.rgb[1:].sum(dim=0)).clamp(0, 1)
@@ -305,11 +305,14 @@ def render_set(
                 )
 
             def format_image(image):
-                image = F.interpolate(
-                    image[None],
-                    (image.shape[-2] // 2 * 2, image.shape[-1] // 2 * 2),
-                    mode="bilinear",
-                )[0]
+                # * Enforce even dimensions for video encoding
+                rounded_size = (image.shape[-2] // 2 * 2, image.shape[-1] // 2 * 2) 
+                if rounded_size != (image.shape[-2], image.shape[-1]):
+                    image = F.interpolate(
+                        image[None],
+                        (image.shape[-2] // 2 * 2, image.shape[-1] // 2 * 2),
+                        mode="bilinear",
+                    )[0]
                 return (image.clamp(0, 1) * 255).to(torch.uint8).moveaxis(0, -1).cpu()
 
             all_renders.append(format_image(pred_image))
@@ -323,7 +326,7 @@ def render_set(
 
             max_depth = package.target_depth.amax()
             all_depth_renders.append(format_image(package.depth[0] / max_depth).repeat(1, 1, 3))
-            all_depth_gts.append(format_image(package.target_depth.unsqueeze(0) / max_depth).repeat(1, 1, 3))
+            all_depth_gts.append(format_image(package.target_depth / max_depth).repeat(1, 1, 3))
 
             all_normal_renders.append(format_image(package.normal[0] / 2 + 0.5))
             all_normal_gts.append(format_image(package.target_normal / 2 + 0.5))

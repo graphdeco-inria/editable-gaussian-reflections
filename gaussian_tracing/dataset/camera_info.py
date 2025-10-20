@@ -16,13 +16,9 @@ class CameraInfo:
     width: int
     height: int
 
-    albedo_image: None
-    glossy_image: None
-    diffuse_image: None
-    depth_image: None
-    normal_image: None
-    roughness_image: None
-    metalness_image: None
-    base_color_image: None
-    brdf_image: None
-    specular_image: None
+    glossy_image: np.array
+    diffuse_image: np.array
+    depth_image: np.array
+    normal_image: np.array
+    roughness_image: np.array
+    f0_image: np.array

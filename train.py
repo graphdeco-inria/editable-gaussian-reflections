@@ -146,11 +146,11 @@ def training_report(
                     normal_image = torch.clamp(package.normal[0] / 2 + 0.5, 0.0, 1.0)
                     depth_image = package.depth[0]
 
-                    F0_image = torch.clamp(package.F0[0], 0.0, 1.0)
+                    f0_image = torch.clamp(package.F0[0], 0.0, 1.0)
                     normal_gt_image = torch.clamp(viewpoint.normal_image / 2 + 0.5, 0.0, 1.0)
                     depth_gt_image = viewpoint.depth_image
-                    F0_gt_image = torch.clamp(viewpoint.F0_image, 0.0, 1.0)
-                    roughness_gt_image = torch.clamp(viewpoint.roughness_image, 0.0, 1.0)
+                    F0_gt_image = torch.clamp(viewpoint.f0_image, 0.0, 1.0)
+                    roughness_gt_image = torch.clamp(viewpoint.roughness_image, 0.0, 1.0) 
 
                     diffuse_l1_test += l1_loss(diffuse_image, diffuse_gt_image).mean().double()
                     diffuse_psnr_test += psnr(diffuse_image, diffuse_gt_image).mean().double()
@@ -226,43 +226,6 @@ def training_report(
                             ),
                             padding=0,
                         )
-                        stats = raytracer.cuda_module.get_stats()
-                        torch.save(
-                            stats.num_traversed_per_pixel,
-                            os.path.join(
-                                tb_writer.log_dir,
-                                f"{config['name']}_view",
-                                f"iter_{iteration:09}_view_{viewpoint.colmap_id}_num_traversed_per_pixel.pt",
-                            ),
-                        )
-                        torch.save(
-                            stats.num_traversed_per_pixel,
-                            os.path.join(
-                                tb_writer.log_dir,
-                                f"{config['name']}_view",
-                                f"iter_{iteration:09}_view_{viewpoint.colmap_id}_num_traversed_per_pixel.pt",
-                            ),
-                        )
-                        # also save them as normalized png
-                        save_image(
-                            (stats.num_traversed_per_pixel.float() / stats.num_traversed_per_pixel.max()),
-                            os.path.join(
-                                tb_writer.log_dir,
-                                f"{config['name']}_view",
-                                f"iter_{iteration:09}_view_{viewpoint.colmap_id}_num_traversed_per_pixel.png",
-                            ),
-                            padding=0,
-                        )
-                        save_image(
-                            (stats.num_traversed_per_pixel.float() / stats.num_traversed_per_pixel.max()),
-                            os.path.join(
-                                tb_writer.log_dir,
-                                f"{config['name']}_view",
-                                f"iter_{iteration:09}_view_{viewpoint.colmap_id}_num_traversed_per_pixel.png",
-                            ),
-                            padding=0,
-                        )
-
                         save_image(
                             torch.stack([roughness_image.cuda(), roughness_gt_image]).clamp(0, 1),
                             os.path.join(
@@ -274,7 +237,7 @@ def training_report(
                             padding=0,
                         )
                         save_image(
-                            torch.stack([F0_image.cuda(), F0_gt_image]).clamp(0, 1),
+                            torch.stack([f0_image.cuda(), F0_gt_image]).clamp(0, 1),
                             os.path.join(
                                 tb_writer.log_dir,
                                 f"{config['name']}_view",
@@ -325,7 +288,7 @@ def training_report(
                         )
 
                         save_image(
-                            (torch.stack([depth_image.cuda(), depth_gt_image.unsqueeze(0)]) - depth_gt_image.amin())
+                            (torch.stack([depth_image.cuda(), depth_gt_image]) - depth_gt_image.amin())
                             / (depth_gt_image.amax() - depth_gt_image.amin()),
                             os.path.join(
                                 tb_writer.log_dir,

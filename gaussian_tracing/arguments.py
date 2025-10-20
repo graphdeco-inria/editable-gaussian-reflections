@@ -59,7 +59,7 @@ class TyroConfig:
     init_num_pts_farfield = 75_000
     init_opa: float = 0.1
     init_opa_farfield: float = 0.1
-    init_scale: float = 0.1  # 1.0 for 3dgs, 0.1 for mcmc
+    init_scale: float = 1.0
     init_scale_farfield: float = 0.1
     init_roughness: float = 0.1
     init_f0: float = 0.04

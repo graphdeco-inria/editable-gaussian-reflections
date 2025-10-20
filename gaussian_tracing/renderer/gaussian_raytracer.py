@@ -126,7 +126,7 @@ class GaussianRaytracer:
             self._export_param_values()
 
             framebuffer = self.cuda_module.get_framebuffer()
-
+    
             if target_diffuse is not None:
                 framebuffer.target_diffuse.copy_(target_diffuse.moveaxis(0, -1))
             else:
@@ -138,7 +138,7 @@ class GaussianRaytracer:
                 framebuffer.target_glossy.zero_()
 
             if target_depth is not None:
-                framebuffer.target_depth.copy_(target_depth.unsqueeze(-1))
+                framebuffer.target_depth.copy_(target_depth.moveaxis(0, -1))
             else:
                 framebuffer.target_depth.zero_()
 

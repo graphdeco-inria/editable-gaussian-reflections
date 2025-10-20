@@ -6,10 +6,11 @@ import cv2
 import numpy as np
 import torch
 from einops import rearrange
+import tifffile
+from torchvision.io import read_image
 
-from gaussian_tracing.dataset.colmap_parser import ColmapParser
-from gaussian_tracing.utils.depth_utils import transform_depth_to_position_image
-from gaussian_tracing.utils.graphics_utils import BasicPointCloud, focal2fov, fov2focal
+from gaussian_tracing.utils.graphics_utils import focal2fov, fov2focal
+from gaussian_tracing.utils.tonemapping import untonemap
 
 from .camera_info import CameraInfo
 
@@ -26,13 +27,6 @@ class BlenderDataset:
         self.split = split
         self.resolution = resolution
         self.max_images = max_images
-
-        self.colmap_parser = ColmapParser(data_dir)
-        self.point_cloud = BasicPointCloud(
-            points=self.colmap_parser.points,
-            colors=self.colmap_parser.points_rgb,
-            normals=np.zeros_like(self.colmap_parser.points),
-        )
 
         downsampled_cache_dir = data_dir.replace("/renders/", f"/cache/{self.resolution}/")
         if os.path.exists(downsampled_cache_dir):
@@ -56,40 +50,26 @@ class BlenderDataset:
         image_name = Path(frame_name).stem + ".png"
         image_path = os.path.join(self.data_dir, image_name)
 
-        if "LOAD_FROM_IMAGE_FILES" not in os.environ:
-            cache_name = frame_name.replace("render/render_", "")
-            cache_path = os.path.join(self.cache_dir, cache_name + ".pt")
-            image_tensor = torch.load(cache_path)
-            (
-                image,
-                diffuse_image,
-                glossy_image,
-                normal_image,
-                position_image,
-                roughness_image,
-                specular_image,
-                metalness_image,
-                base_color_image,
-                brdf_image,
-            ) = torch.unbind(image_tensor, dim=0)
-            albedo_image = None
-            depth_image = None
+        if "safetensors" in self.data_dir:
+            import safetensors.torch
+            st_path = os.path.join(self.data_dir, frame_name.replace("render/render_", "buffers_") + ".safetensors")
+            st = safetensors.torch.load_file(st_path)
+            image = st["render"].moveaxis(0, -1)
+            diffuse_image = st["diffuse"].moveaxis(0, -1)
+            glossy_image = st["glossy"].moveaxis(0, -1)
+            normal_image = st["normal"].moveaxis(0, -1)
+            depth_image = st["depth"].moveaxis(0, -1)
+            roughness_image = st["roughness"].moveaxis(0, -1)
+            f0_image = st["f0"].moveaxis(0, -1)
         else:
             image = self._get_buffer(frame_name, "render")
-            albedo_image = self._get_buffer(frame_name, "albedo")
             diffuse_image = self._get_buffer(frame_name, "diffuse")
             glossy_image = self._get_buffer(frame_name, "glossy")
             roughness_image = self._get_buffer(frame_name, "roughness")
-            metalness_image = self._get_buffer(frame_name, "metalness")
             normal_image = self._get_buffer(frame_name, "normal")
             depth_image = self._get_buffer(frame_name, "depth")
-            specular_image = self._get_buffer(frame_name, "specular")
-            brdf_image = self._get_buffer(frame_name, "glossy_brdf")
-            base_color_image = self._get_buffer(frame_name, "base_color")
-            # specular_image = torch.ones_like(image) * 0.5
-            # brdf_image = torch.zeros_like(image)
-            # base_color_image = albedo_image * (1.0 - metalness_image) + metalness_image
-
+            f0_image = self._get_buffer(frame_name, "f0")
+        
         # Camera intrinsics
         height, width = image.shape[0], image.shape[1]
         fovx = self.contents["camera_angle_x"]
@@ -106,13 +86,6 @@ class BlenderDataset:
         R = np.transpose(w2c[:3, :3])
         T = w2c[:3, 3]
 
-        # Convert to depth to distance image
-        if depth_image is not None:
-            position_image = transform_depth_to_position_image(depth_image[:, :, 0], fovx, fovy)
-            distance_image = torch.norm(position_image, dim=-1)
-        else:
-            distance_image = (position_image - torch.from_numpy(c2w[:3, 3])).norm(dim=-1)
-
         cam_info = CameraInfo(
             uid=idx,
             R=R,
@@ -124,29 +97,34 @@ class BlenderDataset:
             image_name=image_name,
             width=width,
             height=height,
-            albedo_image=albedo_image,
             diffuse_image=diffuse_image,
             glossy_image=glossy_image,
-            depth_image=distance_image,
+            depth_image=depth_image,
             normal_image=normal_image,
             roughness_image=roughness_image,
-            metalness_image=metalness_image,
-            base_color_image=base_color_image,
-            brdf_image=brdf_image,
-            specular_image=specular_image,
+            f0_image=f0_image
         )
         return cam_info
 
     def _get_buffer(self, frame_name: str, buffer_name: str):
         buffer_filename = frame_name.replace("render", buffer_name)
         buffer_path = os.path.join(self.data_dir, buffer_filename + ".exr")
-        assert os.path.exists(buffer_path), f"{buffer_name} not found at {buffer_path}"
-        image = cv2.imread(buffer_path, cv2.IMREAD_UNCHANGED)
-        image = torch.tensor(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
-        if self.resolution is not None:
+        if os.path.exists(buffer_path):
+            image = cv2.imread(buffer_path, cv2.IMREAD_UNCHANGED)
+            image = torch.tensor(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
+        elif os.path.exists(buffer_path.replace(".exr", ".tiff")):
+            buffer_path = buffer_path.replace(".exr", ".tiff")
+            image = torch.tensor(tifffile.imread(buffer_path))
+        elif os.path.exists(buffer_path.replace(".exr", ".png")):
+            buffer_path = buffer_path.replace(".exr", ".png")
+            image = read_image(buffer_path)
+            image = rearrange(image, "c h w -> h w c")
+        assert image.shape[0] != 1
+        if image.ndim == 2:
+            image = image.unsqueeze(-1)
+        if self.resolution is not None and image.shape[0] != self.resolution:
             image = _resize_image_tensor(image, self.resolution)
         return image
-
 
 def _resize_image_tensor(image, resolution):
     height = image.shape[0]

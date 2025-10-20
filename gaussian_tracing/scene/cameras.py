@@ -16,6 +16,7 @@ import torch
 from torch import nn
 
 from gaussian_tracing.utils.graphics_utils import getProjectionMatrix, getWorld2View2
+from gaussian_tracing.utils.tonemapping import untonemap
 
 
 class Camera(nn.Module):
@@ -30,15 +31,12 @@ class Camera(nn.Module):
         gt_alpha_mask,
         image_name,
         uid,
-        diffuse_image,
         glossy_image,
+        diffuse_image,
         depth_image,
         normal_image,
         roughness_image,
-        metalness_image,
-        base_color_image,
-        brdf_image,
-        specular_image,
+        f0_image,
         trans=np.array([0.0, 0.0, 0.0]),
         scale=1.0,
         data_device="cuda",
@@ -57,24 +55,30 @@ class Camera(nn.Module):
 
         image_holding_device = os.getenv("IMAGE_HOLDING_DEVICE", "cpu")
 
-        EXPOSURE = float(os.getenv("EXPOSURE", 3.5))
-        self._original_image = (diffuse_image + glossy_image).half().to(image_holding_device)
+        if image.dtype == torch.uint8:
+            image = untonemap(image.cuda().half() / 255.0)
+            diffuse_image = untonemap(diffuse_image.cuda().half() / 255.0)
+            glossy_image = untonemap(glossy_image.cuda().half() / 255.0)
+        if normal_image.dtype == torch.uint8:
+            normal_image = normal_image.half() / 255.0 * 2.0 - 1.0
+        if depth_image.dtype == torch.uint8:
+            assert False 
+        if roughness_image.dtype == torch.uint8:
+            roughness_image = roughness_image.half() / 255.0
+        if f0_image.dtype == torch.uint8:
+            f0_image = f0_image.half() / 255.0
+        if roughness_image.shape[-1] == 3:
+            roughness_image = roughness_image[..., :1]
+        if depth_image.shape[-1] == 3:
+            depth_image = depth_image[..., :1]
+
+        self._original_image = image.half().to(image_holding_device)
         self._diffuse_image = diffuse_image.half().to(image_holding_device)
         self._glossy_image = glossy_image.half().to(image_holding_device)
-        self._original_image *= EXPOSURE
-        self._diffuse_image *= EXPOSURE
-        self._glossy_image *= EXPOSURE
-
         self._normal_image = normal_image.half().to(image_holding_device)
         self._depth_image = depth_image.half().to(image_holding_device)
-        self._roughness_image = (roughness_image).half().to(image_holding_device)
-        self._brdf_image = brdf_image.half().to(image_holding_device)
-
-        self._F0_image = (
-            ((1.0 - metalness_image) * 0.08 * specular_image + metalness_image * base_color_image)
-            .half()
-            .to(image_holding_device)
-        )
+        self._roughness_image = roughness_image.half().to(image_holding_device)
+        self._f0_image = f0_image.half().to(image_holding_device)
 
         try:
             self.data_device = torch.device(data_device)
@@ -99,20 +103,17 @@ class Camera(nn.Module):
             T=cam_info.T,
             FoVx=cam_info.FovX,
             FoVy=cam_info.FovY,
-            image=cam_info.image,
+            image=cam_info.image.moveaxis(-1, 0),
             gt_alpha_mask=None,
             image_name=cam_info.image_name,
             uid=cam_info.uid,
             data_device="cuda",
             diffuse_image=cam_info.diffuse_image.moveaxis(-1, 0),
             glossy_image=cam_info.glossy_image.moveaxis(-1, 0),
-            depth_image=cam_info.depth_image,
+            depth_image=cam_info.depth_image.moveaxis(-1, 0),
             normal_image=cam_info.normal_image.moveaxis(-1, 0),
             roughness_image=cam_info.roughness_image.moveaxis(-1, 0),
-            metalness_image=cam_info.metalness_image.moveaxis(-1, 0),
-            base_color_image=cam_info.base_color_image.moveaxis(-1, 0),
-            brdf_image=cam_info.brdf_image.moveaxis(-1, 0),
-            specular_image=cam_info.specular_image.moveaxis(-1, 0),
+            f0_image=cam_info.f0_image.moveaxis(-1, 0)
         )
 
     @property
@@ -140,12 +141,8 @@ class Camera(nn.Module):
         return self._roughness_image.float().cuda()
 
     @property
-    def brdf_image(self):
-        return self._brdf_image.float().cuda()
-
-    @property
-    def F0_image(self):
-        return self._F0_image.float().cuda()
+    def f0_image(self):
+        return self._f0_image.float().cuda()
 
     def update(self):
         self.world_view_transform = (

@@ -66,22 +66,22 @@ def getNerfppNorm(cameras: List[Camera]) -> dict:
 
 def get_dataset(cfg: TyroConfig, data_dir: str, split: str):
     if os.path.exists(os.path.join(data_dir, "transforms_train.json")):
-        if os.path.isfile(os.path.join(data_dir, split, "render", "render_0000.exr")):
-            dataset = BlenderDataset(
-                data_dir,
-                split=split,
-                resolution=cfg.resolution,
-                max_images=cfg.max_images,
-            )
-        else:
-            dataset = BlenderPriorDataset(
-                data_dir,
-                split=split,
-                resolution=cfg.resolution,
-                max_images=cfg.max_images,
-                do_eval=cfg.eval,
-                do_depth_fit=cfg.do_depth_fit,
-            )
+        dataset = BlenderDataset(
+            data_dir,
+            split=split,
+            resolution=cfg.resolution,
+            max_images=cfg.max_images,
+        )
+        # if os.path.isfile(os.path.join(data_dir, split, "render", "render_0000.exr")):
+        # else:
+        #     dataset = BlenderPriorDataset(
+        #         data_dir,
+        #         split=split,
+        #         resolution=cfg.resolution,
+        #         max_images=cfg.max_images,
+        #         do_eval=cfg.eval,
+        #         do_depth_fit=cfg.do_depth_fit,
+        #     )
     else:
         dataset = ColmapPriorDataset(
             data_dir,
