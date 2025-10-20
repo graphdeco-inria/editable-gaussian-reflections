@@ -14,7 +14,7 @@ import os
 import shutil
 from os import makedirs
 from dataclasses import dataclass, field
-from typing import Annotated, Literal
+from typing import Annotated, Literal, Optional
 import json 
 
 import numpy as np
@@ -34,20 +34,22 @@ from gaussian_tracing.scene import GaussianModel, Scene
 from gaussian_tracing.utils.general_utils import safe_state
 from gaussian_tracing.utils.image_utils import psnr
 from gaussian_tracing.utils.tonemapping import tonemap
+from gaussian_tracing.utils.system_utils import searchForMaxIteration
 
 @dataclass
 class RenderCLI:
     model_path: Annotated[str, arg(aliases=["-m"])]
 
-    iteration: int = -1
+    iteration: Optional[int] = None
     spp: int = 128
-    train_views: bool = False
+    split: Literal["train", "test"] = "test"
     denoise: bool = True
     modes: list[Literal["regular", "env_rot_1", "env_move_1", "env_move_2"]] = field(
         default_factory=lambda: ["regular"]
     )
     skip_video: bool = False
     skip_save_frames: bool = False
+    znear: float = 1.0
 
 
 @torch.no_grad()
@@ -75,8 +77,8 @@ def render_set(
         normal_gts_path = os.path.join(model_path, split, "ours_{}".format(iteration), "normal_gt")
         roughness_path = os.path.join(model_path, split, "ours_{}".format(iteration), "roughness")
         roughness_gts_path = os.path.join(model_path, split, "ours_{}".format(iteration), "roughness_gt")
-        F0_path = os.path.join(model_path, split, "ours_{}".format(iteration), "F0")
-        F0_gts_path = os.path.join(model_path, split, "ours_{}".format(iteration), "F0_gt")
+        f0_path = os.path.join(model_path, split, "ours_{}".format(iteration), "f0")
+        f0_gts_path = os.path.join(model_path, split, "ours_{}".format(iteration), "f0_gt")
 
         makedirs(render_path, exist_ok=True)
         makedirs(gts_path, exist_ok=True)
@@ -90,8 +92,8 @@ def render_set(
         makedirs(normal_gts_path, exist_ok=True)
         makedirs(roughness_path, exist_ok=True)
         makedirs(roughness_gts_path, exist_ok=True)
-        makedirs(F0_path, exist_ok=True)
-        makedirs(F0_gts_path, exist_ok=True)
+        makedirs(f0_path, exist_ok=True)
+        makedirs(f0_gts_path, exist_ok=True)
 
         all_renders = []
         all_gts = []
@@ -111,8 +113,8 @@ def render_set(
         all_roughness_renders = []
         all_roughness_gts = []
 
-        all_F0_renders = []
-        all_F0_gts = []
+        all_f0_renders = []
+        all_f0_gts = []
 
         for idx, view in enumerate(tqdm(views, desc="Rendering progress")):
             if "env" in mode:
@@ -120,7 +122,7 @@ def render_set(
                     view0 = view
                     view0.FoVx = 2.0944 * 2
                     view0.FoVy = -2.0944 * 2
-                    continue  # * Skip frame 0, rotation is incorrect for some reason I don't understand
+                    continue  # * Skip frame 0, rotation is incorrect
                 view = view0
 
                 R_colmap_init = view.R
@@ -234,7 +236,7 @@ def render_set(
             normal_gt_image = view.normal_image
             roughness_gt_image = view.roughness_image
             depth_gt_image = view.depth_image.unsqueeze(0)
-            F0_gt_image = view.f0_image
+            f0_gt_image = view.f0_image
 
             diffuse_image = tonemap(package.rgb[0]).clamp(0, 1)
             glossy_image = tonemap(package.rgb[1:].sum(dim=0)).clamp(0, 1)
@@ -287,12 +289,12 @@ def render_set(
                 )
 
                 torchvision.utils.save_image(
-                    package.F0[0],
-                    os.path.join(F0_path, "{0:05d}".format(idx) + "_F0.png"),
+                    package.f0[0],
+                    os.path.join(f0_path, "{0:05d}".format(idx) + "_f0.png"),
                 )
                 torchvision.utils.save_image(
-                    F0_gt_image,
-                    os.path.join(F0_gts_path, "{0:05d}".format(idx) + "_F0.png"),
+                    f0_gt_image,
+                    os.path.join(f0_gts_path, "{0:05d}".format(idx) + "_f0.png"),
                 )
 
                 torchvision.utils.save_image(
@@ -334,8 +336,8 @@ def render_set(
             all_roughness_renders.append(format_image(package.roughness[0]))
             all_roughness_gts.append(format_image(package.target_roughness.repeat(3, 1, 1)))
 
-            all_F0_renders.append(format_image(package.F0[0]))
-            all_F0_gts.append(format_image(package.target_f0))
+            all_f0_renders.append(format_image(package.f0[0]))
+            all_f0_gts.append(format_image(package.target_f0))
 
         video_dir = f"videos_{mode}".replace("_normal", "")
         os.makedirs(os.path.join(cfg.model_path, video_dir), exist_ok=True)
@@ -474,19 +476,19 @@ def render_set(
                 )
 
                 torchvision.io.write_video(
-                    path.format(name=f"F0_renders_{label}", dir=video_dir),
-                    torch.stack(all_F0_renders),
+                    path.format(name=f"f0_renders_{label}", dir=video_dir),
+                    torch.stack(all_f0_renders),
                     **kwargs,
                 )
                 torchvision.io.write_video(
-                    path.format(name=f"F0_gts_{label}", dir=video_dir),
-                    torch.stack(all_F0_gts),
+                    path.format(name=f"f0_gts_{label}", dir=video_dir),
+                    torch.stack(all_f0_gts),
                     **kwargs,
                 )
                 torchvision.io.write_video(
-                    path.format(name=f"F0_comparison_{label}", dir=video_dir),
+                    path.format(name=f"f0_comparison_{label}", dir=video_dir),
                     torch.cat(
-                        [torch.stack(all_F0_renders), torch.stack(all_F0_gts)],
+                        [torch.stack(all_f0_renders), torch.stack(all_f0_gts)],
                         dim=2,
                     ),
                     **kwargs,
@@ -512,12 +514,12 @@ if __name__ == "__main__":
     torch.autograd.set_detect_anomaly(cfg.detect_anomaly)
 
     gaussians = GaussianModel(cfg)
-    scene = Scene(cfg, gaussians, load_iteration=cli.iteration, shuffle=False)
+    scene = Scene(cfg, gaussians, load_iteration=cli.iteration, shuffle=False, model_path=cli.model_path)
 
     viewpoint_stack = scene.getTrainCameras().copy()
     raytracer = GaussianRaytracer(gaussians, viewpoint_stack[0].image_width, viewpoint_stack[0].image_height)
 
-    if cli.train_views:
+    if cli.split == "train":
         render_set(
             cli,
             cfg,

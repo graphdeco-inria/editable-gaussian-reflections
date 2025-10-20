@@ -80,13 +80,13 @@ __device__ void G_Smith_derivatives(
     dG_dL = dG_dl_l * Gv;
 }
 
-__device__ float3 fresnel_schlick(float3 F0, float cosTheta) { return F0 + (1.0f - F0) * powf(1.0f - cosTheta, 5.0f); }
+__device__ float3 fresnel_schlick(float3 f0, float cosTheta) { return f0 + (1.0f - f0) * powf(1.0f - cosTheta, 5.0f); }
 
 __device__ void fresnel_schlick_backward(
     float3 dl_dF, // ∂L/∂F (incoming gradient)
-    float3 F0,
+    float3 f0,
     float cosTheta,
-    float3 &dl_dF0,      // output accumulators for F0
+    float3 &dl_df0,      // output accumulators for f0
     float &dl_dcosTheta, // scalar output for cosTheta
     float3 &F_out        // forward Fresnel result
 ) {
@@ -95,23 +95,23 @@ __device__ void fresnel_schlick_backward(
     float one_minus_cos4 = one_minus_cos2 * one_minus_cos2;
     float one_minus_cos5 = one_minus_cos4 * one_minus_cos;
 
-    float3 one_minus_F0 = make_float3(1.0f - F0.x, 1.0f - F0.y, 1.0f - F0.z);
+    float3 one_minus_f0 = make_float3(1.0f - f0.x, 1.0f - f0.y, 1.0f - f0.z);
 
-    F_out = F0 + one_minus_F0 * one_minus_cos5;
+    F_out = f0 + one_minus_f0 * one_minus_cos5;
 
     // Scalar, same for all channels
-    float dF_dF0_scalar = 1.0f - one_minus_cos5;
-    dl_dF0 = dl_dF * dF_dF0_scalar;
+    float dF_df0_scalar = 1.0f - one_minus_cos5;
+    dl_df0 = dl_dF * dF_df0_scalar;
     float3 dF_dcosTheta = make_float3(
-        -5.0f * one_minus_F0.x * one_minus_cos4,
-        -5.0f * one_minus_F0.y * one_minus_cos4,
-        -5.0f * one_minus_F0.z * one_minus_cos4);
+        -5.0f * one_minus_f0.x * one_minus_cos4,
+        -5.0f * one_minus_f0.y * one_minus_cos4,
+        -5.0f * one_minus_f0.z * one_minus_cos4);
 
     dl_dcosTheta = dot(dl_dF, dF_dcosTheta);
 }
 
-__device__ float3 cook_torrance_brdf(float3 N, float3 V, float3 L, float roughness, float3 F0) {
-    if (F0.x == 0.0f && F0.y == 0.0f && F0.z == 0.0f) {
+__device__ float3 cook_torrance_brdf(float3 N, float3 V, float3 L, float roughness, float3 f0) {
+    if (f0.x == 0.0f && f0.y == 0.0f && f0.z == 0.0f) {
         return make_float3(0.0f, 0.0f, 0.0f);
     }
 
@@ -121,7 +121,7 @@ __device__ float3 cook_torrance_brdf(float3 N, float3 V, float3 L, float roughne
     float D = D_GGX(N, H, alpha);
     float G = G_Smith(N, V, L, alpha);
     float cosTheta = fmaxf(dot(L, H), 0.0f);
-    float3 F = fresnel_schlick(F0, cosTheta);
+    float3 F = fresnel_schlick(f0, cosTheta);
 
     float NdotL = fmaxf(dot(N, L), 0.0f);
     float NdotV = fmaxf(dot(N, V), 0.0f);
@@ -131,8 +131,8 @@ __device__ float3 cook_torrance_brdf(float3 N, float3 V, float3 L, float roughne
     return (D * G * F) / denom;
 }
 
-__device__ float3 cook_torrance_weight(float3 N, float3 V, float3 L, float roughness, float3 F0) {
-    if (F0.x == 0.0f && F0.y == 0.0f && F0.z == 0.0f) {
+__device__ float3 cook_torrance_weight(float3 N, float3 V, float3 L, float roughness, float3 f0) {
+    if (f0.x == 0.0f && f0.y == 0.0f && f0.z == 0.0f) {
         return make_float3(0.0f, 0.0f, 0.0f);
     }
 
@@ -144,7 +144,7 @@ __device__ float3 cook_torrance_weight(float3 N, float3 V, float3 L, float rough
 
     float alpha = roughness * roughness;
     float G = G_Smith(N, V, L, alpha);
-    float3 F = fresnel_schlick(F0, VdotH);
+    float3 F = fresnel_schlick(f0, VdotH);
 
     return F * G * VdotH / (NdotH * NdotV + BRDF_EPS);
 }

@@ -182,7 +182,7 @@ class GaussianViewer(Viewer):
         self.monitor = PerformanceMonitor(self.mode, ["Render"], add_other=False)
 
         # Render modes
-        self.render_modes = ["RGB", "Normals", "Depth", "F0", "Roughness", "Illumination", "Ellipsoids"]
+        self.render_modes = ["RGB", "Normals", "Depth", "f0", "Roughness", "Illumination", "Ellipsoids"]
         self.render_mode = 0
         
         self.ray_choices = ["All/Default"] + ["Ray " + str(i) for i in range(self.ray_count)] 
@@ -336,8 +336,8 @@ class GaussianViewer(Viewer):
                             net_image = tonemap(package.rgb[nth_ray])
                     elif mode_name == "Diffuse":
                         net_image = tonemap(package.rgb[max(nth_ray, 0)])
-                    elif mode_name == "F0":
-                        net_image = package.F0[max(nth_ray, 0)]
+                    elif mode_name == "f0":
+                        net_image = package.f0[max(nth_ray, 0)]
                     elif mode_name == "Normals":
                         net_image = package.normal[max(nth_ray, 0)] / 2 + 0.5
                     elif mode_name == "Depth":

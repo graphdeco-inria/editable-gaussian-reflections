@@ -131,13 +131,13 @@ extern "C" __global__ void __raygen__rg() {
         float3 next_origin = effective_position + eps_ray_surface_offset * next_direction;
 
         // * Update throughput in a cumulative product
-        float3 effective_F0 = pixel.output_f0[step];
+        float3 effective_f0 = pixel.output_f0[step];
         if (step > 0) {
             pixel.output_throughput[step] = pixel.output_throughput[step - 1];
         }
 
         pixel.output_throughput[step] *=
-            cook_torrance_weight(effective_normal, -ray_direction, next_direction, effective_roughness, effective_F0);
+            cook_torrance_weight(effective_normal, -ray_direction, next_direction, effective_roughness, effective_f0);
 
         // * Update ray and log it for debugging
         ray_origin = next_origin;

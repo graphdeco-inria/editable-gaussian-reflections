@@ -34,23 +34,22 @@ class Scene:
         resolution_scales=[1.0],
         glossy=False,
         extend_point_cloud=None,
+        model_path=None
     ):
         """b
         :param path: Path to colmap scene main folder.
         """
         self.cfg = cfg
-        self.model_path = cfg.model_path
-        self.loaded_iter = None
+        self.model_path = model_path or cfg.model_path
         self.gaussians = gaussians
         self.glossy = glossy
 
-        if load_iteration:
-            if load_iteration == -1:
-                self.loaded_iter = searchForMaxIteration(os.path.join(self.model_path, "point_cloud"))
-            else:
-                self.loaded_iter = load_iteration
-            print("Loading trained model at iteration {}".format(self.loaded_iter))
-
+        if load_iteration == None:
+            self.loaded_iter = searchForMaxIteration(os.path.join(self.model_path, "point_cloud"))
+        else:
+            self.loaded_iter = load_iteration
+        print("Loading trained model at iteration {}".format(load_iteration))
+        
         self.train_cameras = {}
         self.test_cameras = {}
 

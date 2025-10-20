@@ -3,7 +3,7 @@
 #include <cmath>
 #include <cuda_runtime.h>
 
-__device__ float3 fresnel_schlick(float3 F0, float cosTheta) { return F0 + (1.0f - F0) * powf(1.0f - cosTheta, 5.0f); }
+__device__ float3 fresnel_schlick(float3 f0, float cosTheta) { return f0 + (1.0f - f0) * powf(1.0f - cosTheta, 5.0f); }
 
 __device__ inline float lambda_GGX(float3 N, float3 W, float alpha) {
     float c = dot(N, W);

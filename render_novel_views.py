@@ -78,7 +78,7 @@ def render_set(
             "depth": package.depth[0] / package.depth[0].amax(),
             "normal": normal_image * 0.5 + 0.5,
             "roughness": package.roughness[0],
-            "F0": package.F0[0],
+            "f0": package.f0[0],
         }
         for k, v in result.items():
             save_path = os.path.join(save_dir, k, "{0:05d}".format(idx) + f"_{k}.png")
