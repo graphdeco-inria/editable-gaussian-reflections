@@ -9,7 +9,7 @@ from gaussian_tracing.arguments import (
 )
 from gaussian_tracing.renderer import GaussianRaytracer, render
 from gaussian_tracing.scene import GaussianModel, Scene
-from gaussian_tracing.utils.general_utils import safe_state
+from gaussian_tracing.utils.general_utils import set_seeds
 
 
 @torch.no_grad()
@@ -44,7 +44,7 @@ def render_set(
 
 def main(cfg: TyroConfig):
     # Initialize system state (RNG)
-    safe_state(cfg.quiet)
+    set_seeds()
 
     gaussians = GaussianModel(cfg)
     scene = Scene(cfg, gaussians, load_iteration=cfg.iteration, shuffle=False)

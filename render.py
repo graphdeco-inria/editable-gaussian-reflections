@@ -31,7 +31,7 @@ from gaussian_tracing.arguments import (
 )
 from gaussian_tracing.renderer import GaussianRaytracer, render
 from gaussian_tracing.scene import GaussianModel, Scene
-from gaussian_tracing.utils.general_utils import safe_state
+from gaussian_tracing.utils.general_utils import set_seeds
 from gaussian_tracing.utils.image_utils import psnr
 from gaussian_tracing.utils.tonemapping import tonemap
 from gaussian_tracing.utils.system_utils import searchForMaxIteration
@@ -510,7 +510,7 @@ if __name__ == "__main__":
     saved_cli_path = os.path.join(cli.model_path, "cfg.json")
     cfg = tyro.cli(TyroConfig, args=unknown_args, default=TyroConfig(**json.load(open(saved_cli_path, "r"))))
     
-    safe_state(cfg.quiet)
+    set_seeds()
 
     gaussians = GaussianModel(cfg)
     scene = Scene(cfg, gaussians, load_iteration=cli.iteration, shuffle=False, model_path=cli.model_path)

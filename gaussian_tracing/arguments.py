@@ -23,7 +23,6 @@ class TyroConfig:
     val_views: list[int] = field(default_factory=lambda: [75, 175])
     test_iterations: list[int] = field(default_factory=lambda: [750, 4000, 8000])
     save_iterations: list[int] = field(default_factory=lambda: [750, 4000, 8000])
-    quiet: bool = False
     iterations: int = 8000
 
     # * Dataset params

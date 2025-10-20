@@ -27,7 +27,7 @@ from gaussian_tracing.arguments import (
 from gaussian_tracing.renderer import GaussianRaytracer, render
 from gaussian_tracing.scene import GaussianModel, Scene
 from gaussian_tracing.utils.general_utils import (
-    safe_state,
+    set_seeds,
 )
 from gaussian_tracing.utils.image_utils import psnr
 from gaussian_tracing.utils.loss_utils import l1_loss
@@ -343,7 +343,7 @@ def training_report(
 
 
 def main(cfg: TyroConfig):
-    safe_state(cfg.quiet)
+    set_seeds()
 
     tb_writer = prepare_output_and_logger(cfg)
     gaussians = GaussianModel(cfg)
