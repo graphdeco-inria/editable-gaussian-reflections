@@ -17,7 +17,7 @@ from plyfile import PlyData, PlyElement
 from simple_knn._C import distCUDA2
 from torch import nn
 
-from gaussian_tracing.arguments import TyroConfig
+from gaussian_tracing.cfg import Config
 from gaussian_tracing.utils.general_utils import (
     build_scaling_rotation,
     get_expon_lr_func,
@@ -50,7 +50,7 @@ class GaussianModel:
 
         self.is_dirty = False  # for viewer
 
-    def __init__(self, cfg: TyroConfig):
+    def __init__(self, cfg: Config):
         self.cfg = cfg
         self._xyz = torch.empty(0)
         self._normal = torch.empty(0)

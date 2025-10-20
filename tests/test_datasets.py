@@ -6,7 +6,7 @@ import torch
 from PIL import Image
 from tqdm import tqdm
 
-from gaussian_tracing.arguments import TyroConfig
+from gaussian_tracing.cfg import Config
 from gaussian_tracing.dataset import BlenderDataset, BlenderPriorDataset
 
 
@@ -22,7 +22,7 @@ def vis_tensors(images, image_path):
 
 
 def test_blender_prior_dataset():
-    cfg = TyroConfig()
+    cfg = Config()
     scene_list = ["shiny_kitchen", "shiny_livingroom", "shiny_office", "shiny_bedroom"]
     output_dir = "./output/tests"
     os.makedirs(output_dir, exist_ok=True)

@@ -17,7 +17,7 @@ import numpy as np
 import torch
 from tqdm import tqdm
 
-from gaussian_tracing.arguments import TyroConfig
+from gaussian_tracing.cfg import Config
 from gaussian_tracing.dataset import (
     BlenderDataset,
     ColmapPriorDataset,
@@ -63,7 +63,7 @@ def getNerfppNorm(cameras: List[Camera]) -> dict:
     return {"translate": translate, "radius": radius}
 
 
-def get_dataset(cfg: TyroConfig, data_dir: str, split: str):
+def get_dataset(cfg: Config, data_dir: str, split: str):
     if os.path.exists(os.path.join(data_dir, "transforms_train.json")):
         dataset = BlenderDataset(
             data_dir,
@@ -110,7 +110,7 @@ def read_dataset(dataset, num_workers=16):
     return cameras
 
 
-def readSceneInfo(cfg: TyroConfig, data_dir: str) -> SceneInfo:
+def readSceneInfo(cfg: Config, data_dir: str) -> SceneInfo:
     print("Reading Training Transforms")
     train_dataset = get_dataset(
         cfg,

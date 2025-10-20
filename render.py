@@ -26,8 +26,8 @@ from tqdm import tqdm
 from tyro.conf import arg
 
 from gaussian_tracing.arguments import (
-    TyroConfig,
-)
+    Config,
+)gaussian_tracing.cfg
 from gaussian_tracing.renderer import GaussianRaytracer, render
 from gaussian_tracing.scene import GaussianModel, Scene
 from gaussian_tracing.utils.general_utils import set_seeds
@@ -55,7 +55,7 @@ warnings.filterwarnings("ignore", category=UserWarning, module="torchvision.io")
 @torch.no_grad()
 def render_set(
     cli: RenderCLI,
-    cfg: TyroConfig,
+    cfg: Config,
     scene,
     split,
     iteration,
@@ -421,7 +421,7 @@ def render_set(
 if __name__ == "__main__":
     cli, unknown_args = tyro.cli(RenderCLI, return_unknown_args=True)
     saved_cli_path = os.path.join(cli.model_path, "cfg.json")
-    cfg = tyro.cli(TyroConfig, args=unknown_args, default=TyroConfig(**json.load(open(saved_cli_path, "r"))))
+    cfg = tyro.cli(Config, args=unknown_args, default=Config(**json.load(open(saved_cli_path, "r"))))
 
     set_seeds()
 

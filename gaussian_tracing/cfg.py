@@ -16,7 +16,7 @@ from tyro.conf import arg
 
 
 @dataclass
-class TyroConfig:
+class Config:
     viewer: bool = False
     viewer_mode: str = "local"
     val_view: int = 75

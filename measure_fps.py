@@ -4,9 +4,7 @@ import torch
 import tyro
 from tqdm import tqdm
 
-from gaussian_tracing.arguments import (
-    TyroConfig,
-)
+from gaussian_tracing.cfg import Config
 from gaussian_tracing.renderer import GaussianRaytracer, render
 from gaussian_tracing.scene import GaussianModel, Scene
 from gaussian_tracing.utils.general_utils import set_seeds
@@ -36,7 +34,7 @@ def render_set(
         f.write(f"{fps:.2f}\n")
 
 
-def main(cfg: TyroConfig):
+def main(cfg: Config):
     # Initialize system state (RNG)
     set_seeds()
 
@@ -56,5 +54,5 @@ def main(cfg: TyroConfig):
 
 
 if __name__ == "__main__":
-    cfg = tyro.cli(TyroConfig)
+    cfg = tyro.cli(Config)
     main(cfg)

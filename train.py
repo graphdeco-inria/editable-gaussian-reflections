@@ -21,9 +21,7 @@ from torch.utils.tensorboard import SummaryWriter
 from torchvision.utils import save_image
 from tqdm import tqdm
 
-from gaussian_tracing.arguments import (
-    TyroConfig,
-)
+from gaussian_tracing.cfg import Config
 from gaussian_tracing.renderer import GaussianRaytracer, render
 from gaussian_tracing.scene import GaussianModel, Scene
 from gaussian_tracing.utils.general_utils import (
@@ -32,7 +30,7 @@ from gaussian_tracing.utils.general_utils import (
 from gaussian_tracing.utils.image_utils import psnr
 from gaussian_tracing.utils.tonemapping import tonemap
 
-def prepare_output_and_logger(cfg: TyroConfig):
+def prepare_output_and_logger(cfg: Config):
     if not cfg.model_path:
         cfg.model_path = os.path.join("output", datetime.now().isoformat(timespec="seconds"))
 
@@ -47,7 +45,7 @@ def prepare_output_and_logger(cfg: TyroConfig):
 
 @torch.no_grad()
 def training_report(
-    cfg: TyroConfig,
+    cfg: Config,
     scene,
     raytracer,
     tb_writer,
@@ -152,7 +150,7 @@ def training_report(
 
     torch.cuda.empty_cache()
 
-def main(cfg: TyroConfig):
+def main(cfg: Config):
     set_seeds()
 
     tb_writer = prepare_output_and_logger(cfg)
@@ -264,7 +262,7 @@ def main(cfg: TyroConfig):
 
 
 if __name__ == "__main__":
-    cfg = tyro.cli(TyroConfig)
+    cfg = tyro.cli(Config)
 
     if cfg.viewer:
         cfg.test_iterations = []

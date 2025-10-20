@@ -14,7 +14,7 @@ import random
 
 import torch
 
-from gaussian_tracing.arguments import TyroConfig
+from gaussian_tracing.cfg import Config
 from gaussian_tracing.scene.dataset_readers import (
     readSceneInfo,
 )
@@ -26,7 +26,7 @@ class Scene:
 
     def __init__(
         self,
-        cfg: TyroConfig,
+        cfg: Config,
         gaussians: GaussianModel,
         load_iteration=None,
         shuffle=True,

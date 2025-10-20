@@ -19,9 +19,7 @@ import tyro
 from einops import rearrange
 from tqdm import tqdm
 
-from gaussian_tracing.arguments import (
-    TyroConfig,
-)
+from gaussian_tracing.cfg import Config
 from gaussian_tracing.renderer import GaussianRaytracer, render
 from gaussian_tracing.scene import GaussianModel, Scene
 from gaussian_tracing.utils.cam_utils import generate_spiral_path
@@ -87,7 +85,7 @@ def render_set(
             torchvision.utils.save_image(v, save_path)
 
 
-def main(cfg: TyroConfig):
+def main(cfg: Config):
     # Initialize system state (RNG)
     set_seeds()
 
@@ -137,5 +135,5 @@ def main(cfg: TyroConfig):
 
 
 if __name__ == "__main__":
-    cfg = tyro.cli(TyroConfig)
+    cfg = tyro.cli(Config)
     main(cfg)

@@ -108,7 +108,7 @@ class GaussianViewer(Viewer):
         from gaussian_tracing.scene import GaussianModel
 
         global ModelParams
-        from gaussian_tracing.arguments import ModelParams
+        from gaussian_tracing.cfg import ModelParams
 
         global MiniCam
         from gaussian_tracing.scene.cameras import MiniCam
