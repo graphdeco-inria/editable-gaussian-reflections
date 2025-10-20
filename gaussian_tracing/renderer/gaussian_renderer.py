@@ -24,6 +24,8 @@ def render(
     targets_available=True,
     force_update_bvh=False,
     denoise=False,
+    znear=0.01,
+    zfar=999.9,
 ):
     do_backprop = torch.is_grad_enabled()
 
@@ -64,6 +66,8 @@ def render(
             target_f0=_target_f0,
             force_update_bvh=force_update_bvh,
             denoise=denoise,
+            znear=znear,
+            zfar=zfar,
         )
 
     # All of these results are reshaped to (C, H, W)

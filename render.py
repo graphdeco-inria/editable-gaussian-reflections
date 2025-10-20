@@ -50,7 +50,7 @@ class RenderCLI:
     )
     skip_video: bool = False
     skip_save_frames: bool = False
-    znear: float = 1.0
+    znear: float = 0.01
 
 warnings.filterwarnings("ignore", category=UserWarning, module="torchvision.io")
 
@@ -220,6 +220,7 @@ def render_set(
                         view,
                         raytracer,
                         denoise=False,
+                        znear=cli.znear,
                     ) 
                 if cli.denoise:
                     raytracer.cuda_module.denoise()
@@ -229,6 +230,7 @@ def render_set(
                     view,
                     raytracer,
                     denoise=cli.denoise,
+                    znear=cli.znear,
                 )
 
             diffuse_gt_image = tonemap(view.diffuse_image).clamp(0.0, 1.0)

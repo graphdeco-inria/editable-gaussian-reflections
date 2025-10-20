@@ -103,6 +103,8 @@ class GaussianRaytracer:
         target_f0=None,
         force_update_bvh=False,
         denoise=False,
+        znear=0.01,
+        zfar=999.9,
     ):
         """
         Render the scene.
@@ -118,8 +120,8 @@ class GaussianRaytracer:
             R_c2w_blender[:, 0] = -R_c2w_blender[:, 0]
 
             camera = self.cuda_module.get_camera()
-            camera.znear.fill_(float(os.getenv("ZNEAR", 0.01)))
-            camera.zfar.fill_(float(os.getenv("ZFAR", 999.9)))
+            camera.znear.fill_(float(os.getenv("ZNEAR", znear)))
+            camera.zfar.fill_(float(os.getenv("ZFAR", zfar)))
             camera.vertical_fov_radians.fill_(torch.tensor(viewpoint_camera.FoVy, device="cuda"))
             camera.set_pose(viewpoint_camera.camera_center.contiguous(), R_c2w_blender.contiguous())
 
