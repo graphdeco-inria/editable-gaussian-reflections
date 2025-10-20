@@ -1,3 +1,6 @@
+import sys, os
+sys.path.append(os.getcwd())
+
 import shutil 
 import os 
 import glob
@@ -15,15 +18,13 @@ import tifffile
 import safetensors.torch
 from gaussian_tracing.utils.tonemapping import tonemap
 
-
-# todo put this in tools & make it still work 
-# todo one everything is validated, make this loop over all scenes
 ALWAYS_PRESERVE = ["depth"]
 
 @dataclass
 class ExtractDatasetCLI:
-    src_root: str = "data/blender_renders/shiny_kitchen"
-    dst_root: str = "data/renders_{format}_{precision}bits{extra}/shiny_kitchen"
+    src_root: str = "data/blender_renders/{scene}"
+    dst_root: str = "data/renders_{format}_{precision}bits{extra}/{scene}"
+    scene: str = "shiny_kitchen"
     resolution: int = 768
     format: str = "safetensors"
     precision: Literal[8, 16, 32] = 32
@@ -44,7 +45,8 @@ class ExtractDatasetCLI:
             extra = "_preserve_" + "_".join(self.preserve)
         else:
             extra = ""
-        self.dst_root = self.dst_root.format(format=self.format, precision=self.precision, extra=extra)
+        self.src_root = self.src_root.format(scene=self.scene)
+        self.dst_root = self.dst_root.format(format=self.format, precision=self.precision, scene=self.scene, extra=extra)
 
 # * Parse cli
 cli = tyro.cli(ExtractDatasetCLI)
