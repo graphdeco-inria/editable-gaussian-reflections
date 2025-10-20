@@ -5,16 +5,16 @@ import torch
 from einops import repeat
 from PIL import Image
 
-from gaussian_tracing.dataset.colmap_parser import ColmapParser
-from gaussian_tracing.utils.depth_utils import (
+from editable_gauss_refl.dataset.colmap_parser import ColmapParser
+from editable_gauss_refl.utils.depth_utils import (
     project_pointcloud_to_depth_map,
     ransac_linear_fit,
     transform_depth_to_position_image,
     transform_normals_to_world,
     transform_points,
 )
-from gaussian_tracing.utils.graphics_utils import BasicPointCloud, focal2fov
-from gaussian_tracing.utils.tonemapping import untonemap
+from editable_gauss_refl.utils.graphics_utils import BasicPointCloud, focal2fov
+from editable_gauss_refl.utils.tonemapping import untonemap
 
 from .camera_info import CameraInfo
 from .colmap_loader import (

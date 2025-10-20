@@ -5,7 +5,7 @@ import os
 import kornia
 import torch
 
-from gaussian_tracing.scene.gaussian_model import GaussianModel
+from editable_gauss_refl.scene.gaussian_model import GaussianModel
 
 
 class EditableGaussianModel(GaussianModel):

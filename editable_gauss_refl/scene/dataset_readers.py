@@ -17,14 +17,14 @@ import numpy as np
 import torch
 from tqdm import tqdm
 
-from gaussian_tracing.cfg import Config
-from gaussian_tracing.dataset import (
+from editable_gauss_refl.cfg import Config
+from editable_gauss_refl.dataset import (
     BlenderDataset,
     ColmapPriorDataset,
 )
-from gaussian_tracing.dataset.points_utils import make_random_point_cloud
-from gaussian_tracing.utils.graphics_utils import BasicPointCloud, getWorld2View2
-from gaussian_tracing.utils.ply_utils import read_ply
+from editable_gauss_refl.dataset.points_utils import make_random_point_cloud
+from editable_gauss_refl.utils.graphics_utils import BasicPointCloud, getWorld2View2
+from editable_gauss_refl.utils.ply_utils import read_ply
 
 from .cameras import Camera
 

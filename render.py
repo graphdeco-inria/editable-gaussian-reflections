@@ -25,12 +25,12 @@ import tyro
 from tqdm import tqdm
 from tyro.conf import arg
 
-from gaussian_tracing.cfg import Config
-from gaussian_tracing.renderer import GaussianRaytracer, render
-from gaussian_tracing.scene import GaussianModel, Scene
-from gaussian_tracing.utils.general_utils import set_seeds
-from gaussian_tracing.utils.system_utils import searchForMaxIteration
-from gaussian_tracing.utils.tonemapping import tonemap
+from editable_gauss_refl.cfg import Config
+from editable_gauss_refl.renderer import GaussianRaytracer, render
+from editable_gauss_refl.scene import GaussianModel, Scene
+from editable_gauss_refl.utils.general_utils import set_seeds
+from editable_gauss_refl.utils.system_utils import searchForMaxIteration
+from editable_gauss_refl.utils.tonemapping import tonemap
 
 
 @dataclass

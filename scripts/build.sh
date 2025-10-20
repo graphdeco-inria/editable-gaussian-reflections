@@ -1,4 +1,4 @@
-cd gaussian_tracing/cuda
+cd editable_gauss_refl/cuda
 mkdir -p build
 rm -r build
 mkdir build

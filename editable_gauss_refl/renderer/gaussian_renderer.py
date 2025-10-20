@@ -13,8 +13,8 @@ from types import SimpleNamespace
 
 import torch
 
-from gaussian_tracing.renderer.gaussian_raytracer import GaussianRaytracer
-from gaussian_tracing.scene.cameras import Camera
+from editable_gauss_refl.renderer.gaussian_raytracer import GaussianRaytracer
+from editable_gauss_refl.scene.cameras import Camera
 
 
 # todo remove this

@@ -3,7 +3,7 @@ import os
 import numpy as np
 import torch
 
-from gaussian_tracing.utils.graphics_utils import BasicPointCloud
+from editable_gauss_refl.utils.graphics_utils import BasicPointCloud
 
 from .colmap_loader import read_points3D_binary, read_points3D_text
 

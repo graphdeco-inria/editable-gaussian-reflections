@@ -84,5 +84,6 @@ class Config:
     percent_dense: float = 0.01
     scale_decay: float = 0.9999
     pruning_interval: int = 125
+    pruning_start_iter: int = 1250
     beta_1: float = 0.9
     beta_2: float = 0.999

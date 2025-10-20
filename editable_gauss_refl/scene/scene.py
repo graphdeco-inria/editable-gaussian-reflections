@@ -14,11 +14,11 @@ import random
 
 import torch
 
-from gaussian_tracing.cfg import Config
-from gaussian_tracing.scene.dataset_readers import (
+from editable_gauss_refl.cfg import Config
+from editable_gauss_refl.scene.dataset_readers import (
     readSceneInfo,
 )
-from gaussian_tracing.scene.gaussian_model import GaussianModel
+from editable_gauss_refl.scene.gaussian_model import GaussianModel
 
 
 class Scene:

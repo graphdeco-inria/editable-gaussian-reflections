@@ -21,24 +21,25 @@ from torch.utils.tensorboard import SummaryWriter
 from torchvision.utils import save_image
 from tqdm import tqdm
 
-from gaussian_tracing.cfg import Config
-from gaussian_tracing.renderer import GaussianRaytracer, render
-from gaussian_tracing.scene import GaussianModel, Scene
-from gaussian_tracing.utils.general_utils import (
+from editable_gauss_refl.cfg import Config
+from editable_gauss_refl.renderer import GaussianRaytracer, render
+from editable_gauss_refl.scene import GaussianModel, Scene
+from editable_gauss_refl.utils.general_utils import (
     set_seeds,
 )
-from gaussian_tracing.utils.image_utils import psnr
-from gaussian_tracing.utils.tonemapping import tonemap
+from editable_gauss_refl.utils.image_utils import psnr
+from editable_gauss_refl.utils.tonemapping import tonemap
 
 
 def prepare_output_and_logger(cfg: Config):
     if not cfg.model_path:
         cfg.model_path = os.path.join("output", datetime.now().isoformat(timespec="seconds"))
 
-    # Set up output folder
+    # * Set up output folder
     print("Output folder: {}".format(cfg.model_path))
     os.makedirs(cfg.model_path, exist_ok=True)
-    # Dump cfg as JSON.
+    
+    # * Dump cfg as JSON.
     with open(os.path.join(cfg.model_path, "cfg.json"), "w") as f:
         json.dump(vars(cfg), f, indent=2)
 
@@ -55,18 +56,12 @@ def training_report(
 ):
     
     # * Save the elapsed time
-    now = time.time()
     delta = time.time() - start_time
     with open(os.path.join(cfg.model_path, "time.txt"), "a") as f:
         minutes, seconds = divmod(int(delta), 60)
         timestamp = f"{minutes:02}:{seconds:02}"
         print("Elapsed time: ", timestamp)
-        f.write(
-            "\n[ITER {}] elapsed {}".format(
-                iteration,
-                time.strftime("%H:%M:%S", time.gmtime(now - start_time)),
-            )
-        )
+        f.write("\n[ITER {}] elapsed {}".format(iteration, time.strftime("%H:%M:%S", time.gmtime(delta))))
 
     # * Save the number of gaussians
     with open(os.path.join(cfg.model_path, "num_gaussians.txt"), "a") as f:
@@ -190,12 +185,7 @@ def main(cfg: Config):
     elif cfg.max_one_bounce_until_iter > 0:
         config.num_bounces.copy_(min(raytracer.config.MAX_BOUNCES, 1))
 
-    for iteration in tqdm(
-        range(first_iter, cfg.iterations + 1),
-        desc="Training progress",
-        total=cfg.iterations,
-        initial=first_iter,
-    ):
+    for iteration in tqdm(range(first_iter, cfg.iterations + 1), desc="Training progress", total=cfg.iterations, initial=first_iter):
         iter_start.record()
 
         if cfg.viewer:
@@ -225,7 +215,7 @@ def main(cfg: Config):
                 scene.save(iteration)
 
             if iteration % cfg.pruning_interval == 0:
-                if iteration > cfg.no_bounces_until_iter + 500 and cfg.min_weight > 0: # todo make this an option
+                if iteration > cfg.pruning_start_iter and cfg.min_weight > 0: 
                     gaussians.prune_points((raytracer.cuda_module.get_gaussians().total_weight / cfg.pruning_interval < cfg.min_weight).squeeze(1))
                 if not cfg.disable_znear_densif_pruning:
                     gaussians.prune_znear_only(scene)

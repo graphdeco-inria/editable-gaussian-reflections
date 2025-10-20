@@ -16,7 +16,7 @@ import torch.nn.functional as F
 import cv2 
 import tifffile
 import safetensors.torch
-from gaussian_tracing.utils.tonemapping import tonemap
+from editable_gauss_refl.utils.tonemapping import tonemap
 
 ALWAYS_PRESERVE = ["depth"]
 

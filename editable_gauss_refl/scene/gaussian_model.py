@@ -17,15 +17,15 @@ from plyfile import PlyData, PlyElement
 from simple_knn._C import distCUDA2
 from torch import nn
 
-from gaussian_tracing.cfg import Config
-from gaussian_tracing.utils.general_utils import (
+from editable_gauss_refl.cfg import Config
+from editable_gauss_refl.utils.general_utils import (
     build_scaling_rotation,
     get_expon_lr_func,
     inverse_sigmoid,
     strip_symmetric,
 )
-from gaussian_tracing.utils.graphics_utils import BasicPointCloud
-from gaussian_tracing.utils.system_utils import mkdir_p
+from editable_gauss_refl.utils.graphics_utils import BasicPointCloud
+from editable_gauss_refl.utils.system_utils import mkdir_p
 
 
 class GaussianModel:

@@ -93,7 +93,7 @@ Thumbs.db
 # Custom: ignore any local config overrides
 config.local.*
 /data
-/gaussian_tracing/cuda/data
+/editable_gauss_refl/cuda/data
 /output
 /results*
 *.ignore.*

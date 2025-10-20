@@ -6,11 +6,11 @@ import torch
 import tyro
 from tqdm import tqdm
 
-from gaussian_tracing.cfg import ModelParams
-from gaussian_tracing.scene.dataset.colmap_parser import ColmapParser
-from gaussian_tracing.scene.dataset_readers import get_dataset
-from gaussian_tracing.scene.tonemapping import tonemap
-from gaussian_tracing.utils.ply_utils import save_ply
+from editable_gauss_refl.cfg import ModelParams
+from editable_gauss_refl.scene.dataset.colmap_parser import ColmapParser
+from editable_gauss_refl.scene.dataset_readers import get_dataset
+from editable_gauss_refl.scene.tonemapping import tonemap
+from editable_gauss_refl.utils.ply_utils import save_ply
 
 
 @dataclass

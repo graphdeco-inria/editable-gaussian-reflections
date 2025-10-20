@@ -15,8 +15,8 @@ import numpy as np
 import torch
 from torch import nn
 
-from gaussian_tracing.utils.graphics_utils import getProjectionMatrix, getWorld2View2
-from gaussian_tracing.utils.tonemapping import untonemap
+from editable_gauss_refl.utils.graphics_utils import getProjectionMatrix, getWorld2View2
+from editable_gauss_refl.utils.tonemapping import untonemap
 
 
 class Camera(nn.Module):

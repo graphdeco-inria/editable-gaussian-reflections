@@ -6,8 +6,8 @@ import torch
 from PIL import Image
 from tqdm import tqdm
 
-from gaussian_tracing.cfg import Config
-from gaussian_tracing.dataset import BlenderDataset, BlenderPriorDataset
+from editable_gauss_refl.cfg import Config
+from editable_gauss_refl.dataset import BlenderDataset, BlenderPriorDataset
 
 
 def vis_tensors(images, image_path):

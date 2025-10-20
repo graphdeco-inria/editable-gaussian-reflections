@@ -2,6 +2,6 @@
 set -xe
 
 rm -rf build
-rm -rf gaussian_tracing/cuda/build
+rm -rf editable_gauss_refl/cuda/build
 
 pip install -v -e .[dev]

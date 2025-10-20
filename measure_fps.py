@@ -4,10 +4,10 @@ import torch
 import tyro
 from tqdm import tqdm
 
-from gaussian_tracing.cfg import Config
-from gaussian_tracing.renderer import GaussianRaytracer, render
-from gaussian_tracing.scene import GaussianModel, Scene
-from gaussian_tracing.utils.general_utils import set_seeds
+from editable_gauss_refl.cfg import Config
+from editable_gauss_refl.renderer import GaussianRaytracer, render
+from editable_gauss_refl.scene import GaussianModel, Scene
+from editable_gauss_refl.utils.general_utils import set_seeds
 
 
 @torch.no_grad()

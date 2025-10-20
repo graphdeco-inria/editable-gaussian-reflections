@@ -9,7 +9,7 @@ import torch
 from einops import rearrange
 from torchvision.io import read_image
 
-from gaussian_tracing.utils.graphics_utils import focal2fov, fov2focal
+from editable_gauss_refl.utils.graphics_utils import focal2fov, fov2focal
 
 from .camera_info import CameraInfo
 

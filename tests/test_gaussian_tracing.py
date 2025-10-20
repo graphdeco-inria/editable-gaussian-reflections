@@ -2,7 +2,7 @@ import torch
 
 
 def test_raytracer_init():
-    build_dir = "./gaussian_tracing/cuda/build"
+    build_dir = "./editable_gauss_refl/cuda/build"
     torch.classes.load_library(f"{build_dir}/libraytracer.so")
 
     image_width = 1536

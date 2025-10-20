@@ -5,7 +5,7 @@ from setuptools import find_packages, setup
 from torch.utils.cpp_extension import BuildExtension, CUDAExtension
 
 __version__ = None
-exec(open("gaussian_tracing/version.py", "r").read())
+exec(open("editable_gauss_refl/version.py", "r").read())
 
 
 def get_package_path(package_name):
@@ -40,15 +40,15 @@ class CustomBuildExtension(BuildExtension):
 
         # Build OptiX library
         pkg_source = os.path.dirname(os.path.abspath(__file__))
-        pkg_target = get_package_path("gaussian_tracing")
+        pkg_target = get_package_path("editable_gauss_refl")
         if not os.path.exists(pkg_target):
             os.makedirs(pkg_target, exist_ok=True)
 
-        os.system(f"mkdir -p {pkg_source}/gaussian_tracing/cuda/build && cd {pkg_source}/gaussian_tracing/cuda/build && cmake .. && make")
+        os.system(f"mkdir -p {pkg_source}/editable_gauss_refl/cuda/build && cd {pkg_source}/editable_gauss_refl/cuda/build && cmake .. && make")
 
 
 setup(
-    name="gaussian_tracing",
+    name="editable_gauss_refl",
     version=__version__,
     description=" Python package for differentiable tracing of gaussians",
     keywords="gaussian, raytracing, cuda",
@@ -67,8 +67,8 @@ setup(
     },
     ext_modules=[
         CUDAExtension(
-            name="gaussian_tracing._C",
-            sources=["gaussian_tracing/cuda/ext.cpp"],
+            name="editable_gauss_refl._C",
+            sources=["editable_gauss_refl/cuda/ext.cpp"],
             include_dirs=[],
         ),
     ],

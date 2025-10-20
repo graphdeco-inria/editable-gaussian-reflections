@@ -1,6 +1,6 @@
 import torch
 
-from gaussian_tracing.utils.tonemapping import tonemap, untonemap
+from editable_gauss_refl.utils.tonemapping import tonemap, untonemap
 
 
 def test_tonemap():

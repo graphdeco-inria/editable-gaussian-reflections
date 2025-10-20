@@ -14,8 +14,8 @@ import os
 import numpy as np
 import torch
 
-from gaussian_tracing import make_raytracer
-from gaussian_tracing.scene.gaussian_model import GaussianModel
+from editable_gauss_refl import make_raytracer
+from editable_gauss_refl.scene.gaussian_model import GaussianModel
 
 LOADED = False
 
