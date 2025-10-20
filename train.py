@@ -197,15 +197,6 @@ def training_report(
                                 ),
                                 padding=0,
                             )
-                            save_image(
-                                torch.clamp(package.brdf, 0.0, 1.0),
-                                os.path.join(
-                                    tb_writer.log_dir,
-                                    f"{config['name']}_view",
-                                    f"iter_{iteration:09}_view_{viewpoint.colmap_id}_brdf_all_rays.png",
-                                ),
-                                padding=0,
-                            )
 
                         fb = raytracer.cuda_module.get_framebuffer()
                         save_image(
@@ -343,7 +334,7 @@ def training_report(
                         iteration,
                     )
 
-                with open(os.path.join(tb_writer.log_dir, f"losses_{config['name']}.csv"), "a") as f:
+                with open(os.path.join(tb_writer.log_dir, f"validation_losses_{config['name']}.csv"), "a") as f:
                     f.write(
                         f"{iteration:05d}, {diffuse_psnr_test:02.2f}, {glossy_psnr_test:02.2f}, {psnr_test:02.2f}\n"
                     )

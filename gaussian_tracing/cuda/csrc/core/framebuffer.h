@@ -22,8 +22,6 @@ struct Pixel {
     float remaining_transmittance[MAX_BOUNCES + 1];
     float output_total_transmittance[MAX_BOUNCES + 1];
     float remaining_total_transmittance[MAX_BOUNCES + 1];
-    float3 output_brdf[MAX_BOUNCES + 1];
-    float3 remaining_brdf[MAX_BOUNCES + 1];
     float3 output_ray_origin[MAX_BOUNCES + 1];
     float3 remaining_ray_origin[MAX_BOUNCES + 1];
     float3 output_ray_direction[MAX_BOUNCES + 1];
@@ -63,8 +61,6 @@ struct Pixel {
         fill_array(remaining_transmittance, MAX_BOUNCES + 1, 1.0f);
         fill_array(output_total_transmittance, MAX_BOUNCES + 1, 1.0f);
         fill_array(remaining_total_transmittance, MAX_BOUNCES + 1, 1.0f);
-        fill_array(output_brdf, MAX_BOUNCES + 1, make_float3(0.0f, 0.0f, 0.0f));
-        fill_array(remaining_brdf, MAX_BOUNCES + 1, make_float3(0.0f, 0.0f, 0.0f));
         fill_array(output_ray_origin, MAX_BOUNCES + 1, make_float3(0.0f, 0.0f, 0.0f));
         fill_array(remaining_ray_origin, MAX_BOUNCES + 1, make_float3(0.0f, 0.0f, 0.0f));
         fill_array(output_ray_direction, MAX_BOUNCES + 1, make_float3(0.0f, 0.0f, 0.0f));
@@ -90,7 +86,6 @@ struct Framebuffer {
     float *__restrict__ output_roughness;
     float *__restrict__ output_transmittance;
     float *__restrict__ output_total_transmittance;
-    float3 *__restrict__ output_brdf;
     float3 *__restrict__ output_ray_origin;
     float3 *__restrict__ output_ray_direction;
     float3 *__restrict__ output_final;
@@ -148,7 +143,6 @@ struct Framebuffer {
             output_roughness[pixel.id + num_pixels * step] = pixel.output_roughness[step];
             output_transmittance[pixel.id + num_pixels * step] = pixel.output_transmittance[step];
             output_total_transmittance[pixel.id + num_pixels * step] = pixel.output_total_transmittance[step];
-            output_brdf[pixel.id + num_pixels * step] = pixel.output_brdf[step];
             output_ray_origin[pixel.id + num_pixels * step] = pixel.output_ray_origin[step];
             output_ray_direction[pixel.id + num_pixels * step] = pixel.output_ray_direction[step];
         }
@@ -177,7 +171,6 @@ struct FramebufferDataHolder : torch::CustomClassHolder {
     Tensor output_roughness;
     Tensor output_transmittance;
     Tensor output_total_transmittance;
-    Tensor output_brdf;
     Tensor output_ray_origin;
     Tensor output_ray_direction;
     Tensor output_final;
@@ -207,7 +200,6 @@ struct FramebufferDataHolder : torch::CustomClassHolder {
         output_roughness = torch::zeros({MAX_BOUNCES + 1, image_height, image_width, 1}, CUDA_FLOAT32);
         output_transmittance = torch::zeros({MAX_BOUNCES + 1, image_height, image_width, 1}, CUDA_FLOAT32);
         output_total_transmittance = torch::zeros({MAX_BOUNCES + 1, image_height, image_width, 1}, CUDA_FLOAT32);
-        output_brdf = torch::zeros({MAX_BOUNCES + 1, image_height, image_width, 3}, CUDA_FLOAT32);
         output_ray_origin = torch::zeros({MAX_BOUNCES + 1, image_height, image_width, 3}, CUDA_FLOAT32);
         output_ray_direction = torch::zeros({MAX_BOUNCES + 1, image_height, image_width, 3}, CUDA_FLOAT32);
         output_final = torch::zeros({1, image_height, image_width, 3}, CUDA_FLOAT32);
@@ -239,7 +231,6 @@ struct FramebufferDataHolder : torch::CustomClassHolder {
             .output_roughness = reinterpret_cast<float *>(output_roughness.data_ptr()),
             .output_transmittance = reinterpret_cast<float *>(output_transmittance.data_ptr()),
             .output_total_transmittance = reinterpret_cast<float *>(output_total_transmittance.data_ptr()),
-            .output_brdf = reinterpret_cast<float3 *>(output_brdf.data_ptr()),
             .output_ray_origin = reinterpret_cast<float3 *>(output_ray_origin.data_ptr()),
             .output_ray_direction = reinterpret_cast<float3 *>(output_ray_direction.data_ptr()),
             .output_final = reinterpret_cast<float3 *>(output_final.data_ptr()),
@@ -282,7 +273,6 @@ struct FramebufferDataHolder : torch::CustomClassHolder {
             .def_readonly("output_roughness", &FramebufferDataHolder::output_roughness)
             .def_readonly("output_transmittance", &FramebufferDataHolder::output_transmittance)
             .def_readonly("output_total_transmittance", &FramebufferDataHolder::output_total_transmittance)
-            .def_readonly("output_brdf", &FramebufferDataHolder::output_brdf)
             .def_readonly("output_ray_origin", &FramebufferDataHolder::output_ray_origin)
             .def_readonly("output_ray_direction", &FramebufferDataHolder::output_ray_direction)
             .def_readonly("output_final", &FramebufferDataHolder::output_final)
