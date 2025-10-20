@@ -30,13 +30,18 @@ If you are modifying the raytracer you cna rebuild easily with
 bash make.sh
 ```
 
-## Debugging
+### Troubleshooting
 If you run into cmake or gcc version issues, try using conda to install newer versions.
 
 ```bash
 conda install -c conda-forge cxx-compiler==1.6.0 -y
 conda install anaconda::cmake -y
 ```
+
+## Downloading the datasets
+<!-- todo -->
+
+Please note that the specular buffer is called "glossy" in the datasets and the code.
 
 ## Training 
 

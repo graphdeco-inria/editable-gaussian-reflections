@@ -22,8 +22,8 @@ class TyroConfig:
     detect_anomaly: bool = False
     flip_camera: bool = False
     val_views: list[int] = field(default_factory=lambda: [75, 175])
-    test_iterations: list[int] = field(default_factory=lambda: [1, 1500, 3000, 4500, 6000, 8000])
-    save_iterations: list[int] = field(default_factory=lambda: [1, 1500, 3000, 4500, 6000, 8000])
+    test_iterations: list[int] = field(default_factory=lambda: [1, 750, 4000, 8000])
+    save_iterations: list[int] = field(default_factory=lambda: [1, 750, 4000, 8000])
     quiet: bool = False
     iterations: int = 8000
 
@@ -41,7 +41,6 @@ class TyroConfig:
     scene_extent_init_radius: float = 4.0
     scene_extent_multiplier: float = 5.0
     num_feat_per_gaussian_channel: int = 16
-    raytracer_version: str = ""  # "build_v0.1_attached_brdf"
     max_images: int = 9999999
     min_opacity: float = 0.005
     min_weight: float = 0.1

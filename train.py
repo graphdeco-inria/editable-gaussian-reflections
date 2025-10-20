@@ -84,7 +84,7 @@ def training_report(
                     package = render(viewpoint, raytracer, denoise=True)
 
                     os.makedirs(
-                        os.path.join(tb_writer.log_dir, f"{config['name']}_view"),
+                        os.path.join(tb_writer.log_dir, f"{config['name']}_views"),
                         exist_ok=True,
                     )
 
@@ -113,7 +113,7 @@ def training_report(
                             ).clamp(0, 1),
                             os.path.join(
                                 tb_writer.log_dir,
-                                f"{config['name']}_view",
+                                f"{config['name']}_views",
                                 f"iter_{iteration:09}_view_{viewpoint.colmap_id}.png",
                             ),
                             nrow=2,
@@ -134,7 +134,7 @@ def training_report(
                             ).clamp(0, 1),
                             os.path.join(
                                 tb_writer.log_dir,
-                                f"{config['name']}_view",
+                                f"{config['name']}_views",
                                 f"iter_{iteration:09}_view_{viewpoint.colmap_id}_error_maps.png",
                             ),
                             nrow=3,
@@ -146,10 +146,10 @@ def training_report(
                     normal_image = torch.clamp(package.normal[0] / 2 + 0.5, 0.0, 1.0)
                     depth_image = package.depth[0]
 
-                    f0_image = torch.clamp(package.F0[0], 0.0, 1.0)
+                    f0_image = torch.clamp(package.f0[0], 0.0, 1.0)
                     normal_gt_image = torch.clamp(viewpoint.normal_image / 2 + 0.5, 0.0, 1.0)
                     depth_gt_image = viewpoint.depth_image
-                    F0_gt_image = torch.clamp(viewpoint.f0_image, 0.0, 1.0)
+                    f0_gt_image = torch.clamp(viewpoint.f0_image, 0.0, 1.0)
                     roughness_gt_image = torch.clamp(viewpoint.roughness_image, 0.0, 1.0) 
 
                     diffuse_l1_test += l1_loss(diffuse_image, diffuse_gt_image).mean().double()
@@ -165,7 +165,7 @@ def training_report(
                                 tonemap(package.rgb).clamp(0, 1),
                                 os.path.join(
                                     tb_writer.log_dir,
-                                    f"{config['name']}_view",
+                                    f"{config['name']}_views",
                                     f"iter_{iteration:09}_view_{viewpoint.colmap_id}_rgb_all_rays.png",
                                 ),
                                 padding=0,
@@ -174,17 +174,17 @@ def training_report(
                                 torch.clamp(package.normal / 2 + 0.5, 0.0, 1.0),
                                 os.path.join(
                                     tb_writer.log_dir,
-                                    f"{config['name']}_view",
+                                    f"{config['name']}_views",
                                     f"iter_{iteration:09}_view_{viewpoint.colmap_id}_normal_all_rays.png",
                                 ),
                                 padding=0,
                             )
                             save_image(
-                                torch.clamp(package.F0, 0.0, 1.0),
+                                torch.clamp(package.f0, 0.0, 1.0),
                                 os.path.join(
                                     tb_writer.log_dir,
-                                    f"{config['name']}_view",
-                                    f"iter_{iteration:09}_view_{viewpoint.colmap_id}_F0_all_rays.png",
+                                    f"{config['name']}_views",
+                                    f"iter_{iteration:09}_view_{viewpoint.colmap_id}_f0_all_rays.png",
                                 ),
                                 padding=0,
                             )
@@ -192,7 +192,7 @@ def training_report(
                                 package.depth / package.depth.amax(dim=(1, 2, 3), keepdim=True),
                                 os.path.join(
                                     tb_writer.log_dir,
-                                    f"{config['name']}_view",
+                                    f"{config['name']}_views",
                                     f"iter_{iteration:09}_view_{viewpoint.colmap_id}_depth_all_rays.png",
                                 ),
                                 padding=0,
@@ -203,7 +203,7 @@ def training_report(
                             fb.output_ray_origin[0].moveaxis(-1, 0).abs() / 5,
                             os.path.join(
                                 tb_writer.log_dir,
-                                f"{config['name']}_view",
+                                f"{config['name']}_views",
                                 f"iter_{iteration:09}_view_{viewpoint.colmap_id}_ray_origin.png",
                             ),
                             padding=0,
@@ -212,7 +212,7 @@ def training_report(
                             fb.output_ray_direction[0].moveaxis(-1, 0) / 2 + 0.5,
                             os.path.join(
                                 tb_writer.log_dir,
-                                f"{config['name']}_view",
+                                f"{config['name']}_views",
                                 f"iter_{iteration:09}_view_{viewpoint.colmap_id}_ray_direction.png",
                             ),
                             padding=0,
@@ -221,18 +221,18 @@ def training_report(
                             torch.stack([roughness_image.cuda(), roughness_gt_image]).clamp(0, 1),
                             os.path.join(
                                 tb_writer.log_dir,
-                                f"{config['name']}_view",
+                                f"{config['name']}_views",
                                 f"iter_{iteration:09}_view_{viewpoint.colmap_id}_roughness_vs_target.png",
                             ),
                             nrow=2,
                             padding=0,
                         )
                         save_image(
-                            torch.stack([f0_image.cuda(), F0_gt_image]).clamp(0, 1),
+                            torch.stack([f0_image.cuda(), f0_gt_image]).clamp(0, 1),
                             os.path.join(
                                 tb_writer.log_dir,
-                                f"{config['name']}_view",
-                                f"iter_{iteration:09}_view_{viewpoint.colmap_id}_F0_vs_target.png",
+                                f"{config['name']}_views",
+                                f"iter_{iteration:09}_view_{viewpoint.colmap_id}_f0_vs_target.png",
                             ),
                             nrow=2,
                             padding=0,
@@ -241,7 +241,7 @@ def training_report(
                             torch.stack([pred_image, gt_image]).clamp(0, 1),
                             os.path.join(
                                 tb_writer.log_dir,
-                                f"{config['name']}_view",
+                                f"{config['name']}_views",
                                 f"iter_{iteration:09}_view_{viewpoint.colmap_id}_final_denoised_vs_target.png",
                             ),
                             nrow=2,
@@ -251,7 +251,7 @@ def training_report(
                             torch.stack([pred_image_without_denoising, gt_image]).clamp(0, 1),
                             os.path.join(
                                 tb_writer.log_dir,
-                                f"{config['name']}_view",
+                                f"{config['name']}_views",
                                 f"iter_{iteration:09}_view_{viewpoint.colmap_id}_final_without_denoising_vs_target.png",
                             ),
                             nrow=2,
@@ -261,7 +261,7 @@ def training_report(
                             torch.stack([diffuse_image, diffuse_gt_image]).clamp(0, 1),
                             os.path.join(
                                 tb_writer.log_dir,
-                                f"{config['name']}_view",
+                                f"{config['name']}_views",
                                 f"iter_{iteration:09}_view_{viewpoint.colmap_id}_diffuse_vs_target.png",
                             ),
                             nrow=2,
@@ -271,7 +271,7 @@ def training_report(
                             torch.stack([glossy_image, glossy_gt_image]).clamp(0, 1),
                             os.path.join(
                                 tb_writer.log_dir,
-                                f"{config['name']}_view",
+                                f"{config['name']}_views",
                                 f"iter_{iteration:09}_view_{viewpoint.colmap_id}_glossy_vs_target.png",
                             ),
                             nrow=2,
@@ -283,7 +283,7 @@ def training_report(
                             / (depth_gt_image.amax() - depth_gt_image.amin()),
                             os.path.join(
                                 tb_writer.log_dir,
-                                f"{config['name']}_view",
+                                f"{config['name']}_views",
                                 f"iter_{iteration:09}_view_{viewpoint.colmap_id}_depth_vs_target.png",
                             ),
                             nrow=2,
@@ -293,7 +293,7 @@ def training_report(
                             torch.stack([normal_image.cuda(), normal_gt_image]).clamp(0, 1),
                             os.path.join(
                                 tb_writer.log_dir,
-                                f"{config['name']}_view",
+                                f"{config['name']}_views",
                                 f"iter_{iteration:09}_view_{viewpoint.colmap_id}_normal_vs_target.png",
                             ),
                             nrow=2,
@@ -432,48 +432,6 @@ def main(cfg: TyroConfig):
                             iteration,
                             time.strftime("%H:%M:%S", time.gmtime(NOW - start)),
                         )
-                    )
-
-                # Save the average and std opacity
-                with open(os.path.join(cfg.model_path, "opacity.txt"), "a") as f:
-                    f.write(
-                        f"{iteration:5}: {gaussians.get_opacity.mean().item():.3f} +- {gaussians.get_opacity.std().item():.3f}\n"
-                    )
-
-                # Save the average and std size
-                with open(os.path.join(cfg.model_path, "size.txt"), "a") as f:
-                    f.write(
-                        f"{iteration:5}: {gaussians.get_scaling.mean().item():.3f} +- {gaussians.get_scaling.std().item():.3f}\n"
-                    )
-
-                # Save the average and std size of the largest axis per gaussian
-                with open(os.path.join(cfg.model_path, "size_axis_max.txt"), "a") as f:
-                    f.write(
-                        f"{iteration:5}: {gaussians.get_scaling.amax(dim=1).mean().item():.5f} +- {gaussians.get_scaling.amax(dim=1).std().item():.5f}\n"
-                    )
-
-                # Same but for the median axis
-                with open(os.path.join(cfg.model_path, "size_axis_median.txt"), "a") as f:
-                    f.write(
-                        f"{iteration:5}: {gaussians.get_scaling.median(dim=1).values.mean().item():.5f} +- {gaussians.get_scaling.median(dim=1).values.std().item():.5f}\n"
-                    )
-
-                # Same but for the smallest axis
-                with open(os.path.join(cfg.model_path, "size_axis_min.txt"), "a") as f:
-                    f.write(
-                        f"{iteration:5}: {gaussians.get_scaling.amin(dim=1).mean().item():.5f} +- {gaussians.get_scaling.amin(dim=1).std().item():.5f}\n"
-                    )
-
-                stats = raytracer.cuda_module.get_stats()
-
-                # From raytracer.num_hits, print the mean, max, and std
-                num_traversed = stats.num_traversed_per_pixel.float()
-                with open(os.path.join(cfg.model_path, "num_traversed.txt"), "a") as f:
-                    f.write(f"{iteration:5}: {num_traversed.mean().item():.3f} +- {num_traversed.std().item():.3f}\n")
-                num_accumulated = stats.num_accumulated_per_pixel.float()
-                with open(os.path.join(cfg.model_path, "num_accumulated.txt"), "a") as f:
-                    f.write(
-                        f"{iteration:5}: {num_accumulated.mean().item():.3f} +- {num_accumulated.std().item():.3f}\n"
                     )
 
                 with open(os.path.join(cfg.model_path, "num_gaussians.txt"), "a") as f:

@@ -82,11 +82,8 @@ def render(
         roughness=framebuffer.output_roughness.clone().detach().moveaxis(-1, 1)
         if framebuffer.output_roughness is not None
         else torch.zeros_like(rgb),
-        F0=framebuffer.output_f0.clone().detach().moveaxis(-1, 1)
+        f0=framebuffer.output_f0.clone().detach().moveaxis(-1, 1)
         if framebuffer.output_f0 is not None
-        else torch.zeros_like(rgb),
-        brdf=framebuffer.output_brdf.clone().detach().moveaxis(-1, 1)
-        if framebuffer.output_brdf is not None
         else torch.zeros_like(rgb),
         target=_target,
         target_diffuse=_target_diffuse,
