@@ -22,11 +22,10 @@ class TyroConfig:
     detect_anomaly: bool = False
     flip_camera: bool = False
     val_views: list[int] = field(default_factory=lambda: [75, 175])
-    test_iterations: list[int] = field(default_factory=lambda: [4, 6_000, 12_000, 18_000, 24_000, 32_000])
-    save_iterations: list[int] = field(default_factory=lambda: [4, 6_000, 12_000, 18_000, 24_000, 32_000])
+    test_iterations: list[int] = field(default_factory=lambda: [1, 1500, 3000, 4500, 6000, 8000])
+    save_iterations: list[int] = field(default_factory=lambda: [1, 1500, 3000, 4500, 6000, 8000])
     quiet: bool = False
-
-    iterations: int = 32_000
+    iterations: int = 8000
 
     # * Dataset params
     source_path: Annotated[str, arg(aliases=["-s"])] = ""
@@ -52,7 +51,7 @@ class TyroConfig:
     transmittance_threshold: float = 0.01
     alpha_threshold: float = 0.005
     exp_power: int = 3
-    no_bounces_until_iter: int = 3_000
+    no_bounces_until_iter: int = 750
 
     # * Init params
     init_num_pts: int = 100_000
@@ -78,7 +77,6 @@ class TyroConfig:
     xyz_lr_init: float = 0.00016
     xyz_lr_final: float = 0.0000016
     xyz_lr_delay_mult: float = 0.01
-    timestretch: float = 0.25
     xyz_lr: float = 0.0025
     normal_lr: float = 0.0025
     roughness_lr: float = 0.0025
@@ -89,6 +87,6 @@ class TyroConfig:
     rotation_lr: float = 0.001
     percent_dense: float = 0.01
     scale_decay: float = 0.9999
-    pruning_interval: int = 500
+    pruning_interval: int = 125
     beta_1: float = 0.9
     beta_2: float = 0.999

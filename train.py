@@ -541,12 +541,4 @@ if __name__ == "__main__":
     if cfg.viewer:
         cfg.test_iterations = []
 
-    # todo hardcode this
-    if cfg.timestretch != 1:
-        cfg.no_bounces_until_iter = int(cfg.no_bounces_until_iter * cfg.timestretch)
-        cfg.test_iterations = [int(x * cfg.timestretch) for x in cfg.test_iterations]
-        cfg.save_iterations = [int(x * cfg.timestretch) for x in cfg.save_iterations]
-        cfg.iterations = int(cfg.timestretch * cfg.iterations)
-        cfg.pruning_interval = int(cfg.timestretch * cfg.pruning_interval)
-
     main(cfg)
