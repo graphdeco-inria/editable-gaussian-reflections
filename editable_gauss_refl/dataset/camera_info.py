@@ -16,7 +16,7 @@ class CameraInfo:
     width: int
     height: int
 
-    glossy_image: np.array
+    specular_image: np.array
     diffuse_image: np.array
     depth_image: np.array
     normal_image: np.array

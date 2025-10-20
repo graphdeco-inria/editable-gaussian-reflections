@@ -102,7 +102,7 @@ for split in ["train", "test"]:
         dtype = np.float32
         render = images["render"].astype(dtype)
         diffuse = images["diffuse"].astype(dtype)
-        glossy = images["glossy"].astype(dtype)
+        specular = images["glossy"].astype(dtype)
         depth = np.linalg.norm(images["position"] - np.array(transforms[split]["frames"][i]["transform_matrix"])[:3, 3], axis=-1, keepdims=True).astype(dtype)
         f0 = ((1.0 - images["metalness"]) * 0.08 * images["specular"] + images["metalness"] * images["base_color"]).astype(dtype)
         normal = images["normal"].astype(dtype)
@@ -111,7 +111,7 @@ for split in ["train", "test"]:
         # * Exposure adjust
         render = render * cli.exposure
         diffuse = diffuse * cli.exposure
-        glossy = glossy * cli.exposure  
+        specular = specular * cli.exposure  
 
         # * Resize images
         def resize(arr):
@@ -126,7 +126,7 @@ for split in ["train", "test"]:
         
         render = resize(render)
         diffuse = resize(diffuse)
-        glossy = resize(glossy)
+        specular = resize(specular)
         depth = resize(depth)
         f0 = resize(f0)
         normal = resize(normal)
@@ -137,7 +137,7 @@ for split in ["train", "test"]:
             if "images" not in cli.preserve:
                 render = tonemap(torch.from_numpy(render)).numpy()
                 diffuse = tonemap(torch.from_numpy(diffuse)).numpy()
-                glossy = tonemap(torch.from_numpy(glossy)).numpy()
+                specular = tonemap(torch.from_numpy(specular)).numpy()
             if "depth" not in cli.preserve:
                 depth = (depth - 1) / (3 - 1)
             if "normals" not in cli.preserve:
@@ -161,7 +161,7 @@ for split in ["train", "test"]:
                 else:
                     render = np.clip(render * 255, 0, 255)
                     diffuse = np.clip(diffuse * 255, 0, 255)
-                    glossy = np.clip(glossy * 255, 0, 255)
+                    specular = np.clip(specular * 255, 0, 255)
                     dtype_images = torch.uint8
                 if "depth" in cli.preserve:
                     dtype_depth = torch.float16
@@ -179,7 +179,7 @@ for split in ["train", "test"]:
             safetensors.torch.save_file({
                 "render": torch.from_numpy(render).permute(2, 0, 1).to(dtype_images).contiguous(),
                 "diffuse": torch.from_numpy(diffuse).permute(2, 0, 1).to(dtype_images).contiguous(),
-                "glossy": torch.from_numpy(glossy).permute(2, 0, 1).to(dtype_images).contiguous(),
+                "specular": torch.from_numpy(specular).permute(2, 0, 1).to(dtype_images).contiguous(),
                 "depth": torch.from_numpy(depth).permute(2, 0, 1).to(dtype_depth).contiguous(),
                 "f0": torch.from_numpy(f0).permute(2, 0, 1).to(dtype).contiguous(),
                 "normal": torch.from_numpy(normal).permute(2, 0, 1).to(dtype_normals).contiguous(),
@@ -188,7 +188,7 @@ for split in ["train", "test"]:
         else:
             os.makedirs(os.path.join(dst_dir, "render"), exist_ok=True)
             os.makedirs(os.path.join(dst_dir, "diffuse"), exist_ok=True)
-            os.makedirs(os.path.join(dst_dir, "glossy"), exist_ok=True)
+            os.makedirs(os.path.join(dst_dir, "specular"), exist_ok=True)
             os.makedirs(os.path.join(dst_dir, "depth"), exist_ok=True)
             os.makedirs(os.path.join(dst_dir, "f0"), exist_ok=True)
             os.makedirs(os.path.join(dst_dir, "normal"), exist_ok=True)
@@ -203,8 +203,8 @@ for split in ["train", "test"]:
                     cv2.cvtColor(diffuse, cv2.COLOR_RGB2BGR),
                 )
                 cv2.imwrite(
-                    os.path.join(dst_dir, "glossy", f"glossy_{i:04d}.exr"),
-                    cv2.cvtColor(glossy, cv2.COLOR_RGB2BGR),
+                    os.path.join(dst_dir, "specular", f"specular_{i:04d}.exr"),
+                    cv2.cvtColor(specular, cv2.COLOR_RGB2BGR),
                 )
                 cv2.imwrite(
                     os.path.join(dst_dir, "depth", f"depth_{i:04d}.exr"),
@@ -232,8 +232,8 @@ for split in ["train", "test"]:
                     diffuse.astype(np.float16),
                 )
                 tifffile.imwrite(
-                    os.path.join(dst_dir, "glossy", f"glossy_{i:04d}.tiff"),
-                    glossy.astype(np.float16),
+                    os.path.join(dst_dir, "specular", f"specular_{i:04d}.tiff"),
+                    specular.astype(np.float16),
                 )
                 tifffile.imwrite(
                     os.path.join(dst_dir, "depth", f"depth_{i:04d}.tiff"),
@@ -262,13 +262,13 @@ for split in ["train", "test"]:
                         diffuse.astype(np.float16),
                     )
                     tifffile.imwrite(
-                        os.path.join(dst_dir, "glossy", f"glossy_{i:04d}.tiff"),
-                        glossy.astype(np.float16),
+                        os.path.join(dst_dir, "specular", f"specular_{i:04d}.tiff"),
+                        specular.astype(np.float16),
                     )
                 else:
                     iio.imwrite(os.path.join(dst_dir, "render", f"render_{i:04d}.png"), (np.clip(render, 0, 1) * 255).astype(np.uint8))
                     iio.imwrite(os.path.join(dst_dir, "diffuse", f"diffuse_{i:04d}.png"), (np.clip(diffuse, 0, 1) * 255).astype(np.uint8))
-                    iio.imwrite(os.path.join(dst_dir, "glossy", f"glossy_{i:04d}.png"), (np.clip(glossy, 0, 1) * 255).astype(np.uint8))
+                    iio.imwrite(os.path.join(dst_dir, "specular", f"specular_{i:04d}.png"), (np.clip(specular, 0, 1) * 255).astype(np.uint8))
                 if "depth" in cli.preserve:
                     tifffile.imwrite(
                         os.path.join(dst_dir, "depth", f"depth_{i:04d}.tiff"),

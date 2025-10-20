@@ -78,7 +78,7 @@ do
     ffmpeg -y \
         -i "$NOVEL_VIEWS_DIR/render.mp4" \
         -i "$NOVEL_VIEWS_DIR/diffuse.mp4" \
-        -i "$NOVEL_VIEWS_DIR/glossy.mp4" \
+        -i "$NOVEL_VIEWS_DIR/specular.mp4" \
         -i "$NOVEL_VIEWS_DIR/normal.mp4" \
         -filter_complex "[0:v][1:v][2:v][3:v]hstack=inputs=4[v]" \
         -map "[v]" \

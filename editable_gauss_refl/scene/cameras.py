@@ -31,7 +31,7 @@ class Camera(nn.Module):
         gt_alpha_mask,
         image_name,
         uid,
-        glossy_image,
+        specular_image,
         diffuse_image,
         depth_image,
         normal_image,
@@ -58,7 +58,7 @@ class Camera(nn.Module):
         if image.dtype == torch.uint8:
             image = untonemap(image.cuda().half() / 255.0)
             diffuse_image = untonemap(diffuse_image.cuda().half() / 255.0)
-            glossy_image = untonemap(glossy_image.cuda().half() / 255.0)
+            specular_image = untonemap(specular_image.cuda().half() / 255.0)
         if normal_image.dtype == torch.uint8:
             normal_image = normal_image.half() / 255.0 * 2.0 - 1.0
         if depth_image.dtype == torch.uint8:
@@ -74,7 +74,7 @@ class Camera(nn.Module):
 
         self._original_image = image.half().to(image_holding_device)
         self._diffuse_image = diffuse_image.half().to(image_holding_device)
-        self._glossy_image = glossy_image.half().to(image_holding_device)
+        self._specular_image = specular_image.half().to(image_holding_device)
         self._normal_image = normal_image.half().to(image_holding_device)
         self._depth_image = depth_image.half().to(image_holding_device)
         self._roughness_image = roughness_image.half().to(image_holding_device)
@@ -109,7 +109,7 @@ class Camera(nn.Module):
             uid=cam_info.uid,
             data_device="cuda",
             diffuse_image=cam_info.diffuse_image.moveaxis(-1, 0),
-            glossy_image=cam_info.glossy_image.moveaxis(-1, 0),
+            specular_image=cam_info.specular_image.moveaxis(-1, 0),
             depth_image=cam_info.depth_image.moveaxis(-1, 0),
             normal_image=cam_info.normal_image.moveaxis(-1, 0),
             roughness_image=cam_info.roughness_image.moveaxis(-1, 0),
@@ -125,8 +125,8 @@ class Camera(nn.Module):
         return self._diffuse_image.float().cuda()
 
     @property
-    def glossy_image(self):
-        return self._glossy_image.float().cuda()
+    def specular_image(self):
+        return self._specular_image.float().cuda()
 
     @property
     def normal_image(self):

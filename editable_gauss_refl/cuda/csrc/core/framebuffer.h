@@ -39,7 +39,7 @@ struct Pixel {
     int accumulated_sample_count;
 
     float3 target_diffuse;
-    float3 target_glossy;
+    float3 target_specular;
     float target_depth;
     float3 target_normal;
     float3 target_f0;
@@ -69,7 +69,7 @@ struct Pixel {
         output_final = make_float3(0.0f, 0.0f, 0.0f);
 
         target_diffuse = make_float3(0.0f, 0.0f, 0.0f);
-        target_glossy = make_float3(0.0f, 0.0f, 0.0f);
+        target_specular = make_float3(0.0f, 0.0f, 0.0f);
         target_depth = 0.0f;
         target_normal = make_float3(0.0f, 0.0f, 0.0f);
         target_f0 = make_float3(0.0f, 0.0f, 0.0f);
@@ -101,7 +101,7 @@ struct Framebuffer {
     int *accumulated_sample_count;
 
     const float3 *__restrict__ target_diffuse;
-    const float3 *__restrict__ target_glossy;
+    const float3 *__restrict__ target_specular;
     const float *__restrict__ target_depth;
     const float3 *__restrict__ target_normal;
     const float3 *__restrict__ target_f0;
@@ -153,7 +153,7 @@ struct Framebuffer {
 
     __device__ void fetch_targets(Pixel &pixel) {
         pixel.target_diffuse = target_diffuse[pixel.id];
-        pixel.target_glossy = target_glossy[pixel.id];
+        pixel.target_specular = target_specular[pixel.id];
         pixel.target_depth = target_depth[pixel.id];
         pixel.target_normal = target_normal[pixel.id];
         pixel.target_f0 = target_f0[pixel.id];
@@ -188,7 +188,7 @@ struct FramebufferDataHolder : torch::CustomClassHolder {
     Tensor accumulated_sample_count;
 
     Tensor target_diffuse;
-    Tensor target_glossy;
+    Tensor target_specular;
     Tensor target_depth;
     Tensor target_normal;
     Tensor target_f0;
@@ -217,7 +217,7 @@ struct FramebufferDataHolder : torch::CustomClassHolder {
         accumulated_sample_count = torch::zeros({1}, CUDA_INT32);
 
         target_diffuse = torch::zeros({image_height, image_width, 3}, CUDA_FLOAT32);
-        target_glossy = torch::zeros({image_height, image_width, 3}, CUDA_FLOAT32);
+        target_specular = torch::zeros({image_height, image_width, 3}, CUDA_FLOAT32);
         target_depth = torch::zeros({image_height, image_width, 1}, CUDA_FLOAT32);
         target_normal = torch::zeros({image_height, image_width, 3}, CUDA_FLOAT32);
         target_f0 = torch::zeros({image_height, image_width, 3}, CUDA_FLOAT32);
@@ -246,7 +246,7 @@ struct FramebufferDataHolder : torch::CustomClassHolder {
             .accumulated_roughness = reinterpret_cast<float *>(accumulated_roughness.data_ptr()),
             .accumulated_sample_count = reinterpret_cast<int *>(accumulated_sample_count.data_ptr()),
             .target_diffuse = reinterpret_cast<float3 *>(target_diffuse.data_ptr()),
-            .target_glossy = reinterpret_cast<float3 *>(target_glossy.data_ptr()),
+            .target_specular = reinterpret_cast<float3 *>(target_specular.data_ptr()),
             .target_depth = reinterpret_cast<float *>(target_depth.data_ptr()),
             .target_normal = reinterpret_cast<float3 *>(target_normal.data_ptr()),
             .target_f0 = reinterpret_cast<float3 *>(target_f0.data_ptr()),
@@ -288,7 +288,7 @@ struct FramebufferDataHolder : torch::CustomClassHolder {
             .def_readonly("accumulated_roughness", &FramebufferDataHolder::accumulated_roughness)
             .def_readonly("accumulated_sample_count", &FramebufferDataHolder::accumulated_sample_count)
             .def_readonly("target_diffuse", &FramebufferDataHolder::target_diffuse)
-            .def_readonly("target_glossy", &FramebufferDataHolder::target_glossy)
+            .def_readonly("target_specular", &FramebufferDataHolder::target_specular)
             .def_readonly("target_depth", &FramebufferDataHolder::target_depth)
             .def_readonly("target_normal", &FramebufferDataHolder::target_normal)
             .def_readonly("target_f0", &FramebufferDataHolder::target_f0)

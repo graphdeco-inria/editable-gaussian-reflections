@@ -160,13 +160,13 @@ class EditableGaussianModel(GaussianModel):
         for key, edit in self.edits.items():
             base_f0 = torch.lerp(
                 f0,
-                torch.tensor(edit.glossy_override)[:3].cuda(),
-                edit.glossy_override[-1],
+                torch.tensor(edit.specular_override)[:3].cuda(),
+                edit.specular_override[-1],
             )
             hsv = kornia.color.rgb_to_hsv(base_f0.T[None, :, :, None])[0, :, :, 0].T
-            hsv[:, 0] = (hsv[:, 0] + math.pi * edit.glossy_hue_shift) % (2 * math.pi)
-            hsv[:, 1] = (edit.glossy_saturation_mult * (hsv[:, 1] + edit.glossy_saturation_shift)).clamp(0, 1)
-            hsv[:, 2] = (edit.glossy_value_mult * (hsv[:, 2] + edit.glossy_value_shift)).clamp(0)
+            hsv[:, 0] = (hsv[:, 0] + math.pi * edit.specular_hue_shift) % (2 * math.pi)
+            hsv[:, 1] = (edit.specular_saturation_mult * (hsv[:, 1] + edit.specular_saturation_shift)).clamp(0, 1)
+            hsv[:, 2] = (edit.specular_value_mult * (hsv[:, 2] + edit.specular_value_shift)).clamp(0)
             modified_f0 = kornia.color.hsv_to_rgb(hsv.T[None, :, :, None])[0, :, :, 0].T
             f0 = torch.where(self.selections[key], modified_f0, f0)
 

@@ -1,5 +1,5 @@
 
-DISENTANGLEMENT=diffuse,glossy
+DISENTANGLEMENT=diffuse,specular
 GEOMETRY=normals,position
 BRDF=roughness,base_color,specular,metalness
 

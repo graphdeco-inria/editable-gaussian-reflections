@@ -17,9 +17,6 @@ import torch
 from editable_gauss_refl import make_raytracer
 from editable_gauss_refl.scene.gaussian_model import GaussianModel
 
-LOADED = False
-
-
 class GaussianRaytracer:
     def __init__(self, pc: GaussianModel, image_width: int, image_height: int):
         self.image_width: int = image_width
@@ -28,7 +25,7 @@ class GaussianRaytracer:
 
         config = self.cuda_module.get_config()
         config.loss_weight_diffuse.fill_(pc.cfg.loss_weight_diffuse)
-        config.loss_weight_glossy.fill_(pc.cfg.loss_weight_glossy)
+        config.loss_weight_specular.fill_(pc.cfg.loss_weight_specular)
         config.loss_weight_normal.fill_(pc.cfg.loss_weight_normal)
         config.loss_weight_depth.fill_(pc.cfg.loss_weight_depth)
         config.loss_weight_f0.fill_(pc.cfg.loss_weight_f0)
@@ -90,7 +87,7 @@ class GaussianRaytracer:
         viewpoint_camera,
         target=None,
         target_diffuse=None,
-        target_glossy=None,
+        target_specular=None,
         target_depth=None,
         target_normal=None,
         target_roughness=None,
@@ -124,10 +121,10 @@ class GaussianRaytracer:
             else:
                 framebuffer.target_diffuse.zero_()
 
-            if target_glossy is not None:
-                framebuffer.target_glossy.copy_(target_glossy.moveaxis(0, -1))
+            if target_specular is not None:
+                framebuffer.target_specular.copy_(target_specular.moveaxis(0, -1))
             else:
-                framebuffer.target_glossy.zero_()
+                framebuffer.target_specular.zero_()
 
             if target_depth is not None:
                 framebuffer.target_depth.copy_(target_depth.moveaxis(0, -1))

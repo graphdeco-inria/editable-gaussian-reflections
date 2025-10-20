@@ -11,7 +11,7 @@ struct Config {
     const int *num_bounces;
     const float *global_scale_factor;
     const float *loss_weight_diffuse;
-    const float *loss_weight_glossy;
+    const float *loss_weight_specular;
     const float *loss_weight_depth;
     const float *loss_weight_normal;
     const float *loss_weight_f0;
@@ -37,7 +37,7 @@ struct ConfigDataHolder : torch::CustomClassHolder {
     Tensor num_bounces = torch::tensor({2}, CUDA_INT32);
     Tensor global_scale_factor = torch::ones({1}, CUDA_FLOAT32);
     Tensor loss_weight_diffuse = torch::tensor({1.0}, CUDA_FLOAT32);
-    Tensor loss_weight_glossy = torch::tensor({1.0}, CUDA_FLOAT32);
+    Tensor loss_weight_specular = torch::tensor({1.0}, CUDA_FLOAT32);
     Tensor loss_weight_depth = torch::tensor({1.0}, CUDA_FLOAT32);
     Tensor loss_weight_normal = torch::tensor({1.0}, CUDA_FLOAT32);
     Tensor loss_weight_f0 = torch::tensor({1.0}, CUDA_FLOAT32);
@@ -60,7 +60,7 @@ struct ConfigDataHolder : torch::CustomClassHolder {
             .num_bounces = reinterpret_cast<int *>(num_bounces.data_ptr()),
             .global_scale_factor = reinterpret_cast<float *>(global_scale_factor.data_ptr()),
             .loss_weight_diffuse = reinterpret_cast<float *>(loss_weight_diffuse.data_ptr()),
-            .loss_weight_glossy = reinterpret_cast<float *>(loss_weight_glossy.data_ptr()),
+            .loss_weight_specular = reinterpret_cast<float *>(loss_weight_specular.data_ptr()),
             .loss_weight_depth = reinterpret_cast<float *>(loss_weight_depth.data_ptr()),
             .loss_weight_normal = reinterpret_cast<float *>(loss_weight_normal.data_ptr()),
             .loss_weight_f0 = reinterpret_cast<float *>(loss_weight_f0.data_ptr()),
@@ -86,7 +86,7 @@ struct ConfigDataHolder : torch::CustomClassHolder {
             .def_readonly("num_bounces", &ConfigDataHolder::num_bounces)
             .def_readonly("global_scale_factor", &ConfigDataHolder::global_scale_factor)
             .def_readonly("loss_weight_diffuse", &ConfigDataHolder::loss_weight_diffuse)
-            .def_readonly("loss_weight_glossy", &ConfigDataHolder::loss_weight_glossy)
+            .def_readonly("loss_weight_specular", &ConfigDataHolder::loss_weight_specular)
             .def_readonly("loss_weight_depth", &ConfigDataHolder::loss_weight_depth)
             .def_readonly("loss_weight_normal", &ConfigDataHolder::loss_weight_normal)
             .def_readonly("loss_weight_f0", &ConfigDataHolder::loss_weight_f0)

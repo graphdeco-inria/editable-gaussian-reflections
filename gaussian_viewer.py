@@ -47,12 +47,12 @@ class Edit:
     use_roughness_override: bool = False
     roughness_override: float = 0.0
 
-    glossy_override: tuple[float, float, float, float] = (0.5, 0.5, 0.5, 0.0)
-    glossy_hue_shift: float = 0.0
-    glossy_saturation_shift: float = 0.0
-    glossy_saturation_mult: float = 1.0
-    glossy_value_shift: float = 0.0
-    glossy_value_mult: float = 1.0
+    specular_override: tuple[float, float, float, float] = (0.5, 0.5, 0.5, 0.0)
+    specular_hue_shift: float = 0.0
+    specular_saturation_shift: float = 0.0
+    specular_saturation_mult: float = 1.0
+    specular_value_shift: float = 0.0
+    specular_value_mult: float = 1.0
 
     translate_x: float = 0.0
     translate_y: float = 0.0
@@ -572,35 +572,35 @@ class GaussianViewer(Viewer):
 
             imgui.set_cursor_pos_x((imgui.get_content_region_avail().x - imgui.calc_text_size("Specular").x) * 0.35)
             imgui.text("Specular")
-            _, self.edit.glossy_override = imgui.color_edit4("##Specular Override", self.edit.glossy_override, flags=imgui.ColorEditFlags_.no_options | imgui.ColorEditFlags_.alpha_preview)
+            _, self.edit.specular_override = imgui.color_edit4("##Specular Override", self.edit.specular_override, flags=imgui.ColorEditFlags_.no_options | imgui.ColorEditFlags_.alpha_preview)
             if imgui.is_item_hovered() and imgui.is_mouse_clicked(imgui.MouseButton_.right):
-                self.edit.glossy_override = (0.0, 0.0, 0.0, 0.0)
+                self.edit.specular_override = (0.0, 0.0, 0.0, 0.0)
             imgui.same_line()
             imgui.text("Override")
             imgui.push_item_width(imgui.get_content_region_avail().x * 0.68)
-            _, self.edit.glossy_hue_shift = imgui.drag_float("##Specular Hue Shift", self.edit.glossy_hue_shift, v_min=-1, v_max=1, v_speed=0.01, format="%+.2f")
+            _, self.edit.specular_hue_shift = imgui.drag_float("##Specular Hue Shift", self.edit.specular_hue_shift, v_min=-1, v_max=1, v_speed=0.01, format="%+.2f")
             if imgui.is_item_hovered() and imgui.is_mouse_clicked(imgui.MouseButton_.right):
-                self.edit.glossy_hue_shift = 0.0
+                self.edit.specular_hue_shift = 0.0
             imgui.same_line()
             imgui.text("Hue")
             imgui.pop_item_width()
             imgui.push_item_width(imgui.get_content_region_avail().x * 0.329)
-            _, self.edit.glossy_saturation_shift = imgui.drag_float("##Specular Saturation Shift", self.edit.glossy_saturation_shift, v_min=-1, v_max=1, v_speed=0.01, format="%+.2f")
+            _, self.edit.specular_saturation_shift = imgui.drag_float("##Specular Saturation Shift", self.edit.specular_saturation_shift, v_min=-1, v_max=1, v_speed=0.01, format="%+.2f")
             if imgui.is_item_hovered() and imgui.is_mouse_clicked(imgui.MouseButton_.right):
-                self.edit.glossy_saturation_shift = 0.0
+                self.edit.specular_saturation_shift = 0.0
             imgui.same_line()
-            _, self.edit.glossy_saturation_mult = imgui.drag_float("##Specular Saturation Mult", self.edit.glossy_saturation_mult, v_min=0, v_max=3.0, v_speed=0.01, format="x%.2f")
+            _, self.edit.specular_saturation_mult = imgui.drag_float("##Specular Saturation Mult", self.edit.specular_saturation_mult, v_min=0, v_max=3.0, v_speed=0.01, format="x%.2f")
             if imgui.is_item_hovered() and imgui.is_mouse_clicked(imgui.MouseButton_.right):
-                self.edit.glossy_saturation_mult = 1.0
+                self.edit.specular_saturation_mult = 1.0
             imgui.same_line()
             imgui.text("Saturation")
-            _, self.edit.glossy_value_shift = imgui.drag_float("##Specular Value Shift", self.edit.glossy_value_shift, v_min=-1, v_max=1, v_speed=0.01, format="%+.2f")
+            _, self.edit.specular_value_shift = imgui.drag_float("##Specular Value Shift", self.edit.specular_value_shift, v_min=-1, v_max=1, v_speed=0.01, format="%+.2f")
             if imgui.is_item_hovered() and imgui.is_mouse_clicked(imgui.MouseButton_.right):
-                self.edit.glossy_value_shift = 0.0
+                self.edit.specular_value_shift = 0.0
             imgui.same_line()
-            _, self.edit.glossy_value_mult = imgui.drag_float("##Specular Value Mult", self.edit.glossy_value_mult, v_min=0, v_max=3.0, v_speed=0.01, format="x%.2f")
+            _, self.edit.specular_value_mult = imgui.drag_float("##Specular Value Mult", self.edit.specular_value_mult, v_min=0, v_max=3.0, v_speed=0.01, format="x%.2f")
             if imgui.is_item_hovered() and imgui.is_mouse_clicked(imgui.MouseButton_.right):
-                self.edit.glossy_value_mult = 1.0
+                self.edit.specular_value_mult = 1.0
             imgui.same_line()
             imgui.text("Value")
             imgui.pop_item_width()

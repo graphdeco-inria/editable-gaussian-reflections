@@ -96,7 +96,7 @@ class ColmapPriorDataset:
         image = self._get_buffer(frame_name, "image")
         albedo_image = self._get_buffer(frame_name, "albedo")
         diffuse_image = self._get_buffer(frame_name, "diffuse")
-        glossy_image = self._get_buffer(frame_name, "glossy")
+        specular_image = self._get_buffer(frame_name, "specular")
         roughness_image = self._get_buffer(frame_name, "roughness")
         metalness_image = self._get_buffer(frame_name, "metalness")
         depth_image = self._get_buffer(frame_name, "depth")
@@ -168,14 +168,14 @@ class ColmapPriorDataset:
             height=height,
             albedo_image=albedo_image,
             diffuse_image=diffuse_image,
-            glossy_image=glossy_image,
+            specular_image=specular_image,
             depth_image=distance_image,
             normal_image=normal_image,
             roughness_image=roughness_image,
             metalness_image=metalness_image,
             base_color_image=base_color_image,
             brdf_image=brdf_image,
-            specular_image=specular_image,
+            #!!!specular_image=specular_image,
         )
         return cam_info
 
@@ -189,7 +189,7 @@ class ColmapPriorDataset:
         buffer_image = buffer_image.resize((buffer_width, buffer_height))
         buffer = from_pil_image(buffer_image)
 
-        if buffer_name in ["image", "irradiance", "diffuse", "glossy"]:
+        if buffer_name in ["image", "irradiance", "diffuse", "specular"]:
             buffer = untonemap(buffer)
             buffer /= 3.5  # Align exposure
         elif buffer_name == "albedo":

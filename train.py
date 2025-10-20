@@ -75,7 +75,7 @@ def training_report(
     )
     for config in validation_configs:
         psnr_test = 0.0
-        glossy_psnr_test = 0.0
+        specular_psnr_test = 0.0
         diffuse_psnr_test = 0.0
 
         for idx, viewpoint in enumerate(config["cameras"]):
@@ -84,15 +84,15 @@ def training_report(
             os.makedirs(os.path.join(tb_writer.log_dir, f"{config['name']}_preview"), exist_ok=True)
 
             diffuse_image = tonemap(package.rgb[0]).clamp(0, 1)
-            glossy_image = tonemap(package.rgb[1:].sum(dim=0)).clamp(0, 1)
+            specular_image = tonemap(package.rgb[1:].sum(dim=0)).clamp(0, 1)
             pred_image = tonemap(package.final[0]).clamp(0, 1)
             pred_image_without_denoising = tonemap(package.rgb.sum(dim=0))
             diffuse_gt_image = tonemap(viewpoint.diffuse_image).clamp(0, 1)
-            glossy_gt_image = tonemap(viewpoint.glossy_image).clamp(0, 1)
+            specular_gt_image = tonemap(viewpoint.specular_image).clamp(0, 1)
             gt_image = tonemap(viewpoint.original_image).clamp(0, 1)
 
             if tb_writer and idx == 0:
-                preview = torch.stack([ diffuse_image, diffuse_gt_image, glossy_image, glossy_gt_image, pred_image, gt_image]).clamp(0, 1)
+                preview = torch.stack([ diffuse_image, diffuse_gt_image, specular_image, specular_gt_image, pred_image, gt_image]).clamp(0, 1)
                 save_image(preview, os.path.join(tb_writer.log_dir, f"{config['name']}_preview_iteration_{iteration}.png"), nrow=2, padding=0)
 
             normal_gt_image = torch.clamp(viewpoint.normal_image / 2 + 0.5, 0.0, 1.0)
@@ -107,7 +107,7 @@ def training_report(
             roughness_gt_image = torch.clamp(viewpoint.roughness_image, 0.0, 1.0)
 
             diffuse_psnr_test += psnr(diffuse_image, diffuse_gt_image).mean().double()
-            glossy_psnr_test += psnr(glossy_image, glossy_gt_image).mean().double()
+            specular_psnr_test += psnr(specular_image, specular_gt_image).mean().double()
             psnr_test += psnr(pred_image, gt_image).mean().double()
 
             if tb_writer and idx == 0:
@@ -126,23 +126,23 @@ def training_report(
                 save_image(torch.stack([pred_image, gt_image]).clamp(0, 1), os.path.join(vs_target_dir, "final_denoised.png"), nrow=2, padding=0)
                 save_image(torch.stack([pred_image_without_denoising, gt_image]).clamp(0, 1), os.path.join(vs_target_dir, "final_without_denoising.png"), nrow=2, padding=0)
                 save_image(torch.stack([diffuse_image, diffuse_gt_image]).clamp(0, 1), os.path.join(vs_target_dir, "diffuse.png"), nrow=2, padding=0)
-                save_image(torch.stack([glossy_image, glossy_gt_image]).clamp(0, 1), os.path.join(vs_target_dir, "glossy.png"), nrow=2, padding=0)
+                save_image(torch.stack([specular_image, specular_gt_image]).clamp(0, 1), os.path.join(vs_target_dir, "specular.png"), nrow=2, padding=0)
                 depth_rescaled = (torch.stack([depth_image.cuda(), depth_gt_image]) - depth_gt_image.amin()) / (depth_gt_image.amax() - depth_gt_image.amin())
                 save_image(depth_rescaled, os.path.join(vs_target_dir, "depth.png"), nrow=2, padding=0)
                 save_image(torch.stack([normal_image.cuda(), normal_gt_image]).clamp(0, 1), os.path.join(vs_target_dir, "normal.png"), nrow=2, padding=0)
 
         psnr_test /= len(config["cameras"])
         diffuse_psnr_test /= len(config["cameras"])
-        glossy_psnr_test /= len(config["cameras"])
+        specular_psnr_test /= len(config["cameras"])
 
         print("\n[ITER {}] Evaluating {}: PSNR {}".format(iteration, config["name"], psnr_test))
         if tb_writer:
             tb_writer.add_scalar(config["name"] + "/loss_viewpoint - psnr", psnr_test, iteration)
-            tb_writer.add_scalar(config["name"] + "/loss_viewpoint - glossy_psnr", glossy_psnr_test, iteration)
+            tb_writer.add_scalar(config["name"] + "/loss_viewpoint - specular_psnr", specular_psnr_test, iteration)
             tb_writer.add_scalar(config["name"] + "/loss_viewpoint - diffuse_psnr", diffuse_psnr_test, iteration)
 
         with open(os.path.join(tb_writer.log_dir, f"{config['name']}_validation_scores.csv"), "a") as f:
-            f.write(f"{iteration}, {diffuse_psnr_test:02.2f}, {glossy_psnr_test:02.2f}, {psnr_test:02.2f}\n")
+            f.write(f"{iteration}, {diffuse_psnr_test:02.2f}, {specular_psnr_test:02.2f}, {psnr_test:02.2f}\n")
 
     torch.cuda.empty_cache()
 

@@ -81,7 +81,7 @@ __device__ void backward_pass(
         int num_pixels = 1; // * Deliberately avoid averaging over all pixels (seemed more stable)
         float3 dL_doutput_rgb = make_float3(0.0f, 0.0f, 0.0f);
         float3 dL_doutput_diffuse = make_float3(0.0f, 0.0f, 0.0f);
-        float3 dL_doutput_glossy = make_float3(0.0f, 0.0f, 0.0f);
+        float3 dL_doutput_specular = make_float3(0.0f, 0.0f, 0.0f);
         float dL_doutput_depth = 0.0f;
         float3 dL_doutput_normal = make_float3(0.0f, 0.0f, 0.0f);
         float3 dL_doutput_f0 = make_float3(0.0f, 0.0f, 0.0f);
@@ -98,12 +98,12 @@ __device__ void backward_pass(
             dL_doutput_roughness = 2.0f / 1.0f * sign(pixel.output_roughness[0] - pixel.target_roughness) *
                                    *params.config.loss_weight_roughness / num_pixels;
         } else {
-            float3 output_glossy = make_float3(0.0f, 0.0f, 0.0f);
+            float3 output_specular = make_float3(0.0f, 0.0f, 0.0f);
             for (int j = 1; j < num_bounces + 1; j++) {
-                output_glossy += pixel.output_rgb[j];
+                output_specular += pixel.output_rgb[j];
             }
-            dL_doutput_rgb = 2.0f / 3.0f * sign(output_glossy - pixel.target_glossy) *
-                             *params.config.loss_weight_glossy / num_pixels * roughness_downweighting;
+            dL_doutput_rgb = 2.0f / 3.0f * sign(output_specular - pixel.target_specular) *
+                             *params.config.loss_weight_specular / num_pixels * roughness_downweighting;
             dL_doutput_rgb *= throughput;
         }
 

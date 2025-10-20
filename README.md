@@ -40,7 +40,7 @@ conda install anaconda::cmake -y
 ## Downloading the datasets
 <!-- todo -->
 
-Please note that the specular buffer is called "glossy" in the datasets and the code.
+Please note that the specular buffer is called "specular" in the datasets and the code.
 
 ## Training 
 
@@ -82,5 +82,5 @@ python gaussian_viewer.py local $OUTDIR 8000
 ## Creating the dense init point cloud
 <!-- todo -->
 
-<!-- todo note that the specular pass is called glossy -->
+<!-- todo note that the specular pass is called specular -->
 

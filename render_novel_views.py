@@ -56,7 +56,7 @@ def render_set(
             )
 
         diffuse_image = tonemap(package.rgb[0]).clamp(0, 1)
-        glossy_image = tonemap(package.rgb[1:].sum(dim=0)).clamp(0, 1)
+        specular_image = tonemap(package.rgb[1:].sum(dim=0)).clamp(0, 1)
         pred_image = tonemap(package.final.squeeze(0)).clamp(0, 1)
 
         # Match normal image with EnvGS visualization
@@ -71,7 +71,7 @@ def render_set(
 
         result = {
             "render": pred_image,
-            "glossy": glossy_image,
+            "specular": specular_image,
             "diffuse": diffuse_image,
             "depth": package.depth[0] / package.depth[0].amax(),
             "normal": normal_image * 0.5 + 0.5,

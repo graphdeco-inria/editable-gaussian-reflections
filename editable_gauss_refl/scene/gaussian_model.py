@@ -63,7 +63,7 @@ class GaussianModel:
         self._round_counter = torch.empty(0)
         self.max_radii2D = torch.empty(0)
         self.xyz_gradient_accum_diffuse = torch.empty(0)
-        self.xyz_gradient_accum_glossy = torch.empty(0)
+        self.xyz_gradient_accum_specular = torch.empty(0)
         self.comes_from_colmap_pc = torch.empty(0)
         self.denom = torch.empty(0)
         self.optimizer = None
@@ -87,7 +87,7 @@ class GaussianModel:
             self._round_counter,
             self.max_radii2D,
             self.xyz_gradient_accum_diffuse,
-            self.xyz_gradient_accum_glossy,
+            self.xyz_gradient_accum_specular,
             self.comes_from_colmap_pc,
             self.denom,
             self.optimizer.state_dict(),
@@ -107,7 +107,7 @@ class GaussianModel:
             self._round_counter,
             self.max_radii2D,
             xyz_gradient_accum_diffuse,
-            xyz_gradient_accum_glossy,
+            xyz_gradient_accum_specular,
             comes_from_colmap_pc,
             denom,
             opt_dict,
@@ -115,7 +115,7 @@ class GaussianModel:
         ) = model_args
         self.training_setup(training_args)
         self.xyz_gradient_accum_diffuse = xyz_gradient_accum_diffuse
-        self.xyz_gradient_accum_glossy = xyz_gradient_accum_glossy
+        self.xyz_gradient_accum_specular = xyz_gradient_accum_specular
         self.comes_from_colmap_pc = comes_from_colmap_pc
         self.denom = denom
         self.optimizer.load_state_dict(opt_dict)
@@ -286,7 +286,7 @@ class GaussianModel:
     def training_setup(self, training_args):
         self.percent_dense = training_args.percent_dense
         self.xyz_gradient_accum_diffuse = torch.zeros((self.get_xyz.shape[0], 1), device="cuda")
-        self.xyz_gradient_accum_glossy = torch.zeros((self.get_xyz.shape[0], 1), device="cuda")
+        self.xyz_gradient_accum_specular = torch.zeros((self.get_xyz.shape[0], 1), device="cuda")
         self.comes_from_colmap_pc = torch.ones((self.get_xyz.shape[0], 1), device="cuda")
         self.denom = torch.zeros((self.get_xyz.shape[0], 1), device="cuda")
 
@@ -529,7 +529,7 @@ class GaussianModel:
         self._rotation.grad = torch.zeros_like(self._rotation)
 
         self.xyz_gradient_accum_diffuse = self.xyz_gradient_accum_diffuse[valid_points_mask]
-        self.xyz_gradient_accum_glossy = self.xyz_gradient_accum_glossy[valid_points_mask]
+        self.xyz_gradient_accum_specular = self.xyz_gradient_accum_specular[valid_points_mask]
         self.comes_from_colmap_pc = self.comes_from_colmap_pc[valid_points_mask]
 
         self._round_counter = self._round_counter[valid_points_mask]
@@ -616,7 +616,7 @@ class GaussianModel:
 
         if reset_params:
             self.xyz_gradient_accum_diffuse = torch.zeros((self.get_xyz.shape[0], 1), device="cuda")
-            self.xyz_gradient_accum_glossy = torch.zeros((self.get_xyz.shape[0], 1), device="cuda")
+            self.xyz_gradient_accum_specular = torch.zeros((self.get_xyz.shape[0], 1), device="cuda")
             self.denom = torch.zeros((self.get_xyz.shape[0], 1), device="cuda")
             self.max_radii2D = torch.zeros((self.get_xyz.shape[0]), device="cuda")
 

@@ -30,7 +30,7 @@ def test_blender_prior_dataset():
     max_tolerances = {
         "image": 0.01,
         "diffuse": 0.01,
-        "glossy": 0.01,
+        "specular": 0.01,
         "position": 0.01,
     }
 

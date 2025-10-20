@@ -15,13 +15,13 @@ method_ordering = [
     "envgs_gt",
     "ours"
 ]
-pass_ordering = [ "diffuse", "glossy", "render" ]
+pass_ordering = [ "diffuse", "specular", "render" ]
 
 pass_renaming = {
     "normal": "\makebox[0pt][l]{\scriptsize Normal}",
     "render": "\makebox[0pt][l]{\scriptsize Final}",
     "diffuse": "\makebox[0pt][l]{\scriptsize Diffuse}",
-    "glossy": "\makebox[0pt][l]{\scriptsize Residual}"
+    "specular": "\makebox[0pt][l]{\scriptsize Residual}"
 }
 
 method_renaming = {

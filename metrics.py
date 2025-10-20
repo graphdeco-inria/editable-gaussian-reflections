@@ -19,7 +19,7 @@ from torchvision.transforms.functional import to_tensor, to_pil_image
 class Conf:
     model_path: Annotated[str, arg(aliases=["-m"])]
 
-    render_passes: List[int] = field(default_factory=lambda: [ "diffuse", "glossy", "render" ])
+    render_passes: List[int] = field(default_factory=lambda: [ "diffuse", "specular", "render" ])
     metrics: List[int] = field(default_factory=lambda: [ "psnr" ])
 
     ground_truth_pattern: str = "{model_path}/test/ours_8000/{render_pass}_gt/{i:05d}_{render_pass}.png" 

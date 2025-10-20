@@ -62,7 +62,7 @@ class Config:
 
     # * Loss weights
     loss_weight_diffuse: float = 5.0
-    loss_weight_glossy: float = 3.0
+    loss_weight_specular: float = 3.0
     loss_weight_depth: float = 2.5
     loss_weight_normal: float = 2.5
     loss_weight_f0: float = 1.0

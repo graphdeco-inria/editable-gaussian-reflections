@@ -3,7 +3,7 @@ set -e
 DIR=${1?You must pass in a parent directory containing multiple training runs e.g. output/}
 
 
-for render_pass in _ _diffuse_ _glossy_; do 
+for render_pass in _ _diffuse_ _specular_; do 
   for scene in shiny_{bedroom,kitchen,livingroom,bedroom}; do 
 
     # Add ground truth

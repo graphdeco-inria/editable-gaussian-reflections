@@ -32,7 +32,7 @@ def render(
     if targets_available:
         target = camera.original_image
         target_diffuse = camera.diffuse_image
-        target_glossy = camera.glossy_image
+        target_specular = camera.specular_image
         target_normal = camera.normal_image
         target_f0 = camera.f0_image
         target_roughness = camera.roughness_image
@@ -40,7 +40,7 @@ def render(
     else:
         target = None
         target_diffuse = None
-        target_glossy = None
+        target_specular = None
         target_normal = None
         target_roughness = None
         target_f0 = None
@@ -48,7 +48,7 @@ def render(
 
     _target = target
     _target_diffuse = target_diffuse
-    _target_glossy = target_glossy
+    _target_specular = target_specular
     _target_normal = target_normal
     _target_roughness = target_roughness
     _target_f0 = target_f0
@@ -59,7 +59,7 @@ def render(
             camera,
             target=_target,
             target_diffuse=_target_diffuse,
-            target_glossy=_target_glossy,
+            target_specular=_target_specular,
             target_depth=_target_depth,
             target_normal=_target_normal,
             target_roughness=_target_roughness,
@@ -84,7 +84,7 @@ def render(
         f0=framebuffer.output_f0.clone().detach().moveaxis(-1, 1) if framebuffer.output_f0 is not None else torch.zeros_like(rgb),
         target=_target,
         target_diffuse=_target_diffuse,
-        target_glossy=_target_glossy,
+        target_specular=_target_specular,
         target_depth=_target_depth,
         target_normal=_target_normal,
         target_roughness=_target_roughness,

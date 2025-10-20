@@ -45,7 +45,7 @@ class BlenderPriorDataset:
             "albedo",
             "base_color",
             "diffuse",
-            "glossy",
+            "specular",
             "roughness",
             "metalness",
             "depth",
@@ -149,14 +149,14 @@ class BlenderPriorDataset:
             #
             albedo_image=buffers["albedo"],
             diffuse_image=buffers["diffuse"],
-            glossy_image=buffers["glossy"],
+            specular_image=buffers["specular"],
             depth_image=buffers["distance"],
             normal_image=buffers["normal"],
             roughness_image=buffers["roughness"],
             metalness_image=buffers["metalness"],
             base_color_image=buffers["base_color"],
             brdf_image=buffers["brdf"],
-            specular_image=buffers["specular"],
+            #!!! specular_image=buffers["specular"],
         )
         return cam_info
 
@@ -167,7 +167,7 @@ class BlenderPriorDataset:
 
         buffer_image = Image.open(buffer_path)
         buffer = from_pil_image(buffer_image)
-        if buffer_name in ["render", "irradiance", "diffuse", "glossy"]:
+        if buffer_name in ["render", "irradiance", "diffuse", "specular"]:
             buffer = untonemap(buffer)
             buffer /= 3.5  # Align exposure
         elif buffer_name in ["albedo", "base_color", "brdf"]:

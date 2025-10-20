@@ -81,7 +81,7 @@ def get_dataset(cfg: Config, data_dir: str, split: str):
         #         do_eval=cfg.eval,
         #         do_depth_fit=cfg.do_depth_fit,
         #     )
-    else:
+    elif os.path.exists(data_dir):
         dataset = ColmapPriorDataset(
             data_dir,
             split=split,
@@ -90,6 +90,8 @@ def get_dataset(cfg: Config, data_dir: str, split: str):
             do_eval=cfg.eval,
             do_depth_fit=cfg.do_depth_fit,
         )
+    else:
+        raise FileNotFoundError(f"Data directory {data_dir} not found.")
     return dataset
 
 

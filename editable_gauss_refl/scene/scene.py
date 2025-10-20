@@ -31,7 +31,7 @@ class Scene:
         load_iteration=None,
         shuffle=True,
         resolution_scales=[1.0],
-        glossy=False,
+        specular=False,
         extend_point_cloud=None,
         model_path=None,
     ):
@@ -41,7 +41,7 @@ class Scene:
         self.cfg = cfg
         self.model_path = model_path or cfg.model_path
         self.gaussians = gaussians
-        self.glossy = glossy
+        self.specular = specular
 
         self.loaded_iter = load_iteration
 

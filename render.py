@@ -65,8 +65,8 @@ def render_set(
         gts_path = os.path.join(cli.model_path, split, "ours_{}".format(iteration), "render_gt")
         diffuse_render_path = os.path.join(cli.model_path, split, "ours_{}".format(iteration), "diffuse")
         diffuse_gts_path = os.path.join(cli.model_path, split, "ours_{}".format(iteration), "diffuse_gt")
-        glossy_render_path = os.path.join(cli.model_path, split, "ours_{}".format(iteration), "glossy")
-        glossy_gts_path = os.path.join(cli.model_path, split, "ours_{}".format(iteration), "glossy_gt")
+        specular_render_path = os.path.join(cli.model_path, split, "ours_{}".format(iteration), "specular")
+        specular_gts_path = os.path.join(cli.model_path, split, "ours_{}".format(iteration), "specular_gt")
         depth_path = os.path.join(cli.model_path, split, "ours_{}".format(iteration), "depth")
         depth_gts_path = os.path.join(cli.model_path, split, "ours_{}".format(iteration), "depth_gt")
         normal_path = os.path.join(cli.model_path, split, "ours_{}".format(iteration), "normal")
@@ -80,8 +80,8 @@ def render_set(
         makedirs(gts_path, exist_ok=True)
         makedirs(diffuse_render_path, exist_ok=True)
         makedirs(diffuse_gts_path, exist_ok=True)
-        makedirs(glossy_render_path, exist_ok=True)
-        makedirs(glossy_gts_path, exist_ok=True)
+        makedirs(specular_render_path, exist_ok=True)
+        makedirs(specular_gts_path, exist_ok=True)
         makedirs(depth_path, exist_ok=True)
         makedirs(depth_gts_path, exist_ok=True)
         makedirs(normal_path, exist_ok=True)
@@ -97,8 +97,8 @@ def render_set(
         all_diffuse_renders = []
         all_diffuse_gts = []
 
-        all_glossy_renders = []
-        all_glossy_gts = []
+        all_specular_renders = []
+        all_specular_gts = []
 
         all_depth_renders = []
         all_depth_gts = []
@@ -229,7 +229,7 @@ def render_set(
                 )
 
             diffuse_gt_image = tonemap(view.diffuse_image).clamp(0.0, 1.0)
-            glossy_gt_image = tonemap(view.glossy_image).clamp(0.0, 1.0)
+            specular_gt_image = tonemap(view.specular_image).clamp(0.0, 1.0)
             gt_image = tonemap(view.original_image).clamp(0.0, 1.0)
             normal_gt_image = view.normal_image
             roughness_gt_image = view.roughness_image
@@ -237,17 +237,17 @@ def render_set(
             f0_gt_image = view.f0_image
 
             diffuse_image = tonemap(package.rgb[0]).clamp(0, 1)
-            glossy_image = tonemap(package.rgb[1:].sum(dim=0)).clamp(0, 1)
+            specular_image = tonemap(package.rgb[1:].sum(dim=0)).clamp(0, 1)
             pred_image = tonemap(package.final.squeeze(0)).clamp(0, 1)
 
             if not cli.skip_save_frames and mode == "regular":
                 torchvision.utils.save_image(
-                    glossy_image,
-                    os.path.join(glossy_render_path, "{0:05d}".format(idx) + "_glossy.png"),
+                    specular_image,
+                    os.path.join(specular_render_path, "{0:05d}".format(idx) + "_specular.png"),
                 )
                 torchvision.utils.save_image(
-                    glossy_gt_image,
-                    os.path.join(glossy_gts_path, "{0:05d}".format(idx) + "_glossy.png"),
+                    specular_gt_image,
+                    os.path.join(specular_gts_path, "{0:05d}".format(idx) + "_specular.png"),
                 )
 
                 torchvision.utils.save_image(
@@ -321,8 +321,8 @@ def render_set(
             all_diffuse_renders.append(format_image(diffuse_image))
             all_diffuse_gts.append(format_image(tonemap(package.target_diffuse)))
 
-            all_glossy_renders.append(format_image(glossy_image))
-            all_glossy_gts.append(format_image(tonemap(package.target_glossy)))
+            all_specular_renders.append(format_image(specular_image))
+            all_specular_gts.append(format_image(tonemap(package.target_specular)))
 
             max_depth = package.target_depth.amax()
             all_depth_renders.append(format_image(package.depth[0] / max_depth).repeat(1, 1, 3))
@@ -363,11 +363,11 @@ def render_set(
                 **kwargs,
             )
             torchvision.io.write_video(
-                path.format(name="glossy", dir=video_dir),
+                path.format(name="specular", dir=video_dir),
                 torch.cat(
                     [
-                        torch.stack(all_glossy_renders),
-                        torch.stack(all_glossy_gts),
+                        torch.stack(all_specular_renders),
+                        torch.stack(all_specular_gts),
                     ],
                     dim=2,
                 ),

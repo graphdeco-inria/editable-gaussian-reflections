@@ -19,4 +19,5 @@ ruff
 tensorboard
 tqdm
 tyro
+tifffile
 submodules/simple-knn

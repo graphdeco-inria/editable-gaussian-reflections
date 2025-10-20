@@ -36,7 +36,7 @@ class Conf:
     render_passes: List[int] = tuple([
         # "normal", 
         "diffuse", 
-        "glossy",
+        "specular",
         "render", 
     ])
 
@@ -61,67 +61,67 @@ class Conf:
         "3dgs": {
             "render": "renders",
             "diffuse": "diffuse",
-            "glossy": "residual",
+            "specular": "residual",
             "normal": "normal",
         },
         "2dgs": {
             "render": "renders",
             "diffuse": "diffuse",
-            "glossy": "residual",
+            "specular": "residual",
             "normal": "normals",
         },
         "r3dg": {
             "render": "renders",
             "diffuse": "diffuse",
-            "glossy": "specular",
+            "specular": "specular",
             "normal": "normal",
         },
         "gaussian_shader": {
             "render": "renders",
             "diffuse": "diffuse_color",
-            "glossy": "residual",
+            "specular": "residual",
             "normal": "normal",
         },
         "3dgs_dr": {
             "render": "rgb",
             "diffuse": "diffuse",
-            "glossy": "glossy",
+            "specular": "specular",
             "normal": "normal",
         },
         "ref_gaussian": {
             "render": "rgb",
             "diffuse": "diffuse",
-            "glossy": "glossy",
+            "specular": "specular",
             "normal": "normal",
         },
         "envgs_network": {
             "render": "RENDER",
             "diffuse": "DIFFUSE",
-            "glossy": "CUSTOM",
+            "specular": "CUSTOM",
             "normal": "NORMAL",
         },
         "envgs_gt": {
             "render": "RENDER",
             "diffuse": "DIFFUSE",
-            "glossy": "CUSTOM",
+            "specular": "CUSTOM",
             "normal": "NORMAL",
         },
         "ours_network": {
             "render": "render",
             "diffuse": "diffuse",
-            "glossy": "glossy",
+            "specular": "specular",
             "normal": "normal",
         },
         "ours": {
             "render": "render",
             "diffuse": "diffuse",
-            "glossy": "glossy",
+            "specular": "specular",
             "normal": "normal",
         },
         "priors": {
             "render": "image",
             "diffuse": "diffuse",
-            "glossy": "glossy",
+            "specular": "specular",
             "normal": "normal",
         }
     }

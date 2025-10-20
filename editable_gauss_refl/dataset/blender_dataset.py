@@ -56,7 +56,7 @@ class BlenderDataset:
             st = safetensors.torch.load_file(st_path)
             image = st["render"].moveaxis(0, -1)
             diffuse_image = st["diffuse"].moveaxis(0, -1)
-            glossy_image = st["glossy"].moveaxis(0, -1)
+            specular_image = st["specular"].moveaxis(0, -1)
             normal_image = st["normal"].moveaxis(0, -1)
             depth_image = st["depth"].moveaxis(0, -1)
             roughness_image = st["roughness"].moveaxis(0, -1)
@@ -64,7 +64,7 @@ class BlenderDataset:
         else:
             image = self._get_buffer(frame_name, "render")
             diffuse_image = self._get_buffer(frame_name, "diffuse")
-            glossy_image = self._get_buffer(frame_name, "glossy")
+            specular_image = self._get_buffer(frame_name, "specular")
             roughness_image = self._get_buffer(frame_name, "roughness")
             normal_image = self._get_buffer(frame_name, "normal")
             depth_image = self._get_buffer(frame_name, "depth")
@@ -98,7 +98,7 @@ class BlenderDataset:
             width=width,
             height=height,
             diffuse_image=diffuse_image,
-            glossy_image=glossy_image,
+            specular_image=specular_image,
             depth_image=depth_image,
             normal_image=normal_image,
             roughness_image=roughness_image,
