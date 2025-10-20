@@ -95,6 +95,7 @@ config.local.*
 /data
 /editable_gauss_refl/cuda/data
 /output
+/out
 /results*
 *.ignore.*
 
