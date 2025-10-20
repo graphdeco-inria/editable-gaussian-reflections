@@ -114,7 +114,7 @@ def build_scaling_rotation(s, r):
     return L
 
 
-def set_seeds(silent):
+def set_seeds():
     random.seed(0)
     np.random.seed(0)
     torch.manual_seed(0)
@@ -143,13 +143,6 @@ def create_rotation_matrix_from_direction_vector_batch(direction_vectors):
     # Create the batch of rotation matrices with the direction vectors as the last columns
     rotation_matrices = torch.stack((v1, v2, direction_vectors), dim=-1)
     return rotation_matrices
-
-
-# from kornia.geometry import conversions
-# def normal_to_rotation(normals):
-#     rotations = create_rotation_matrix_from_direction_vector_batch(normals)
-#     rotations = conversions.rotation_matrix_to_quaternion(rotations,eps=1e-5, order=conversions.QuaternionCoeffOrder.WXYZ)
-#     return rotations
 
 
 def colormap(img, cmap="jet"):

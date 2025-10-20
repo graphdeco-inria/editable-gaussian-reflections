@@ -19,7 +19,6 @@ from tyro.conf import arg
 class TyroConfig:
     viewer: bool = False
     viewer_mode: str = "local"
-    flip_camera: bool = False
     val_views: list[int] = field(default_factory=lambda: [75, 175])
     test_iterations: list[int] = field(default_factory=lambda: [750, 4000, 8000])
     save_iterations: list[int] = field(default_factory=lambda: [750, 4000, 8000])

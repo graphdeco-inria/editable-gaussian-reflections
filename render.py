@@ -25,6 +25,7 @@ from torchvision.utils import save_image
 import tyro
 from tyro.conf import arg
 from tqdm import tqdm
+import warnings
 
 from gaussian_tracing.arguments import (
     TyroConfig,
@@ -51,6 +52,7 @@ class RenderCLI:
     skip_save_frames: bool = False
     znear: float = 1.0
 
+warnings.filterwarnings("ignore", category=UserWarning, module="torchvision.io")
 
 @torch.no_grad()
 def render_set(
@@ -62,23 +64,22 @@ def render_set(
     views,
     raytracer,
 ):
-    model_path = cfg.model_path
 
     for mode in cli.modes:
-        render_path = os.path.join(model_path, split, "ours_{}".format(iteration), "render")
-        gts_path = os.path.join(model_path, split, "ours_{}".format(iteration), "render_gt")
-        diffuse_render_path = os.path.join(model_path, split, "ours_{}".format(iteration), "diffuse")
-        diffuse_gts_path = os.path.join(model_path, split, "ours_{}".format(iteration), "diffuse_gt")
-        glossy_render_path = os.path.join(model_path, split, "ours_{}".format(iteration), "glossy")
-        glossy_gts_path = os.path.join(model_path, split, "ours_{}".format(iteration), "glossy_gt")
-        depth_path = os.path.join(model_path, split, "ours_{}".format(iteration), "depth")
-        depth_gts_path = os.path.join(model_path, split, "ours_{}".format(iteration), "depth_gt")
-        normal_path = os.path.join(model_path, split, "ours_{}".format(iteration), "normal")
-        normal_gts_path = os.path.join(model_path, split, "ours_{}".format(iteration), "normal_gt")
-        roughness_path = os.path.join(model_path, split, "ours_{}".format(iteration), "roughness")
-        roughness_gts_path = os.path.join(model_path, split, "ours_{}".format(iteration), "roughness_gt")
-        f0_path = os.path.join(model_path, split, "ours_{}".format(iteration), "f0")
-        f0_gts_path = os.path.join(model_path, split, "ours_{}".format(iteration), "f0_gt")
+        render_path = os.path.join(cli.model_path, split, "ours_{}".format(iteration), "render")
+        gts_path = os.path.join(cli.model_path, split, "ours_{}".format(iteration), "render_gt")
+        diffuse_render_path = os.path.join(cli.model_path, split, "ours_{}".format(iteration), "diffuse")
+        diffuse_gts_path = os.path.join(cli.model_path, split, "ours_{}".format(iteration), "diffuse_gt")
+        glossy_render_path = os.path.join(cli.model_path, split, "ours_{}".format(iteration), "glossy")
+        glossy_gts_path = os.path.join(cli.model_path, split, "ours_{}".format(iteration), "glossy_gt")
+        depth_path = os.path.join(cli.model_path, split, "ours_{}".format(iteration), "depth")
+        depth_gts_path = os.path.join(cli.model_path, split, "ours_{}".format(iteration), "depth_gt")
+        normal_path = os.path.join(cli.model_path, split, "ours_{}".format(iteration), "normal")
+        normal_gts_path = os.path.join(cli.model_path, split, "ours_{}".format(iteration), "normal_gt")
+        roughness_path = os.path.join(cli.model_path, split, "ours_{}".format(iteration), "roughness")
+        roughness_gts_path = os.path.join(cli.model_path, split, "ours_{}".format(iteration), "roughness_gt")
+        f0_path = os.path.join(cli.model_path, split, "ours_{}".format(iteration), "f0")
+        f0_gts_path = os.path.join(cli.model_path, split, "ours_{}".format(iteration), "f0_gt")
 
         makedirs(render_path, exist_ok=True)
         makedirs(gts_path, exist_ok=True)
@@ -333,176 +334,89 @@ def render_set(
             all_normal_renders.append(format_image(package.normal[0] / 2 + 0.5))
             all_normal_gts.append(format_image(package.target_normal / 2 + 0.5))
 
-            all_roughness_renders.append(format_image(package.roughness[0]))
+            all_roughness_renders.append(format_image(package.roughness[0].repeat(3, 1, 1)))
             all_roughness_gts.append(format_image(package.target_roughness.repeat(3, 1, 1)))
 
             all_f0_renders.append(format_image(package.f0[0]))
             all_f0_gts.append(format_image(package.target_f0))
 
-        video_dir = f"videos_{mode}".replace("_normal", "")
-        os.makedirs(os.path.join(cfg.model_path, video_dir), exist_ok=True)
+        video_dir = os.path.join("videos", mode)
+        os.makedirs(os.path.join(cli.model_path, video_dir), exist_ok=True)
 
         if not cli.skip_video:
             print("Writing videos...")
-            path = os.path.join(cfg.model_path, f"{{dir}}", f"{split}_{{name}}.mp4")
+            path = os.path.join(cli.model_path, f"{{dir}}", f"{split}_{{name}}.mp4")
 
-            for label, quality in [("hq", "18"), ("lq", "30")]:
-                kwargs = dict(fps=30, options={"crf": quality})
+            kwargs = {"fps": 30, "options":{"crf": "30"}}
 
-                torchvision.io.write_video(
-                    path.format(name=f"renders_{label}", dir=video_dir),
-                    torch.stack(all_renders),
-                    **kwargs,
-                )
-                torchvision.io.write_video(
-                    path.format(name=f"gts_{label}", dir=video_dir),
-                    torch.stack(all_gts),
-                    **kwargs,
-                )
-                torchvision.io.write_video(
-                    path.format(name=f"comparison_{label}", dir=video_dir),
-                    torch.cat([torch.stack(all_renders), torch.stack(all_gts)], dim=2),
-                    **kwargs,
-                )
-
-                torchvision.io.write_video(
-                    path.format(name=f"diffuse_renders_{label}", dir=video_dir),
-                    torch.stack(all_diffuse_renders),
-                    **kwargs,
-                )
-                torchvision.io.write_video(
-                    path.format(name=f"diffuse_gts_{label}", dir=video_dir),
-                    torch.stack(all_diffuse_gts),
-                    **kwargs,
-                )
-                torchvision.io.write_video(
-                    path.format(name=f"diffuse_comparison_{label}", dir=video_dir),
-                    torch.cat(
-                        [
-                            torch.stack(all_diffuse_renders),
-                            torch.stack(all_diffuse_gts),
-                        ],
-                        dim=2,
-                    ),
-                    **kwargs,
-                )
-
-                torchvision.io.write_video(
-                    path.format(name=f"glossy_renders_{label}", dir=video_dir),
-                    torch.stack(all_glossy_renders),
-                    **kwargs,
-                )
-                torchvision.io.write_video(
-                    path.format(name=f"glossy_gts_{label}", dir=video_dir),
-                    torch.stack(all_glossy_gts),
-                    **kwargs,
-                )
-                torchvision.io.write_video(
-                    path.format(name=f"glossy_comparison_{label}", dir=video_dir),
-                    torch.cat(
-                        [
-                            torch.stack(all_glossy_renders),
-                            torch.stack(all_glossy_gts),
-                        ],
-                        dim=2,
-                    ),
-                    **kwargs,
-                )
-
-                torchvision.io.write_video(
-                    path.format(name=f"depth_renders_{label}", dir=video_dir),
-                    torch.stack(all_depth_renders),
-                    **kwargs,
-                )
-                torchvision.io.write_video(
-                    path.format(name=f"depth_gts_{label}", dir=video_dir),
-                    torch.stack(all_depth_gts),
-                    **kwargs,
-                )
-                torchvision.io.write_video(
-                    path.format(name=f"depth_comparison_{label}", dir=video_dir),
-                    torch.cat(
-                        [
-                            torch.stack(all_depth_renders),
-                            torch.stack(all_depth_gts),
-                        ],
-                        dim=2,
-                    ),
-                    **kwargs,
-                )
-
-                torchvision.io.write_video(
-                    path.format(name=f"normal_renders_{label}", dir=video_dir),
-                    torch.stack(all_normal_renders),
-                    **kwargs,
-                )
-                torchvision.io.write_video(
-                    path.format(name=f"normal_gts_{label}", dir=video_dir),
-                    torch.stack(all_normal_gts),
-                    **kwargs,
-                )
-                torchvision.io.write_video(
-                    path.format(name=f"normal_comparison_{label}", dir=video_dir),
-                    torch.cat(
-                        [
-                            torch.stack(all_normal_renders),
-                            torch.stack(all_normal_gts),
-                        ],
-                        dim=2,
-                    ),
-                    **kwargs,
-                )
-
-                torchvision.io.write_video(
-                    path.format(name=f"roughness_renders_{label}", dir=video_dir),
-                    torch.stack(all_roughness_renders),
-                    **kwargs,
-                )
-                torchvision.io.write_video(
-                    path.format(name=f"roughness_gts_{label}", dir=video_dir),
-                    torch.stack(all_roughness_gts),
-                    **kwargs,
-                )
-                torchvision.io.write_video(
-                    path.format(name=f"roughness_comparison_{label}", dir=video_dir),
-                    torch.cat(
-                        [
-                            torch.stack(all_roughness_renders),
-                            torch.stack(all_roughness_gts),
-                        ],
-                        dim=2,
-                    ),
-                    **kwargs,
-                )
-
-                torchvision.io.write_video(
-                    path.format(name=f"f0_renders_{label}", dir=video_dir),
-                    torch.stack(all_f0_renders),
-                    **kwargs,
-                )
-                torchvision.io.write_video(
-                    path.format(name=f"f0_gts_{label}", dir=video_dir),
-                    torch.stack(all_f0_gts),
-                    **kwargs,
-                )
-                torchvision.io.write_video(
-                    path.format(name=f"f0_comparison_{label}", dir=video_dir),
-                    torch.cat(
-                        [torch.stack(all_f0_renders), torch.stack(all_f0_gts)],
-                        dim=2,
-                    ),
-                    **kwargs,
-                )
-
-            if split == "test":
-                shutil.copy(
-                    path.format(name="comparison_lq", dir=video_dir),
-                    path.format(name=f"comparison_lq_{mode}", dir=""),
-                )
-                shutil.copy(
-                    path.format(name="comparison_hq", dir=video_dir),
-                    path.format(name=f"comparison_hq_{mode}", dir=""),
-                )
+            torchvision.io.write_video(
+                path.format(name=f"final", dir=video_dir),
+                torch.cat([torch.stack(all_renders), torch.stack(all_gts)], dim=2),
+                **kwargs,
+            )
+            torchvision.io.write_video(
+                path.format(name=f"diffuse", dir=video_dir),
+                torch.cat(
+                    [
+                        torch.stack(all_diffuse_renders),
+                        torch.stack(all_diffuse_gts),
+                    ],
+                    dim=2,
+                ),
+                **kwargs,
+            )
+            torchvision.io.write_video(
+                path.format(name=f"glossy", dir=video_dir),
+                torch.cat(
+                    [
+                        torch.stack(all_glossy_renders),
+                        torch.stack(all_glossy_gts),
+                    ],
+                    dim=2,
+                ),
+                **kwargs,
+            )
+            torchvision.io.write_video(
+                path.format(name=f"depth", dir=video_dir),
+                torch.cat(
+                    [
+                        torch.stack(all_depth_renders),
+                        torch.stack(all_depth_gts),
+                    ],
+                    dim=2,
+                ),
+                **kwargs,
+            )
+            torchvision.io.write_video(
+                path.format(name=f"normal", dir=video_dir),
+                torch.cat(
+                    [
+                        torch.stack(all_normal_renders),
+                        torch.stack(all_normal_gts),
+                    ],
+                    dim=2,
+                ),
+                **kwargs,
+            )
+            torchvision.io.write_video(
+                path.format(name=f"roughness", dir=video_dir),
+                torch.cat(
+                    [
+                        torch.stack(all_roughness_renders),
+                        torch.stack(all_roughness_gts),
+                    ],
+                    dim=2,
+                ),
+                **kwargs,
+            )
+            torchvision.io.write_video(
+                path.format(name=f"f0", dir=video_dir),
+                torch.cat(
+                    [torch.stack(all_f0_renders), torch.stack(all_f0_gts)],
+                    dim=2,
+                ),
+                **kwargs,
+            )
 
 
 if __name__ == "__main__":
