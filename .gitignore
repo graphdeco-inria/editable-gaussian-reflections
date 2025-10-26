@@ -98,6 +98,7 @@ config.local.*
 /out
 /results*
 *.ignore.*
+*.ignore
 
 # Local files
 /.bash_history

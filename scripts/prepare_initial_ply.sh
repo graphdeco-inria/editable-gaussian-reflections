@@ -41,7 +41,6 @@ for SCENE in $SCENE_LIST;
 do
     python prepare_initial_ply.py \
         --source_path $DATA_DIR/$DATASET_NAME/$SCENE \
-        --output_dir $OUTPUT_DIR/$DATASET_NAME/$SCENE \
         --scale $SCALE \
         --resolution $RESOLUTION
 done

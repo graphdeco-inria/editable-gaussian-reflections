@@ -44,7 +44,7 @@ class RenderCLI:
     modes: list[Literal["regular", "env_rot_1", "env_move_1", "env_move_2"]] = field(default_factory=lambda: ["regular"])
     skip_video: bool = False
     skip_save_frames: bool = False
-    znear: float = 0.01
+    znear: float = 1.0 # * Set a high znear to avoid floaters, you may need to reduce this based on your scene
 
 
 warnings.filterwarnings("ignore", category=UserWarning, module="torchvision.io")

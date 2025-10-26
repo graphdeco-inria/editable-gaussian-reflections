@@ -49,26 +49,13 @@ class BlenderDataset:
         image_name = Path(frame_name).stem + ".png"
         image_path = os.path.join(self.data_dir, image_name)
 
-        if "safetensors" in self.data_dir:
-            import safetensors.torch
-
-            st_path = os.path.join(self.data_dir, frame_name.replace("render/render_", "buffers_") + ".safetensors")
-            st = safetensors.torch.load_file(st_path)
-            image = st["render"].moveaxis(0, -1)
-            diffuse_image = st["diffuse"].moveaxis(0, -1)
-            specular_image = st["specular"].moveaxis(0, -1)
-            normal_image = st["normal"].moveaxis(0, -1)
-            depth_image = st["depth"].moveaxis(0, -1)
-            roughness_image = st["roughness"].moveaxis(0, -1)
-            f0_image = st["f0"].moveaxis(0, -1)
-        else:
-            image = self._get_buffer(frame_name, "render")
-            diffuse_image = self._get_buffer(frame_name, "diffuse")
-            specular_image = self._get_buffer(frame_name, "specular")
-            roughness_image = self._get_buffer(frame_name, "roughness")
-            normal_image = self._get_buffer(frame_name, "normal")
-            depth_image = self._get_buffer(frame_name, "depth")
-            f0_image = self._get_buffer(frame_name, "f0")
+        image = self._get_buffer(frame_name, "render")
+        diffuse_image = self._get_buffer(frame_name, "diffuse")
+        specular_image = self._get_buffer(frame_name, "specular")
+        roughness_image = self._get_buffer(frame_name, "roughness")
+        normal_image = self._get_buffer(frame_name, "normal")
+        depth_image = self._get_buffer(frame_name, "depth")
+        f0_image = self._get_buffer(frame_name, "f0") 
 
         # Camera intrinsics
         height, width = image.shape[0], image.shape[1]
@@ -132,10 +119,16 @@ def _resize_image_tensor(image, resolution):
     width = image.shape[1]
     aspect_ratio = width / height
     image = rearrange(image, "h w c -> 1 c h w")
+    was_uint = False
+    if image.dtype == torch.uint8:
+        image = image.float()
+        was_uint = True
     image = torch.nn.functional.interpolate(
         image,
         (resolution, int(resolution * aspect_ratio)),
         mode="area",
     )
+    if was_uint:
+        image = image.byte()
     image = rearrange(image, "1 c h w -> h w c")
     return image

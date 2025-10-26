@@ -24,6 +24,45 @@ def transform_normals_world_to_camera(normals_world, view_matrix):
     return normals_camera
 
 
+@torch.no_grad()
+def compute_primary_ray_directions(
+    height: int,
+    width: int,
+    vertical_fov_radians: float,
+    rotation_c2w: torch.Tensor,  # 3x3 matrix, camera → world
+) -> torch.Tensor:
+    """Compute world-space primary ray directions for every pixel (H, W, 3)."""
+    device = rotation_c2w.device
+    dtype = rotation_c2w.dtype
+
+    view_size = math.tan(vertical_fov_radians * 0.5)
+    aspect = width / float(height)
+
+    # Pixel coordinate grid (centered on pixel centers)
+    ys, xs = torch.meshgrid(
+        torch.arange(height, device=device, dtype=dtype),
+        torch.arange(width, device=device, dtype=dtype),
+        indexing="ij",
+    )
+
+    u = (xs + 0.5) / float(width)
+    v = (ys + 0.5) / float(height)
+
+    x = aspect * view_size * (2.0 * u - 1.0)
+    y = view_size * (1.0 - 2.0 * v)
+
+    # Directions in camera space
+    dirs_cam = torch.stack([x, y, -torch.ones_like(x)], dim=-1)  # (H, W, 3)
+
+    # Rotate to world space (c2w)
+    dirs_world = dirs_cam @ rotation_c2w.T  # (H, W, 3)
+
+    # Normalize
+    dirs_world = dirs_world / torch.linalg.norm(dirs_world, dim=-1, keepdim=True)
+
+    return dirs_world
+
+
 def transform_depth_to_position_image(depth, fov_x_rad, fov_y_rad):
     """
     Convert a depth image to a position image using FoV and image size.
