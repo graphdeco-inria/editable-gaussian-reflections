@@ -234,12 +234,12 @@ class GaussianModel:
         mask = scene.select_points_to_prune_near_cameras(new_xyz, torch.zeros_like(new_xyz))
         new_xyz = new_xyz[~mask]
 
-        add_book_points = "shiny_office_with_book" in self.cfg.source_path and "SKIP_BOOK_EXTRA_POINTS" not in os.environ
+        add_book_points = "ADD_BOOK_INIT_PTS" in os.environ
         if add_book_points:
-            num_book_pts = int(os.getenv("NUM_BOOK_PTS", 5000))
+            num_book_pts = int(os.getenv("NUM_BOOK_PTS", 50000))
             extra_pts = torch.rand(num_book_pts, 3, device="cuda") * 0.3 + torch.tensor([-0.15, -0.10, -0.15], device="cuda")
             new_xyz = torch.cat([new_xyz, extra_pts])
-            print("ADDED EXTRA POINTS FOR BOOK")
+            print("ADDED EXTRA POINTS FOR BOOK DEMO")
 
         dist2 = torch.clamp_min(
             distCUDA2(new_xyz.float().cuda()),
@@ -264,8 +264,6 @@ class GaussianModel:
 
         new_round_counter = torch.zeros(new_xyz.shape[0], 1, dtype=torch.int, device="cuda")
         new_comes_from_colmap_pc = torch.zeros(new_xyz.shape[0], 1, dtype=torch.int, device="cuda")
-        if "BOOK_POINTS_NEARFIELD" and add_book_points:
-            new_comes_from_colmap_pc[-new_xyz.shape[0] :] = 1.0
 
         self.densification_postfix(
             new_xyz,

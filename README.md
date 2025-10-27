@@ -62,7 +62,7 @@ We rendered at 128spp for evaluation but lower values can give adequate results.
 To render a view of the reconstructed environment, pass in the flag `--modes env_rot_1`.
 
 ## Evaluation
-<!-- todo -->
+<!-- todo mention why psnr has improved a bit-->
 
 <!-- ## Measuring FPS
 ```bash
@@ -83,4 +83,5 @@ python gaussian_viewer.py local $OUTDIR 8000
 <!-- todo -->
 
 <!-- todo note that the specular pass is called specular -->
+
 

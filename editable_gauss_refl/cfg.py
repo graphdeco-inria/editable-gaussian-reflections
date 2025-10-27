@@ -30,7 +30,6 @@ class Config:
     resolution: Annotated[int, arg(aliases=["-r"])] = 768
     eval: bool = False
     max_images: int | None = None
-    do_depth_fit: bool = False
 
     # * Model params
     white_background: bool = False
@@ -38,7 +37,6 @@ class Config:
     scene_extent_init_radius: float = 4.0
     scene_extent_multiplier: float = 5.0
     num_feat_per_gaussian_channel: int = 16
-    max_images: int = 9999999
     min_opacity: float = 0.005
     min_weight: float = 0.1
     disable_znear_densif_pruning: bool = False

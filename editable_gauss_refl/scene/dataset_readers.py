@@ -20,6 +20,7 @@ from tqdm import tqdm
 from editable_gauss_refl.cfg import Config
 from editable_gauss_refl.dataset import (
     BlenderDataset,
+    BlenderPriorDataset,
     ColmapPriorDataset,
 )
 from editable_gauss_refl.dataset.points_utils import make_random_point_cloud
@@ -65,30 +66,28 @@ def getNerfppNorm(cameras: List[Camera]) -> dict:
 
 def get_dataset(cfg: Config, data_dir: str, split: str):
     if os.path.exists(os.path.join(data_dir, "transforms_train.json")):
-        dataset = BlenderDataset(
-            data_dir,
-            split=split,
-            resolution=cfg.resolution,
-            max_images=cfg.max_images,
-        )
-        # if os.path.isfile(os.path.join(data_dir, split, "render", "render_0000.exr")):
-        # else:
-        #     dataset = BlenderPriorDataset(
-        #         data_dir,
-        #         split=split,
-        #         resolution=cfg.resolution,
-        #         max_images=cfg.max_images,
-        #         do_eval=cfg.eval,
-        #         do_depth_fit=cfg.do_depth_fit,
-        #     )
+        # * This is a bit of a kludge: we check for depth format to distinguish between g.t. render and prdicted buffer for the blender scenes
+        if os.path.isfile(os.path.join(data_dir, split, "depth", "depth_0000.tiff")):
+            dataset = BlenderDataset(
+                data_dir,
+                split=split,
+                resolution=cfg.resolution,
+                max_images=cfg.max_images,
+            )
+        else:
+            dataset = BlenderPriorDataset(
+                data_dir,
+                split=split,
+                resolution=cfg.resolution,
+                max_images=cfg.max_images,
+            )
     elif os.path.exists(data_dir):
         dataset = ColmapPriorDataset(
             data_dir,
             split=split,
             resolution=cfg.resolution,
             max_images=cfg.max_images,
-            do_eval=cfg.eval,
-            do_depth_fit=cfg.do_depth_fit,
+            do_eval=False
         )
     else:
         raise FileNotFoundError(f"Data directory {data_dir} not found.")

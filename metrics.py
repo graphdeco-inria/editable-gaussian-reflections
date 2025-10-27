@@ -22,8 +22,8 @@ class Conf:
     render_passes: List[int] = field(default_factory=lambda: [ "diffuse", "specular", "render" ])
     metrics: List[int] = field(default_factory=lambda: [ "psnr" ])
 
-    ground_truth_pattern: str = "{model_path}/test/ours_8000/{render_pass}_gt/{i:05d}_{render_pass}.png" 
-    predictions_path_pattern = "{model_path}/test/ours_8000/{render_pass}/{i:05d}_{render_pass}.png" 
+    pred_path: str = "{model_path}/test/ours_8000/{render_pass}/{i:05d}_{render_pass}.png"
+    gt_path: str = "data/renders/{scene_name}/test/{render_pass}/{render_pass}_{i:04d}.png" 
 
     num_frames: int = 100
 
@@ -49,8 +49,9 @@ if __name__ == "__main__":
         images = {}
 
         for render_pass in conf.render_passes:
-            gt_path = base_path + "/" + conf.ground_truth_pattern.format(i=i, render_pass=render_pass, model_path=conf.model_path)
-            pred_path = base_path + "/" + conf.predictions_path_pattern.format(i=i, render_pass=render_pass, model_path=conf.model_path)
+            pred_path = base_path + "/" + conf.pred_path.format(i=i, render_pass=render_pass, model_path=conf.model_path)
+            scene_name = os.path.basename(conf.model_path)
+            gt_path = base_path + "/" + conf.gt_path.format(i=i, render_pass=render_pass, model_path=conf.model_path, scene_name=scene_name)
             
             gt = Image.open(gt_path).convert("RGB")
             pred = Image.open(pred_path).convert("RGB")

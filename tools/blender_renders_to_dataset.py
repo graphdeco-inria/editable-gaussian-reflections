@@ -22,12 +22,12 @@ ALWAYS_PRESERVE = ["depth"]
 
 @dataclass
 class ExtractDatasetCLI:
+    scene: str # *e.g. "shiny_kitchen"
     src_root: str = "data/blender_renders/{scene}"
     dst_root: str = "data/renders_{format}_{precision}bits{extra}/{scene}"
-    scene: str = "shiny_kitchen"
     resolution: int = 768
-    format: str = "safetensors"
-    precision: Literal[8, 16, 32] = 32
+    format: str = "png"
+    precision: Literal[8, 16, 32] = 8
     preserve: List[Literal["images", "depth", "normals"]] = field(default_factory=lambda: ALWAYS_PRESERVE)
     collapsed: bool = False
     exposure: float = 3.5 

@@ -35,14 +35,12 @@ class ColmapPriorDataset:
         resolution: int | None = None,
         max_images: int | None = None,
         do_eval: bool = True,
-        do_depth_fit: bool = False,
     ):
         self.data_dir = data_dir
         self.split = split
         self.resolution = resolution
         self.max_images = max_images
         self.do_eval = do_eval
-        self.do_depth_fit = do_depth_fit
 
         self.colmap_parser = ColmapParser(data_dir)
         self.point_cloud = BasicPointCloud(
@@ -78,10 +76,6 @@ class ColmapPriorDataset:
         if self.max_images is not None:
             self.keys = self.keys[: self.max_images]
 
-        if "MANUAL_FILTER" in os.environ:
-            self.best_frames = open(os.path.join(data_dir, "best_frames.txt"), "r").read().strip().split(" ")
-            self.keys = [k for k in self.keys if k in self.best_frames]
-
     def __len__(self) -> int:
         return len(self.keys)
 
@@ -93,17 +87,15 @@ class ColmapPriorDataset:
         frame_name = os.path.splitext(image_name)[0]
         image_path = os.path.join(self.data_dir, "images", frame_name + ".jpg")
 
-        image = self._get_buffer(frame_name, "image")
-        albedo_image = self._get_buffer(frame_name, "albedo")
+        image = self._get_buffer(frame_name, "render")
         diffuse_image = self._get_buffer(frame_name, "diffuse")
         specular_image = self._get_buffer(frame_name, "specular")
         roughness_image = self._get_buffer(frame_name, "roughness")
         metalness_image = self._get_buffer(frame_name, "metalness")
         depth_image = self._get_buffer(frame_name, "depth")
         normal_image = self._get_buffer(frame_name, "normal")
-        specular_image = torch.ones_like(image) * 0.5
-        brdf_image = torch.zeros_like(image)
-        base_color_image = albedo_image * (1.0 - metalness_image) + metalness_image
+
+        f0_image = (0.04 * (1.0 - metalness_image) + metalness_image).repeat(1, 1, 3)
 
         # Camera intrinsics
         height = intr.height
@@ -135,25 +127,22 @@ class ColmapPriorDataset:
         normal_image = transform_normals_to_world(normal_image, R_tensor)
 
         # Postprocess depth_image
-        if self.do_depth_fit:
-            points_tensor = torch.tensor(
-                self.colmap_parser.points[self.colmap_parser.point_indices[image_name]],
-                dtype=torch.float32,
-            )
-            points_tensor = transform_points(points_tensor, w2c_tensor)
-            depth_points_image = project_pointcloud_to_depth_map(points_tensor, fovx, fovy, depth_image.shape[:2])
-            valid_mask = depth_points_image != 0
-            x = depth_image[:, :, 0][valid_mask].float()
-            y = depth_points_image[valid_mask]
-            # a, b = linear_least_squares_1d(x, y)
-            (a, b), _ = ransac_linear_fit(x, y)
-        else:
-            a, b = (4.0, 0.0)
+        points_tensor = torch.tensor(
+            self.colmap_parser.points[self.colmap_parser.point_indices[image_name]],
+            dtype=torch.float32,
+        )
+        points_tensor = transform_points(points_tensor, w2c_tensor)
+        depth_points_image = project_pointcloud_to_depth_map(points_tensor, fovx, fovy, depth_image.shape[:2])
+        valid_mask = (depth_points_image != 0)
+        x = depth_image[:, :, 0][valid_mask].float()
+        y = depth_points_image[valid_mask]
+        # a, b = linear_least_squares_1d(x, y)
+        (a, b), _ = ransac_linear_fit(x, y)
         depth_image = depth_image * a + b
 
         # Convert to depth to distance image
         position_image = transform_depth_to_position_image(depth_image[:, :, 0], fovx, fovy)
-        distance_image = torch.norm(position_image, dim=-1)
+        distance_image = torch.norm(position_image, dim=-1, keepdim=True)
 
         cam_info = CameraInfo(
             uid=idx,
@@ -166,22 +155,18 @@ class ColmapPriorDataset:
             image_name=image_name,
             width=width,
             height=height,
-            albedo_image=albedo_image,
             diffuse_image=diffuse_image,
             specular_image=specular_image,
             depth_image=distance_image,
             normal_image=normal_image,
             roughness_image=roughness_image,
-            metalness_image=metalness_image,
-            base_color_image=base_color_image,
-            brdf_image=brdf_image,
-            #!!!specular_image=specular_image,
+            f0_image=f0_image
         )
         return cam_info
 
     def _get_buffer(self, frame_name: str, buffer_name: str):
-        file_name = frame_name.split("/")[-1]
-        buffer_path = os.path.join(self.buffers_dir, buffer_name, file_name + ".png")
+        fno = frame_name.split("/")[-1]
+        buffer_path = os.path.join(self.buffers_dir, buffer_name, buffer_name + "_" + fno + ".png")
 
         buffer_image = Image.open(buffer_path)
         buffer_height = self.resolution
@@ -189,11 +174,8 @@ class ColmapPriorDataset:
         buffer_image = buffer_image.resize((buffer_width, buffer_height))
         buffer = from_pil_image(buffer_image)
 
-        if buffer_name in ["image", "irradiance", "diffuse", "specular"]:
+        if buffer_name in ["render", "irradiance", "diffuse", "specular"]:
             buffer = untonemap(buffer)
-            buffer /= 3.5  # Align exposure
-        elif buffer_name == "albedo":
-            pass
         elif buffer_name in ["roughness", "metalness", "depth"]:
             buffer = repeat(buffer, "h w 1 -> h w 3")
         elif buffer_name in ["normal"]:
