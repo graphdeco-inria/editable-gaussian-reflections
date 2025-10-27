@@ -41,7 +41,7 @@ if __name__ == "__main__":
         dataset,
         batch_size=1,
         shuffle=False,
-        num_workers=4,
+        num_workers=4 if "NO_WORKERS" not in os.environ else 0,
         collate_fn=lambda x: x,
     )
 
