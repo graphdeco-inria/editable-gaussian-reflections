@@ -20,7 +20,10 @@ from dataclasses import dataclass
 import dataclasses
 from scipy.spatial.transform import Rotation
 import numpy as np 
-
+from typing import Annotated, Literal, Optional
+from tyro.conf import arg
+from editable_gauss_refl.utils.system_utils import searchForMaxIteration
+import tyro 
 
 gizmo = imguizmo.im_guizmo
 Matrix3 = gizmo.Matrix3
@@ -107,8 +110,8 @@ class GaussianViewer(Viewer):
         global GaussianModel
         from editable_gauss_refl.scene import GaussianModel
 
-        global ModelParams
-        from editable_gauss_refl.cfg import ModelParams
+        global ModelParams, Config
+        from editable_gauss_refl.config import Config
 
         global MiniCam
         from editable_gauss_refl.scene.cameras import MiniCam
@@ -122,48 +125,58 @@ class GaussianViewer(Viewer):
     @classmethod
     def from_ply(cls, model_path, iter, mode: ViewerMode):
         from editable_gauss_refl.scene import EditableGaussianModel
+        from editable_gauss_refl.config import Config
         from editable_gauss_refl.renderer.gaussian_renderer import GaussianRaytracer
 
         # Read configuration
-        with open(os.path.join(model_path, "model_params")) as f:
-            model_params = eval(f.read())
-       
+        with open(os.path.join(model_path, "cfg.json")) as f:
+            cfg_data = json.load(f)
+            del cfg_data["do_depth_fit"] #!!!
+            cfg = Config(**cfg_data)
+
         dataset = Dummy()
         dataset.sh_degree = 0
-        #dataset.train_test_exp = params["train_test_exp"] == "True"
         
-        gaussians = EditableGaussianModel(model_params)
+        gaussians = EditableGaussianModel(cfg)
         ply_path = os.path.join(model_path, "point_cloud", f"iteration_{iter}", "point_cloud.ply")
         gaussians.load_ply(ply_path)
-        metadata = json.load(open(os.path.join(model_params.source_path, "transforms_train.json"), "r"))
-        downsampling = metadata["height"] / model_params.resolution
-        raytracer = GaussianRaytracer(gaussians, int(metadata["width"] / downsampling), model_params.resolution)
+        try:
+            metadata = json.load(open(os.path.join(model_path, "transforms_train.json"), "r"))
+        except Exception as e:
+            metadata = json.load(open(os.path.join(cfg.source_path, "transforms_train.json"), "r"))
+        downsampling = metadata["height"] / cfg.resolution
+        raytracer = GaussianRaytracer(gaussians, int(metadata["width"] / downsampling), cfg.resolution)
 
         viewer = cls(mode, raytracer)
         viewer.separate_sh = False
         viewer.gaussians = gaussians
         viewer.dataset = dataset
 
-        viewer.load_metadata(model_params)
+        viewer.load_metadata(cfg, model_path)
         return viewer
     
-    def load_metadata(self, model_params):
+    def load_metadata(self, cfg, model_path):
         from editable_gauss_refl.scene import EditableGaussianModel
 
-        source_path = model_params.source_path
-        
-        self.train_transforms = json.load(open(os.path.join(source_path, "transforms_train.json"), "r"))
-        self.test_transforms = json.load(open(os.path.join(source_path, "transforms_test.json"), "r"))
+        try:
+            self.train_transforms = json.load(open(os.path.join(model_path, "transforms_train.json"), "r"))
+            self.test_transforms = json.load(open(os.path.join(model_path, "transforms_test.json"), "r"))
+        except Exception as e:
+            self.train_transforms = json.load(open(os.path.join(cfg.source_path, "transforms_train.json"), "r"))
+            self.test_transforms = json.load(open(os.path.join(cfg.source_path, "transforms_test.json"), "r"))
 
-        self.bounding_boxes = json.load(open(os.path.join(source_path, "bounding_boxes.json"), "r"))
-        
+        try:
+            self.bounding_boxes = json.load(open(os.path.join(model_path, "bounding_boxes.json"), "r"))
+        except Exception as e:
+            self.bounding_boxes = json.load(open(os.path.join(cfg.source_path, "bounding_boxes.json"), "r"))
+
         self.bounding_boxes["everything"] = {"min": [-1000, 1000, -1000], "max": [1000, 1000, 1000] }
         self.edits = { bbox_name: Edit() for bbox_name in self.bounding_boxes.keys() }
         
         self.selection_masks = {}
 
         if isinstance(self.gaussians, EditableGaussianModel):
-            self.gaussians.make_editable(self.edits, self.bounding_boxes, model_params.model_path)
+            self.gaussians.make_editable(self.edits, self.bounding_boxes, model_path)
 
     @classmethod
     def from_gaussians(cls, raytracer, dataset, gaussians, separate_sh, mode: ViewerMode):
@@ -172,7 +185,7 @@ class GaussianViewer(Viewer):
         viewer.gaussians = gaussians
         viewer.separate_sh = separate_sh
 
-        viewer.load_metadata(gaussians.model_params)
+        viewer.load_metadata(gaussians.cfg, gaussians.cfg.model_path)
         return viewer
 
     def create_widgets(self):
@@ -182,7 +195,7 @@ class GaussianViewer(Viewer):
         self.monitor = PerformanceMonitor(self.mode, ["Render"], add_other=False)
 
         # Render modes
-        self.render_modes = ["RGB", "Normals", "Depth", "f0", "Roughness", "Illumination", "Ellipsoids"]
+        self.render_modes = ["RGB", "Normals", "Depth", "F0", "Roughness", "Ellipsoids"]
         self.render_mode = 0
         
         self.ray_choices = ["All/Default"] + ["Ray " + str(i) for i in range(self.ray_count)] 
@@ -336,7 +349,7 @@ class GaussianViewer(Viewer):
                             net_image = tonemap(package.rgb[nth_ray])
                     elif mode_name == "Diffuse":
                         net_image = tonemap(package.rgb[max(nth_ray, 0)])
-                    elif mode_name == "f0":
+                    elif mode_name == "F0":
                         net_image = package.f0[max(nth_ray, 0)]
                     elif mode_name == "Normals":
                         net_image = package.normal[max(nth_ray, 0)] / 2 + 0.5
@@ -344,10 +357,8 @@ class GaussianViewer(Viewer):
                         depth = package.depth[max(nth_ray, 0)]
                         depth = (depth - depth.amin()) / (depth.amax() - depth.amin())
                         net_image = depth.repeat(3, 1, 1)
-                    elif mode_name == "Illumination":
-                        net_image = self.raytracer.cuda_module.get_framebuffer().output_incident_radiance[max(nth_ray, 0)].moveaxis(-1, 0)
                     elif mode_name == "Roughness":
-                        net_image = package.roughness[max(nth_ray, 0)]
+                        net_image = package.roughness[max(nth_ray, 0)].repeat(3, 1, 1)
 
                 if mode_name == "RGB":
                     net_image = tonemap(untonemap(net_image.permute(1, 2, 0))*self.exposure) 
@@ -493,15 +504,6 @@ class GaussianViewer(Viewer):
             if clicked and self.edits is not None and self.selection_choice != 0:
                 for key, default_value in dataclasses.asdict(Edit()).items():
                     setattr(self.edits[self.selection_choices[self.selection_choice]], key, default_value)
-            clicked = imgui.button("Reset Everything", size=(240, 24))
-            if clicked and self.edits is not None:
-                for obj_name, edit in self.edits.items():
-                    if "_copy" in obj_name:
-                        self.gaussians.remove_object(obj_name) # hacky, just hides them for now
-        
-                    for key, default_value in dataclasses.asdict(Edit()).items():
-                        setattr(edit, key, default_value)
-                self.selection_choice = 0
             imgui.separator_text("BRDF Editing")
 
             imgui.set_cursor_pos_x((imgui.get_content_region_avail().x - imgui.calc_text_size("Roughness").x) * 0.35)
@@ -705,13 +707,6 @@ class GaussianViewer(Viewer):
                 if init_tool == "move":
                     imgui.pop_style_color()
 
-                #if init_tool == "scale":
-                #    imgui.push_style_color(imgui.Col_.button, (0.2, 0.5, 0.2, 1.0))  # Highlight color
-                #if imgui.button("Scale", size=(toolbar_width - 10, 40)):
-                #    self.tool = "scale"
-                #if init_tool == "scale":
-                #   imgui.pop_style_color()
-
                 if init_tool == "rotate":
                     imgui.push_style_color(imgui.Col_.button, (0.2, 0.5, 0.2, 1.0))  # Highlight color
                 if imgui.button("Rotate", size=(toolbar_width - 10, 40)):
@@ -869,40 +864,20 @@ class GaussianViewer(Viewer):
             self.selection_masks = {
                 k: np.array(v) for k, v in text["selection_masks"].items()
             }
-        
-    
+                
+@dataclass
+class ViewerCLI:
+    model_path: Annotated[str, arg(aliases=["-m"])]
+    iteration: Optional[int] = None
+
 if __name__ == "__main__":
-    parser = ArgumentParser()
-    subparsers = parser.add_subparsers(title="mode", dest="mode", required=True)
-    local = subparsers.add_parser("local")
-    local.add_argument("model_path")
-    local.add_argument("iter", type=int, default=30000)
-    client = subparsers.add_parser("client")
-    client.add_argument("--ip", default="localhost")
-    client.add_argument("--port", type=int, default=8000)
-    server = subparsers.add_parser("server")
-    server.add_argument("model_path")
-    server.add_argument("iter", type=int, default=30000)
-    server.add_argument("--ip", default="localhost")
-    server.add_argument("--port", type=int, default=8000)
-    args = parser.parse_args()
+    cli = tyro.cli(ViewerCLI)
 
-    match args.mode:
-        case "local":
-            mode = ViewerMode.LOCAL
-        case "client":
-            mode = ViewerMode.CLIENT
-        case "server":
-            mode = ViewerMode.SERVER
-
-    if mode is ViewerMode.CLIENT:
-        viewer = GaussianViewer(mode, None)
+    if cli.iteration is None:
+        load_iteration = searchForMaxIteration(os.path.join(cli.model_path, "point_cloud"))
     else:
-        viewer = GaussianViewer.from_ply(args.model_path, args.iter, mode)
+        load_iteration = cli.iteration
 
-    if args.mode in ["client", "server"]:
-        viewer.run(args.ip, args.port)
-    else:
-        viewer.run()
-
-    #  xvfb-run -s "-screen 0 1400x900x24" python gaussianviewer.py server output/tmp2 7000 --ip 0.0.0.0
+    print("Loading trained model at iteration {}".format(load_iteration))
+    viewer = GaussianViewer.from_ply(cli.model_path, load_iteration, ViewerMode.LOCAL)
+    viewer.run()

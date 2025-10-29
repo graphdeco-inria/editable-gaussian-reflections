@@ -17,13 +17,12 @@ import numpy as np
 import torch
 from tqdm import tqdm
 
-from editable_gauss_refl.cfg import Config
+from editable_gauss_refl.config import Config
 from editable_gauss_refl.dataset import (
     BlenderDataset,
     BlenderPriorDataset,
     ColmapPriorDataset,
 )
-from editable_gauss_refl.dataset.points_utils import make_random_point_cloud
 from editable_gauss_refl.utils.graphics_utils import BasicPointCloud, getWorld2View2
 from editable_gauss_refl.utils.ply_utils import read_ply
 

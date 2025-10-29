@@ -14,7 +14,7 @@ import random
 
 import torch
 
-from editable_gauss_refl.cfg import Config
+from editable_gauss_refl.config import Config
 from editable_gauss_refl.scene.dataset_readers import (
     readSceneInfo,
 )

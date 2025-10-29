@@ -25,7 +25,7 @@ import tyro
 from tqdm import tqdm
 from tyro.conf import arg
 
-from editable_gauss_refl.cfg import Config
+from editable_gauss_refl.config import Config
 from editable_gauss_refl.renderer import GaussianRaytracer, render
 from editable_gauss_refl.scene import GaussianModel, Scene
 from editable_gauss_refl.utils.general_utils import set_seeds

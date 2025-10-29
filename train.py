@@ -21,7 +21,7 @@ from torch.utils.tensorboard import SummaryWriter
 from torchvision.utils import save_image
 from tqdm import tqdm
 
-from editable_gauss_refl.cfg import Config
+from editable_gauss_refl.config import Config
 from editable_gauss_refl.renderer import GaussianRaytracer, render
 from editable_gauss_refl.scene import GaussianModel, Scene
 from editable_gauss_refl.utils.general_utils import (
@@ -38,6 +38,31 @@ def prepare_output_and_logger(cfg: Config):
     # * Set up output folder
     print("Output folder: {}".format(cfg.model_path))
     os.makedirs(cfg.model_path, exist_ok=True)
+
+    # * Copy transforms json files and bounding_boxes if they exist
+    try:
+        import shutil
+
+        shutil.copyfile(
+            os.path.join(cfg.source_path, "transforms_train.json"),
+            os.path.join(cfg.model_path, "transforms_train.json"),
+        )
+        shutil.copyfile(
+            os.path.join(cfg.source_path, "transforms_test.json"),
+            os.path.join(cfg.model_path, "transforms_test.json"),
+        )
+    except Exception as e:
+        print("Could not copy transforms json files: ", e)  
+
+    try:
+        import shutil
+
+        shutil.copyfile(
+            os.path.join(cfg.source_path, "bounding_boxes.json"),
+            os.path.join(cfg.model_path, "bounding_boxes.json"),
+        )
+    except Exception as e:
+        pass
     
     # * Dump cfg as JSON.
     with open(os.path.join(cfg.model_path, "cfg.json"), "w") as f:

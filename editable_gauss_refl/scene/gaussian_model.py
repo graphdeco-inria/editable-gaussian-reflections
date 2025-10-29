@@ -17,7 +17,7 @@ from plyfile import PlyData, PlyElement
 from simple_knn._C import distCUDA2
 from torch import nn
 
-from editable_gauss_refl.cfg import Config
+from editable_gauss_refl.config import Config
 from editable_gauss_refl.utils.general_utils import (
     build_scaling_rotation,
     get_expon_lr_func,

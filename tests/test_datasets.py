@@ -6,7 +6,7 @@ import torch
 from PIL import Image
 from tqdm import tqdm
 
-from editable_gauss_refl.cfg import Config
+from editable_gauss_refl.config import Config
 from editable_gauss_refl.dataset import BlenderDataset, BlenderPriorDataset
 
 
