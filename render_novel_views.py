@@ -24,35 +24,56 @@ from editable_gauss_refl.renderer import GaussianRaytracer, render
 from editable_gauss_refl.scene import GaussianModel, Scene
 from editable_gauss_refl.utils.cam_utils import generate_spiral_path
 from editable_gauss_refl.utils.general_utils import set_seeds
+from editable_gauss_refl.utils.system_utils import searchForMaxIteration
 from editable_gauss_refl.utils.tonemapping import tonemap
+
+from dataclasses import dataclass, field
+from typing import Literal, Optional
+from typing_extensions import Annotated
+from tyro.conf import arg
+
+import json 
+
+
+@dataclass
+class RenderNovelViewCLI:
+    model_path: Annotated[str, arg(aliases=["-m"])] 
+
+    iteration: Optional[int] = None
+    spp: int = 64
+    denoise: bool = True
+
+    znear: float = 1.0 # * Set a high znear to avoid floaters, you may need to reduce this based on your scene
 
 
 @torch.no_grad()
 def render_set(
-    cfg,
+    cli,
     cameras,
     raytracer,
     save_dir,
 ):
     for idx, camera in enumerate(tqdm(cameras, desc="Rendering progress")):
         config = raytracer.cuda_module.get_config()
-        if cfg.max_bounces > -1:
-            config.num_bounces.copy_(cfg.max_bounces)
-
-        if cfg.spp > 1:
+        if cli.spp > 1:
             config.accumulate_samples.copy_(True)
             raytracer.cuda_module.reset_accumulators()
-            for i in range(cfg.spp):
+            for _ in range(cli.spp):
                 package = render(
                     camera,
                     raytracer,
-                    denoise=cfg.denoise,
+                    denoise=False,
+                    znear=cli.znear,
                 )
+            if cli.denoise:
+                raytracer.cuda_module.denoise()
+                package.final = raytracer.cuda_module.get_framebuffer().output_denoised.clone().detach().moveaxis(-1, 1)
         else:
             package = render(
                 camera,
                 raytracer,
-                denoise=cfg.denoise,
+                denoise=cli.denoise,
+                znear=cli.znear,
             )
 
         diffuse_image = tonemap(package.rgb[0]).clamp(0, 1)
@@ -85,12 +106,21 @@ def render_set(
             torchvision.utils.save_image(v, save_path)
 
 
-def main(cfg: Config):
-    # Initialize system state (RNG)
+if __name__ == "__main__":
+    cli, unknown_args = tyro.cli(RenderNovelViewCLI, return_unknown_args=True)
+    saved_cli_path = os.path.join(cli.model_path, "cfg.json")
+    cfg = tyro.cli(Config, args=unknown_args, default=Config(**json.load(open(saved_cli_path, "r"))))
+
+    if cli.iteration is None:
+        load_iteration = searchForMaxIteration(os.path.join(cli.model_path, "point_cloud"))
+    else:
+        load_iteration = cli.iteration
+    print("Loading trained model at iteration {}".format(load_iteration))
+
     set_seeds()
 
     gaussians = GaussianModel(cfg)
-    scene = Scene(cfg, gaussians, load_iteration=cfg.iteration, shuffle=False)
+    scene = Scene(cfg, gaussians, load_iteration=load_iteration, shuffle=False)
     views = scene.getTrainCameras()
 
     raytracer = GaussianRaytracer(gaussians, views[0].image_width, views[0].image_height)
@@ -127,13 +157,9 @@ def main(cfg: Config):
 
     save_dir = os.path.join(cfg.model_path, "novel_views", f"ours_{scene.loaded_iter}")
     render_set(
-        cfg,
+        cli,
         cameras,
         raytracer,
         save_dir,
     )
 
-
-if __name__ == "__main__":
-    cfg = tyro.cli(Config)
-    main(cfg)

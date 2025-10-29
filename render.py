@@ -53,8 +53,6 @@ warnings.filterwarnings("ignore", category=UserWarning, module="torchvision.io")
 @torch.no_grad()
 def render_set(
     cli: RenderCLI,
-    cfg: Config,
-    scene,
     split,
     iteration,
     views,
@@ -438,8 +436,6 @@ if __name__ == "__main__":
     if cli.split == "train":
         render_set(
             cli,
-            cfg,
-            scene,
             "train",
             scene.loaded_iter,
             scene.getTrainCameras(),
@@ -448,8 +444,6 @@ if __name__ == "__main__":
     else:
         render_set(
             cli,
-            cfg,
-            scene,
             "test",
             scene.loaded_iter,
             scene.getTestCameras(),
