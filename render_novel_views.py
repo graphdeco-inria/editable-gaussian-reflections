@@ -19,7 +19,7 @@ import tyro
 from einops import rearrange
 from tqdm import tqdm
 
-from editable_gauss_refl.cfg import Config
+from editable_gauss_refl.config import Config
 from editable_gauss_refl.renderer import GaussianRaytracer, render
 from editable_gauss_refl.scene import GaussianModel, Scene
 from editable_gauss_refl.utils.cam_utils import generate_spiral_path
@@ -40,7 +40,7 @@ class RenderNovelViewCLI:
     model_path: Annotated[str, arg(aliases=["-m"])] 
 
     iteration: Optional[int] = None
-    spp: int = 64
+    spp: int = 128
     denoise: bool = True
 
     znear: float = 1.0 # * Set a high znear to avoid floaters, you may need to reduce this based on your scene
