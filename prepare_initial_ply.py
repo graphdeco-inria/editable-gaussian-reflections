@@ -25,14 +25,14 @@ class PrepareInitialPLYCLI:
     mode: Literal["sfm", "dense"] = "dense"
     filename: str = "point_cloud_{mode}.ply"
 
-    binning_scale: float = 400.0
+    voxel_scale: float = 400.0
     resolution: int = 128
     
     max_images: Optional[int] = None
 
 
 if __name__ == "__main__":
-    cli, unknown_args = tyro.cli(PrepareInitialPLYCLI, return_unknown_args=True)
+    cli = tyro.cli(PrepareInitialPLYCLI)
 
     set_seeds()
 
@@ -83,7 +83,7 @@ if __name__ == "__main__":
         colors = torch.cat(colors_all)  # (N, 3)
 
         # Compute voxel indices
-        voxel_coords = (points * cli.binning_scale).round().int()
+        voxel_coords = (points * cli.voxel_scale).round().int()
 
         # Find unique voxel positions
         unique_coords, inverse_indices, counts = torch.unique(voxel_coords, dim=0, return_inverse=True, return_counts=True)
@@ -103,7 +103,7 @@ if __name__ == "__main__":
         avg_colors = avg_colors[mask]
 
         # Extract points and colors
-        points_np = (unique_coords.float() / cli.binning_scale).numpy()  # (n, 3)
+        points_np = (unique_coords.float() / cli.voxel_scale).numpy()  # (n, 3)
         colors_np = avg_colors.numpy()  # (n, 3)
         print("Dense Point Cloud:", points_np.shape)
         ply_path = os.path.join(cli.source_path, cli.filename.format(mode="dense"))
