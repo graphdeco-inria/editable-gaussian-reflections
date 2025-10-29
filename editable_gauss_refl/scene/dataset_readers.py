@@ -33,7 +33,6 @@ from .cameras import Camera
 @dataclass
 class SceneInfo:
     point_cloud: BasicPointCloud
-    extra_point_cloud: BasicPointCloud
     train_cameras: List[Camera]
     test_cameras: List[Camera]
     nerf_normalization: dict
@@ -127,19 +126,16 @@ def readSceneInfo(cfg: Config, data_dir: str) -> SceneInfo:
     )
     test_cameras = read_dataset(test_dataset)
 
-    init_type = "dense" if "INIT_TYPE" not in os.environ else os.environ["INIT_TYPE"]
-    points, colors = read_ply(os.path.join(data_dir, f"point_cloud_{init_type}.ply"))
+    points, colors = read_ply(os.path.join(data_dir, f"point_cloud_{cfg.init_type}.ply"))
 
     point_cloud = BasicPointCloud(
         points=points,
         colors=colors,
         normals=np.zeros_like(points),
     )
-    extra_point_cloud = make_random_point_cloud(cfg.init_num_pts_farfield, cfg.init_diffuse_farfield)
 
     scene_info = SceneInfo(
         point_cloud=point_cloud,
-        extra_point_cloud=extra_point_cloud,
         train_cameras=train_cameras,
         test_cameras=test_cameras,
         nerf_normalization=getNerfppNorm(train_cameras),

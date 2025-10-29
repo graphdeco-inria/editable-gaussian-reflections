@@ -55,6 +55,7 @@ class Camera(nn.Module):
 
         image_holding_device = os.getenv("IMAGE_HOLDING_DEVICE", "cpu")
 
+        # * These conversions placed here since GPU operations cannot be done in the dataloader
         if image.dtype == torch.uint8:
             image = untonemap(image.cuda().half() / 255.0)
             diffuse_image = untonemap(diffuse_image.cuda().half() / 255.0)

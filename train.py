@@ -69,10 +69,14 @@ def training_report(
         print("Number of gaussians: ", scene.gaussians.get_xyz.shape[0])
 
     # * Run validation  
-    validation_configs = (
-        {"name": "test", "cameras": scene.getTestCameras()},
-        {"name": "train", "cameras": [sorted(scene.getTrainCameras(), key=lambda x: x.image_name)[min(cfg.val_view, cfg.max_images or 99999)]]},
+    validation_configs = []
+    validation_configs.append(
+        {"name": "train", "cameras": [sorted(scene.getTrainCameras(), key=lambda x: x.image_name)[min(cfg.val_view, (cfg.max_images or 1) - 1)]]},
     )
+    if len(scene.getTestCameras()) > 0:
+        validation_configs.append(
+            {"name": "test", "cameras": scene.getTestCameras()},
+        )
     for config in validation_configs:
         psnr_test = 0.0
         specular_psnr_test = 0.0

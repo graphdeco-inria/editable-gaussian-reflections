@@ -23,21 +23,6 @@ def get_point_cloud(data_dir) -> BasicPointCloud:
     return pcd
 
 
-def make_random_point_cloud(num_rand_pts, init_extra_point_diffuse) -> BasicPointCloud:
-    print(f"Generating random point cloud ({num_rand_pts})...")
-    rand_xyz = np.random.random((num_rand_pts, 3)) * 2.6 - 1.3  # * specular_bbox_size_mult
-    if "GRAY_EXTRA_POINTS" in os.environ:
-        init_rgb = np.ones_like(rand_xyz) * init_extra_point_diffuse
-    else:
-        init_rgb = np.random.random((num_rand_pts, 3))
-    pcd = BasicPointCloud(
-        points=rand_xyz,
-        colors=init_rgb,
-        normals=np.zeros_like(rand_xyz),
-    )
-    return pcd
-
-
 def make_skybox(radius=1.0, num_skybox_pts=10_000):
     theta = 2.0 * torch.pi * torch.rand(num_skybox_pts)
     phi = torch.arccos(1.0 - 1.4 * torch.rand(num_skybox_pts))

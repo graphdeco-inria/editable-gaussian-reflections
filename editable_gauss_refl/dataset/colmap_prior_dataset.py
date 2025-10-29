@@ -177,7 +177,7 @@ class ColmapPriorDataset:
         if buffer_name in ["render", "irradiance", "diffuse", "specular"]:
             buffer = untonemap(buffer)
         elif buffer_name in ["roughness", "metalness", "depth"]:
-            buffer = repeat(buffer, "h w 1 -> h w 3")
+            pass
         elif buffer_name in ["normal"]:
             buffer = buffer * 2.0 - 1.0
         else:

@@ -27,11 +27,6 @@ class BlenderDataset:
         self.resolution = resolution
         self.max_images = max_images
 
-        downsampled_cache_dir = data_dir.replace("/renders/", f"/cache/{self.resolution}/")
-        if os.path.exists(downsampled_cache_dir):
-            self.cache_dir = downsampled_cache_dir
-        else:
-            self.cache_dir = data_dir.replace("/renders/", "/cache/fullres/")
         transform_path = os.path.join(data_dir, f"transforms_{split}.json")
         with open(transform_path) as json_file:
             self.contents = json.load(json_file)
