@@ -10,7 +10,7 @@
 #
 
 from dataclasses import dataclass, field
-from typing import Annotated
+from typing import Annotated, Literal
 
 from tyro.conf import arg
 
@@ -30,6 +30,7 @@ class Config:
     resolution: Annotated[int, arg(aliases=["-r"])] = 768
     eval: bool = False
     max_images: int | None = None
+    init_type: Literal["dense", "sfm"] = "dense"
 
     # * Model params
     white_background: bool = False

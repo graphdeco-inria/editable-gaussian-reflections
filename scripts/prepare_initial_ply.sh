@@ -13,18 +13,19 @@ SCALE=50
 
 # DATASET_NAME=renders_priors
 # SCENE_LIST="shiny_kitchen shiny_bedroom shiny_livingroom shiny_office"
-# RESOLUTION=128
+# SCALE=400
+
+# DATASET_NAME=demos
+# SCENE_LIST="shiny_office_with_book multichromeball multichromeball_identical multichromeball_tint"
 # SCALE=400
 
 # DATASET_NAME=renders
-# SCENE_LIST="shiny_kitchen shiny_bedroom shiny_livingroom shiny_office multichromeball_kitchen_v2 multichromeball_identical_kitchen_v2 multichromeball_tint_kitchen_v2 multichromeball_value_kitchen_v2"
-# RESOLUTION=128
+# SCENE_LIST="shiny_kitchen shiny_bedroom shiny_livingroom shiny_office"
 # SCALE=400
 
 for SCENE in $SCENE_LIST;
 do
     python prepare_initial_ply.py \
         --source_path $DATA_DIR/$DATASET_NAME/$SCENE \
-        --scale $SCALE \
-        --resolution $RESOLUTION
+        --scale $SCALE 
 done

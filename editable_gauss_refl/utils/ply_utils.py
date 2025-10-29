@@ -8,12 +8,12 @@ def read_ply(ply_path: str):
     vertex_data = plydata["vertex"].data
     points = np.vstack([vertex_data["x"], vertex_data["y"], vertex_data["z"]]).T
     colors = np.vstack([vertex_data["red"], vertex_data["green"], vertex_data["blue"]]).T
-    colors = colors / 255.0
+    if colors.dtype == np.uint8:
+        colors = colors.astype(np.float32) / 255.0
     return points, colors
 
 
 def save_ply(ply_path: str, points: np.ndarray, colors: np.ndarray):
-    colors = (colors * 255.0).round().astype(np.uint8)
     # Create structured array
     vertex = np.array(
         [(*point, *color) for point, color in zip(points, colors)],
@@ -21,9 +21,9 @@ def save_ply(ply_path: str, points: np.ndarray, colors: np.ndarray):
             ("x", "f4"),
             ("y", "f4"),
             ("z", "f4"),
-            ("red", "u1"),
-            ("green", "u1"),
-            ("blue", "u1"),
+            ("red", "f4"),
+            ("green", "f4"),
+            ("blue", "f4"),
         ],
     )
 
