@@ -44,16 +44,24 @@ conda install -c conda-forge cxx-compiler==1.6.0 -y
 conda install anaconda::cmake -y
 ```
 
-## Viewing pretrained models
+## Viewing and editing pretrained models
 <!-- todo first download-->
 
 ```bash 
-bash gaussian_viewer.py -m <model_path>
+MODEL_PATH=pretrained/renders/shiny_kitchen
+bash gaussian_viewer.py -m $MODEL_PATH
 ```
-e.g. `bash gaussian_viewer.py -m output/neural_catacaustics/bear`.
+
+<!-- todo viewer during training -->
+
+<!-- todo: describe the json -->
+Selections are made with bounding box and filters detailled in the ......
 
 ## Downloading the datasets
 <!-- todo -->
+[Download links are provided here]()
+
+These already contain the required network predictions and dense point clouds; detailled commands for reproducing these are provided later.
 
 ## Running the scenes 
 To run the synthetic scenes with ground truth inputs (`data/renders`):
@@ -76,13 +84,13 @@ To run the real scenes from the Neural Catacaustics dataset:
 ```bash 
 bash run_all_neural_catacaustics.sh
 ```
-Note that in the real scenes, depth regularization was disabled since it did not improve results.
+Note that in the real scenes, depth regularization was disabled since it did not improve results, and the specular loss weight was reduced significantly as this produced better results.
 
-The bear scene shown in the video was run on an older configuration which still use SfM init, provided for completeness: () 
+The bear scene (`neural_catacaustics/multibounce`) shown in the video was run on an older configuration which still used SfM init. We provided it here although the new configuration yields arguably better results: 
 ```
 bash run_bear_scene_legacy_sfm.sh
 ```
-<!-- todo: editing -->
+As described in the paper some manual edits were applied after training (plant deleted, background reflectance removed); the json file for obtaining the same selections is provided alongside the dataset.
 
 ## Detailled commands
 
@@ -94,7 +102,8 @@ https://github.com/jefequien/GenPrior/tree/main/tools.
 ### Creating the initial point cloud 
 
 ```bash 
-python prepare_initial_ply.py --mode <sfm|dense>
+SCENE_PATH=data/renders/shiny_kitchen
+python prepare_initial_ply.py --mode dense -s $SCENE_PATH
 ```
 We recommend working with dense init; this code base does not support densification.
 
@@ -108,7 +117,7 @@ MODEL_PATH=out/shiny_kitchen
 python train.py -s $SCENE_PATH -m $MODEL_PATH
 ```
 
-### Rendering
+### Rendering test views
 ```bash
 SCENE_PATH=data/renders/shiny_kitchen
 MODEL_PATH=out/shiny_kitchen
@@ -121,10 +130,17 @@ You may need to adjust the near clipping plane with the `--znear` flag if you ru
 
 To render a view of the reconstructed environment, pass in the flag `--modes env_rot_1`.
 
-### Evaluation
+### Rendering novel views
+<!-- todo -->
+```
+```
 
-<!-- todo mention why psnr has improved a bit-->
-PSNR values might be slightly higher than reported in the paper (on average) since we fixed an minor aliasing issue with the training data. 
+### Evaluation
+```bash 
+MODEL_PATH=out/shiny_kitchen
+python metrics.py -m $MODEL_PATH
+```
+PSNR values should be slightly higher than reported in the paper (on average) since we fixed a minor aliasing issue with the training data. 
 
 ### Measuring framerates
 ```bash
@@ -132,12 +148,28 @@ MODEL_PATH=out/shiny_kitchen
 python measure_fps.py -m $MODEL_PATH
 ```
 
-## Using the interactive viewer
-<!-- todo
+### Using the interactive viewer
 ```bash 
 MODEL_PATH=out/shiny_kitchen
-python gaussian_viewer.py local $MODEL_PATH 8000
-``` -->
+python gaussian_viewer.py -m $MODEL_PATH
+```
 
+## BibTeX
 
-
+```
+@inproceedings{
+  poirierginter:hal-05306634,
+  TITLE = {{Editable Physically-based Reflections in Raytraced Gaussian Radiance Fields}},
+  AUTHOR = {Poirier-Ginter, Yohan and Hu, Jeffrey and Lalonde, Jean-Fran{\c c}ois and Drettakis, George},
+  URL = {https://inria.hal.science/hal-05306634},
+  BOOKTITLE = {{SIGGRAPH Asia 2025 - 18th ACM SIGGRAPH Conference and Exhibition on Computer Graphics and Interactive Techniques in Asia}},
+  ADDRESS = {Hong Kong, Hong Kong SAR China},
+  YEAR = {2025},
+  MONTH = Dec,
+  DOI = {10.1145/3757377.3763971},
+  KEYWORDS = {path tracing ; differentiable rendering ; Reconstruction Gaussian splatting ; Reconstruction Gaussian splatting differentiable rendering path tracing ; Computing methodologies $\rightarrow$ Rendering},
+  PDF = {https://inria.hal.science/hal-05306634v1/file/saconferencepapers25-163.pdf},
+  HAL_ID = {hal-05306634},
+  HAL_VERSION = {v1},
+}
+``
