@@ -10,7 +10,7 @@
 #
 
 from dataclasses import dataclass, field
-from typing import Annotated, Literal
+from typing import Annotated, Literal, Optional
 
 from tyro.conf import arg
 
@@ -31,6 +31,7 @@ class Config:
     eval: bool = False
     max_images: int | None = None
     init_type: Literal["dense", "sfm"] = "dense"
+    clamp_max: Optional[float] = None
 
     # * Model params
     white_background: bool = False

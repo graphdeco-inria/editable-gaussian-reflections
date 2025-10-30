@@ -210,6 +210,8 @@ class GaussianModel:
         self._roughness = nn.Parameter(torch.ones((fused_point_cloud.shape[0], 1), device="cuda") * self.cfg.init_roughness)
         self._f0 = nn.Parameter(torch.ones((fused_point_cloud.shape[0], 3), device="cuda") * self.cfg.init_f0)
         self._diffuse = nn.Parameter(fused_color.clone())
+        if self.cfg.clamp_max is not None:
+            self._diffuse.data = torch.clamp(self._diffuse.data, 0.0, self.cfg.clamp_max)
         self._scaling = nn.Parameter(scales.requires_grad_(True))
         self._rotation = nn.Parameter(rots.requires_grad_(True))
         self._opacity = nn.Parameter(opacities.requires_grad_(True))
@@ -403,12 +405,6 @@ class GaussianModel:
         elements[:] = list(map(tuple, attributes))
         el = PlyElement.describe(elements, "vertex")
         PlyData([el]).write(path)
-
-    def reset_opacity(self):
-        opacities_new = inverse_sigmoid(torch.min(self.get_opacity, torch.ones_like(self.get_opacity) * 0.1))  #! was 0.01
-        optimizable_tensors = self.replace_tensor_to_optimizer(opacities_new, "opacity")
-        self._opacity = optimizable_tensors["opacity"]
-        self._opacity.grad = torch.zeros_like(self._opacity)
 
     def load_ply(self, path):
         plydata = PlyData.read(path)

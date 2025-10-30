@@ -85,7 +85,8 @@ def get_dataset(cfg: Config, data_dir: str, split: str):
             split=split,
             resolution=cfg.resolution,
             max_images=cfg.max_images,
-            do_eval=False
+            do_eval=False,
+            clamp_max=cfg.clamp_max if hasattr(cfg, "clamp_max") else None,
         )
     else:
         raise FileNotFoundError(f"Data directory {data_dir} not found.")

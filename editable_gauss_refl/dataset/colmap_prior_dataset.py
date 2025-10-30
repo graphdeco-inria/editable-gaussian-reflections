@@ -35,12 +35,14 @@ class ColmapPriorDataset:
         resolution: int | None = None,
         max_images: int | None = None,
         do_eval: bool = True,
+        clamp_max: float | None = None,
     ):
         self.data_dir = data_dir
         self.split = split
         self.resolution = resolution
         self.max_images = max_images
         self.do_eval = do_eval
+        self.clamp_max = clamp_max
 
         self.colmap_parser = ColmapParser(data_dir)
         self.point_cloud = BasicPointCloud(
@@ -174,8 +176,10 @@ class ColmapPriorDataset:
         buffer_image = buffer_image.resize((buffer_width, buffer_height))
         buffer = from_pil_image(buffer_image)
 
-        if buffer_name in ["render", "irradiance", "diffuse", "specular"]:
+        if buffer_name in ["render", "diffuse", "specular"]:
             buffer = untonemap(buffer)
+            if self.clamp_max is not None:
+                buffer = buffer.clip(0, self.clamp_max)
         elif buffer_name in ["roughness", "metalness", "depth"]:
             pass
         elif buffer_name in ["normal"]:
