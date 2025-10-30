@@ -168,7 +168,7 @@ class GaussianViewer(Viewer):
             try:
                 self.test_transforms = json.load(open(os.path.join(cfg.source_path, "transforms_test.json"), "r"))
             except Exception as e:
-                self.test_transforms = {}
+                self.test_transforms = None
 
         try:
             self.bounding_boxes = json.load(open(os.path.join(model_path, "bounding_boxes.json"), "r"))
@@ -433,6 +433,11 @@ class GaussianViewer(Viewer):
                     imgui.pop_style_color(3)
                 self.current_train_cam = max(-1, min(len(self.train_transforms["frames"]) - 1, self.current_train_cam))
 
+                if train_cam_changed:
+                    self.camera.update_pose(np.array(self.train_transforms["frames"][self.current_train_cam]["transform_matrix"]) @ self.blender_to_opengl)
+                    self.current_test_cam = -1
+
+            if self.test_transforms is not None:
                 using_test_cam = self.current_test_cam != -1
                 if not using_test_cam:
                     imgui.push_style_color(imgui.Col_.frame_bg, (0.0, 0.0, 0.0, 0.0)) 
@@ -446,10 +451,7 @@ class GaussianViewer(Viewer):
                     imgui.pop_style_color(3)
                 self.current_test_cam = max(-1, min(len(self.test_transforms["frames"]) - 1, self.current_test_cam))
                 
-                if train_cam_changed:
-                    self.camera.update_pose(np.array(self.train_transforms["frames"][self.current_train_cam]["transform_matrix"]) @ self.blender_to_opengl)
-                    self.current_test_cam = -1
-                elif test_cam_changed:
+                if test_cam_changed:
                     self.camera.update_pose(np.array(self.test_transforms["frames"][self.current_test_cam]["transform_matrix"]) @ self.blender_to_opengl)
                     self.current_train_cam = -1
 
@@ -695,6 +697,8 @@ class GaussianViewer(Viewer):
                     imgui.push_style_color(imgui.Col_.button, (0.2, 0.5, 0.2, 1.0))  # Highlight color
                 if imgui.button("Pan", size=(toolbar_width - 10, 40)):
                     self.tool = "pan"
+                    self.selection_choice = 0
+                    self.update_active_edit()
                 if init_tool == "pan":
                     imgui.pop_style_color()
 
