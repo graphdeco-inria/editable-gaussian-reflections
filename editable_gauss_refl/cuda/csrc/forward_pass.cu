@@ -58,10 +58,6 @@ forward_pass(const int step, Pixel &pixel, const float3 ray_origin, const float3
 
         // * Fill batch with nearest gaussians behind the last one
         for (auto hit_idx : params.ppll_forward.pixel_view(pixel.id)) {
-            if (pixel.id == 777 && hit_idx == 832839) {
-                printf(" ");
-            } //!!!!!!! kludge to fix an undetermined result, this printf
-              //! affects compilation and cannot be removed
             float curr_distance = params.ppll_forward.distances[hit_idx];
             if (curr_distance > tmin && curr_distance < distances[BUFFER_SIZE - 1]) {
                 distances[BUFFER_SIZE - 1] = curr_distance;
@@ -90,7 +86,7 @@ forward_pass(const int step, Pixel &pixel, const float3 ray_origin, const float3
 #pragma unroll
         for (int i = 0; i < BUFFER_SIZE; i++) {
             float distance = distances[i];
-            tmin = distance;
+            tmin = max(tmin, distance);
 
             if (distance < far_plane) {
                 num_hits++;
