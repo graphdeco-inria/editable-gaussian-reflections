@@ -131,7 +131,6 @@ class GaussianViewer(Viewer):
         # Read configuration
         with open(os.path.join(model_path, "cfg.json")) as f:
             cfg_data = json.load(f)
-            del cfg_data["do_depth_fit"] #!!!
             cfg = Config(**cfg_data)
 
         dataset = Dummy()
@@ -144,8 +143,8 @@ class GaussianViewer(Viewer):
             metadata = json.load(open(os.path.join(model_path, "transforms_train.json"), "r"))
         except Exception as e:
             metadata = json.load(open(os.path.join(cfg.source_path, "transforms_train.json"), "r"))
-        downsampling = metadata["height"] / cfg.resolution
-        raytracer = GaussianRaytracer(gaussians, int(metadata["width"] / downsampling), cfg.resolution)
+        downsampling = (metadata["height"] if "height" in metadata else metadata["h"]) / cfg.resolution
+        raytracer = GaussianRaytracer(gaussians, int((metadata["width"] if "width" in metadata else metadata["w"]) / downsampling), cfg.resolution)
 
         viewer = cls(mode, raytracer)
         viewer.separate_sh = False
@@ -160,10 +159,16 @@ class GaussianViewer(Viewer):
 
         try:
             self.train_transforms = json.load(open(os.path.join(model_path, "transforms_train.json"), "r"))
-            self.test_transforms = json.load(open(os.path.join(model_path, "transforms_test.json"), "r"))
         except Exception as e:
             self.train_transforms = json.load(open(os.path.join(cfg.source_path, "transforms_train.json"), "r"))
-            self.test_transforms = json.load(open(os.path.join(cfg.source_path, "transforms_test.json"), "r"))
+        
+        try:
+            self.test_transforms = json.load(open(os.path.join(model_path, "transforms_test.json"), "r"))
+        except Exception as e:
+            try:
+                self.test_transforms = json.load(open(os.path.join(cfg.source_path, "transforms_test.json"), "r"))
+            except Exception as e:
+                self.test_transforms = {}
 
         try:
             self.bounding_boxes = json.load(open(os.path.join(model_path, "bounding_boxes.json"), "r"))

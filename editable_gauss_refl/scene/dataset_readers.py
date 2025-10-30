@@ -63,7 +63,16 @@ def getNerfppNorm(cameras: List[Camera]) -> dict:
 
 
 def get_dataset(cfg: Config, data_dir: str, split: str):
-    if os.path.exists(os.path.join(data_dir, "transforms_train.json")):
+    if os.path.exists(os.path.join(data_dir, "sparse")):
+        dataset = ColmapPriorDataset(
+            data_dir,
+            split=split,
+            resolution=cfg.resolution,
+            max_images=cfg.max_images,
+            do_eval=False,
+            clamp_max=cfg.clamp_max if hasattr(cfg, "clamp_max") else None,
+        )
+    elif os.path.exists(data_dir):
         # * This is a bit of a kludge: we check for depth format to distinguish between g.t. render and prdicted buffer for the blender scenes
         if os.path.isfile(os.path.join(data_dir, split, "depth", "depth_0000.tiff")):
             dataset = BlenderDataset(
@@ -79,15 +88,6 @@ def get_dataset(cfg: Config, data_dir: str, split: str):
                 resolution=cfg.resolution,
                 max_images=cfg.max_images,
             )
-    elif os.path.exists(data_dir):
-        dataset = ColmapPriorDataset(
-            data_dir,
-            split=split,
-            resolution=cfg.resolution,
-            max_images=cfg.max_images,
-            do_eval=False,
-            clamp_max=cfg.clamp_max if hasattr(cfg, "clamp_max") else None,
-        )
     else:
         raise FileNotFoundError(f"Data directory {data_dir} not found.")
     return dataset
