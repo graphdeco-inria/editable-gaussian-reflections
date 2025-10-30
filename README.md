@@ -8,8 +8,6 @@ Yohan Poirier-Ginter, Jeffrey Hu, Jean-François Lalonde, George Drettakis
 
 ## Installation
 
-We have included the official OptiX SDK header files in the third_party/optix directory as a submodule, so by default, you don't need to download the OptiX SDK from the NVIDIA official website, just add the `--recursive` flag when cloning the repository.
-
 The default installation is as follows:
 
 ```bash
@@ -23,11 +21,13 @@ pip install torch==2.5.1 torchvision==0.20.1 torchaudio==2.5.1 --index-url https
 pip install -r requirements.txt
 ```
 
+We have included the official OptiX SDK header files in the third_party/optix directory as a submodule, so by default, you don't need to download the OptiX SDK from the NVIDIA official website, just add the `--recursive` flag when cloning the repository.
+
 To build the cuda raytracer run
 ```bash
 bash make.sh
 ```
-alternatively you can pip install this project.
+alternatively you can pip install the project.
 
 To test if installed correctly, run
 ```bash
@@ -44,7 +44,7 @@ conda install anaconda::cmake -y
 ```
 
 ## Viewing and editing pretrained models
-[Pretrained models are provided here](https://repo-sam.inria.fr/nerphys/editable-gaussian-reflections/pretrained/index.html) and can be opened with:
+[Pretrained models are available here](https://repo-sam.inria.fr/nerphys/editable-gaussian-reflections/pretrained/index.html) and can be opened with:
 
 ```bash 
 MODEL_PATH=pretrained/renders/shiny_kitchen
@@ -52,22 +52,21 @@ python gaussian_viewer.py -m $MODEL_PATH
 ```
 The models are self-contained and you do not need to download the corresponding dataset to view them.
 
-You can download all models with `bash download_all_datasets.sh`.
+You can otherwise download all models with `bash download_all_datasets.sh`.
 
 Selections are made with bounding box/cylinders and filters detailled in `bounding_boxes.json` files. You can edit these files to add your own selections.
 
 The viewer can also be opened during training by passing in the `--viewer` flag.
 
+As described in the paper some manual edits were applied to the bear scene (neural_catcaustics/multibounce) after training (plant deleted, background reflectance removed); before and after versions are provided.
+
 ## Downloading the datasets
 
-[Download links are provided here](https://repo-sam.inria.fr/nerphys/editable-gaussian-reflections/datasets/index.html)
+[Download links are available here](https://repo-sam.inria.fr/nerphys/editable-gaussian-reflections/datasets/index.html)
 
-You can download all scenes with:
-```bash 
-bash download_all_datasets.sh
-```
+You can otherwise download all scenes with `bash download_all_datasets.sh`
 
-These files already contain the required network predictions and dense point clouds; detailled commands for producing these yourself are provided [further below](#detailled-commands).
+These files already contain the required network predictions and dense init point clouds; detailled commands for producing these yourself are provided [further below](#detailled-commands).
 
 ## Running the scenes 
 To run the synthetic scenes with ground truth inputs (`data/renders`):
@@ -90,13 +89,13 @@ To run the real scenes from the Neural Catacaustics dataset:
 ```bash 
 bash run_all_neural_catacaustics.sh
 ```
-Note that in the real scenes, depth regularization was disabled since it did not improve results, and the specular loss weight was reduced significantly which seemed to work better. 
+Note that in the real scenes, depth regularization was reduced since it did not improve results, and the specular loss weight was reduced significantly which seemed to work better. The initial scale was also adjusted and the init/target radiance values clamped to a maximum.
 
 The bear scene (`neural_catacaustics/multibounce`) shown in the video was run on an older configuration which still used SfM init. Although the new configuration yields arguably better results, you can reproduce the old one with:
 ```
 bash run_bear_scene_legacy_sfm.sh
 ```
-As described in the paper some manual edits were applied after training (plant deleted, background reflectance removed); the json file for obtaining the same selections is provided alongside the dataset.
+Ablations for network predictions in the synthetic scene were also run with legacy SfM init. 
 
 ## Detailled commands
 
@@ -112,7 +111,7 @@ python prepare_initial_ply.py --mode dense -s $SCENE_PATH
 ```
 We recommend working with dense init; this code base does not support densification.
 
-You may need to adjust the `--voxel_scale` flag to get good results.
+You may need to adjust the `--voxel_scale` flag to get good results depending on your scene.
 
 The script `scripts/prepare_initial_ply.sh` contains the hyperparameters we used in all scenes.
 
@@ -149,7 +148,10 @@ python render_novel_views.py -s $SCENE_PATH -m $MODEL_PATH --spp $SPP
 MODEL_PATH=out/shiny_kitchen
 python metrics.py -m $MODEL_PATH
 ```
-PSNR values should be slightly higher than reported in the paper (on average) since we fixed a minor aliasing issue with the training data. 
+Results from the paper were run in 32 bit, but we have since quantized the training data to 8 bit, and addressed a minor aliasing issue when downsampling the source data. PSNR values should be slighly higher than reported in the paper on average (especially for diffuse pass which is markedly higher). Original 32bit training data is available upon request.
+
+We obtain the following results:
+<!-- todo: insert final results here -->
 
 ### Measuring framerates
 ```bash
