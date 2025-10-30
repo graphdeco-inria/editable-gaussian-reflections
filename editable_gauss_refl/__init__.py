@@ -10,8 +10,8 @@ def make_raytracer(
     image_width: int,
     image_height: int,
     num_gaussians: int,
-    ppll_forward_size: int = 200_000_000,
-    ppll_backward_size: int = 150_000_000,
+    ppll_forward_size: int = 180_000_000,
+    ppll_backward_size: int = 120_000_000,
 ):
     global LOADED
     if not LOADED:
