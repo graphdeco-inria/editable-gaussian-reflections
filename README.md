@@ -2,9 +2,7 @@
 
 Yohan Poirier-Ginter, Jeffrey Hu, Jean-François Lalonde, George Drettakis
 
-[Webpage](https://repo-sam.inria.fr/nerphys/editable-gaussian-reflections/) | [Paper](https://repo-sam.inria.fr/nerphys/editable-gaussian-reflections/content/paper.pdf) | [Video](https://www.youtube.com/watch?v=Ag9xM1Zm0AY) | [Other GRAPHDECO Publications](http://www-sop.inria.fr/reves/publis/gdindex.php) | [NERPHYS project page](https://project.inria.fr/nerphys/) 
-<!-- [Datasets](https://repo-sam.inria.fr/nerphys/editable-gaussian-reflections/datasets)  -->
-<!-- [Pretrained Models](https://repo-sam.inria.fr/nerphys/editable-gaussian-reflections/pretrained)  -->
+[Webpage](https://repo-sam.inria.fr/nerphys/editable-gaussian-reflections/) | [Paper](https://repo-sam.inria.fr/nerphys/editable-gaussian-reflections/content/paper.pdf) | [Video](https://www.youtube.com/watch?v=Ag9xM1Zm0AY) | [Other GRAPHDECO Publications](http://www-sop.inria.fr/reves/publis/gdindex.php) | [NERPHYS project page](https://project.inria.fr/nerphys/) | [Datasets](https://repo-sam.inria.fr/nerphys/editable-gaussian-reflections/datasets)  | [Pretrained Models](https://repo-sam.inria.fr/nerphys/editable-gaussian-reflections/pretrained) 
 
 ![Teaser image](assets/teaser.png)
 
@@ -46,29 +44,28 @@ conda install anaconda::cmake -y
 ```
 
 ## Viewing and editing pretrained models
-<!-- todo -->
-[Pretrained models are provided here]()
-<!-- todo first download-->
+[Pretrained models are provided here](https://repo-sam.inria.fr/nerphys/editable-gaussian-reflections/pretrained/index.html) and can be opened with:
 
 ```bash 
 MODEL_PATH=pretrained/renders/shiny_kitchen
 python gaussian_viewer.py -m $MODEL_PATH
 ```
+The models are self-contained and you do not need to download the corresponding dataset to view them.
 
-<!-- todo viewer during training -->
+You can download all models with `bash download_all_datasets.sh`.
 
-<!-- todo: describe the json -->
-Selections are made with bounding box and filters detailled in `bounding_boxes.json` files. You can edit these files to add your own selections. 
+Selections are made with bounding box/cylinders and filters detailled in `bounding_boxes.json` files. You can edit these files to add your own selections.
+
+The viewer can also be opened during training by passing in the `--viewer` flag.
 
 ## Downloading the datasets
-<!-- todo -->
-[Download links are provided here]()
+
+[Download links are provided here](https://repo-sam.inria.fr/nerphys/editable-gaussian-reflections/datasets/index.html)
 
 You can download all scenes with:
 ```bash 
-bash download_all_scenes.sh
+bash download_all_datasets.sh
 ```
-<!-- todo -->
 
 These files already contain the required network predictions and dense point clouds; detailled commands for producing these yourself are provided [further below](#detailled-commands).
 
@@ -109,7 +106,6 @@ https://github.com/jefequien/GenPrior/tree/main/tools.
 
 
 ### Creating the initial point cloud 
-
 ```bash 
 SCENE_PATH=data/renders/shiny_kitchen
 python prepare_initial_ply.py --mode dense -s $SCENE_PATH
@@ -141,7 +137,6 @@ You may need to adjust the near clipping plane with the `--znear` flag if you ru
 To render a view of the reconstructed environment, use this script with the flag `--modes env_rot_1`.
 
 ### Rendering novel views
-<!-- todo what aobut ffmpeg -->
 ```bash 
 SCENE_PATH=data/renders/shiny_kitchen
 MODEL_PATH=out/shiny_kitchen
