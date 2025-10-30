@@ -33,8 +33,8 @@ class ExtractDatasetCLI:
     exposure: float = 3.5 
     
     def __post_init__(self):
-        assert self.format in ["safetensors", "exr", "tiff", "png", "st_mixed_depth"]
-        assert self.precision in [8, 16, 32, "mixed_depth", "mixed_images", "mixed_both"]
+        assert self.format in ["safetensors", "exr", "tiff", "png"]
+        assert self.precision in [8, 16, 32]
         if self.format == "png":
             assert self.precision == 8, "PNG format only supports 8-bit precision"
         elif self.format == "tiff":
