@@ -2,6 +2,7 @@ import os
 from dataclasses import dataclass
 from typing import Annotated, Literal, Optional
 
+import numpy as np
 import torch
 import tyro
 from tqdm import tqdm
