@@ -9,6 +9,9 @@
 # For inquiries contact  george.drettakis@inria.fr
 #
 
+import sys 
+sys.path.append(".")
+
 import os
 from copy import deepcopy
 

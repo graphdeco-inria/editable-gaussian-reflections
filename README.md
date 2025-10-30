@@ -2,8 +2,9 @@
 
 Yohan Poirier-Ginter, Jeffrey Hu, Jean-François Lalonde, George Drettakis
 
-[Webpage](https://repo-sam.inria.fr/nerphys/editable-gaussian-reflections/) | [Paper](https://repo-sam.inria.fr/nerphys/editable-gaussian-reflections/content/paper.pdf) | [Video](https://www.youtube.com/watch?v=Ag9xM1Zm0AY) | [Other GRAPHDECO Publications](http://www-sop.inria.fr/reves/publis/gdindex.php) | [NERPHYS project page](https://project.inria.fr/nerphys/) <br>
-<!-- todo dataset download link, scene download link -->
+[Webpage](https://repo-sam.inria.fr/nerphys/editable-gaussian-reflections/) | [Paper](https://repo-sam.inria.fr/nerphys/editable-gaussian-reflections/content/paper.pdf) | [Video](https://www.youtube.com/watch?v=Ag9xM1Zm0AY) | [Other GRAPHDECO Publications](http://www-sop.inria.fr/reves/publis/gdindex.php) | [NERPHYS project page](https://project.inria.fr/nerphys/) 
+<!-- [Datasets](https://repo-sam.inria.fr/nerphys/editable-gaussian-reflections/datasets)  -->
+<!-- [Pretrained Models](https://repo-sam.inria.fr/nerphys/editable-gaussian-reflections/pretrained)  -->
 
 ![Teaser image](assets/teaser.png)
 
@@ -45,23 +46,31 @@ conda install anaconda::cmake -y
 ```
 
 ## Viewing and editing pretrained models
+<!-- todo -->
+[Pretrained models are provided here]()
 <!-- todo first download-->
 
 ```bash 
 MODEL_PATH=pretrained/renders/shiny_kitchen
-bash gaussian_viewer.py -m $MODEL_PATH
+python gaussian_viewer.py -m $MODEL_PATH
 ```
 
 <!-- todo viewer during training -->
 
 <!-- todo: describe the json -->
-Selections are made with bounding box and filters detailled in the ......
+Selections are made with bounding box and filters detailled in `bounding_boxes.json` files. You can edit these files to add your own selections. 
 
 ## Downloading the datasets
 <!-- todo -->
 [Download links are provided here]()
 
-These already contain the required network predictions and dense point clouds; detailled commands for reproducing these are provided later.
+You can download all scenes with:
+```bash 
+bash download_all_scenes.sh
+```
+<!-- todo -->
+
+These files already contain the required network predictions and dense point clouds; detailled commands for producing these yourself are provided [further below](#detailled-commands).
 
 ## Running the scenes 
 To run the synthetic scenes with ground truth inputs (`data/renders`):
@@ -84,9 +93,9 @@ To run the real scenes from the Neural Catacaustics dataset:
 ```bash 
 bash run_all_neural_catacaustics.sh
 ```
-Note that in the real scenes, depth regularization was disabled since it did not improve results, and the specular loss weight was reduced significantly as this produced better results.
+Note that in the real scenes, depth regularization was disabled since it did not improve results, and the specular loss weight was reduced significantly which seemed to work better. 
 
-The bear scene (`neural_catacaustics/multibounce`) shown in the video was run on an older configuration which still used SfM init. We provided it here although the new configuration yields arguably better results: 
+The bear scene (`neural_catacaustics/multibounce`) shown in the video was run on an older configuration which still used SfM init. Although the new configuration yields arguably better results, you can reproduce the old one with:
 ```
 bash run_bear_scene_legacy_sfm.sh
 ```
@@ -107,10 +116,11 @@ python prepare_initial_ply.py --mode dense -s $SCENE_PATH
 ```
 We recommend working with dense init; this code base does not support densification.
 
-You may need to adjust the `--binning_scale` flag to get good results.
+You may need to adjust the `--voxel_scale` flag to get good results.
+
+The script `scripts/prepare_initial_ply.sh` contains the hyperparameters we used in all scenes.
 
 ### Training 
-
 ```bash
 SCENE_PATH=data/renders/shiny_kitchen
 MODEL_PATH=out/shiny_kitchen
@@ -128,11 +138,15 @@ We rendered at 128spp for evaluation but lower values can give adequate results.
 
 You may need to adjust the near clipping plane with the `--znear` flag if you run other scenes.
 
-To render a view of the reconstructed environment, pass in the flag `--modes env_rot_1`.
+To render a view of the reconstructed environment, use this script with the flag `--modes env_rot_1`.
 
 ### Rendering novel views
-<!-- todo -->
-```
+<!-- todo what aobut ffmpeg -->
+```bash 
+SCENE_PATH=data/renders/shiny_kitchen
+MODEL_PATH=out/shiny_kitchen
+SPP=128 # samples per pixel
+python render_novel_views.py -s $SCENE_PATH -m $MODEL_PATH --spp $SPP
 ```
 
 ### Evaluation
@@ -148,11 +162,13 @@ MODEL_PATH=out/shiny_kitchen
 python measure_fps.py -m $MODEL_PATH
 ```
 
-### Using the interactive viewer
+### Editing with the interactive viewer
 ```bash 
 MODEL_PATH=out/shiny_kitchen
 python gaussian_viewer.py -m $MODEL_PATH
 ```
+
+Note that to open your own real scenes with the viewer, the camera poses first need to be transformed from COLMAP to JSON, which can be done with the script `bash scripts/transforms_from_colmap.sh`. We have already done this step for the provided scenes.
 
 ## BibTeX
 
