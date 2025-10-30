@@ -52,7 +52,7 @@ def prepare_output_and_logger(cfg: Config):
             os.path.join(cfg.model_path, "transforms_test.json"),
         )
     except Exception as e:
-        print("Could not copy transforms json files: ", e)  
+        print("Could not copy transforms json files: ", e)
 
     try:
         import shutil
@@ -61,25 +61,18 @@ def prepare_output_and_logger(cfg: Config):
             os.path.join(cfg.source_path, "bounding_boxes.json"),
             os.path.join(cfg.model_path, "bounding_boxes.json"),
         )
-    except Exception as e:
+    except Exception:
         pass
-    
+
     # * Dump cfg as JSON.
     with open(os.path.join(cfg.model_path, "cfg.json"), "w") as f:
         json.dump(vars(cfg), f, indent=2)
 
     return SummaryWriter(cfg.model_path)
 
+
 @torch.no_grad()
-def training_report(
-    cfg: Config,
-    scene,
-    raytracer,
-    tb_writer,
-    iteration,
-    start_time
-):
-    
+def training_report(cfg: Config, scene, raytracer, tb_writer, iteration, start_time):
     # * Save the elapsed time
     delta = time.time() - start_time
     with open(os.path.join(cfg.model_path, "time.txt"), "a") as f:
@@ -93,7 +86,7 @@ def training_report(
         f.write("\n[ITER {}] # {}".format(iteration, scene.gaussians.get_xyz.shape[0]))
         print("Number of gaussians: ", scene.gaussians.get_xyz.shape[0])
 
-    # * Run validation  
+    # * Run validation
     validation_configs = []
     validation_configs.append(
         {"name": "train", "cameras": [sorted(scene.getTrainCameras(), key=lambda x: x.image_name)[min(cfg.val_view, (cfg.max_images or 1) - 1)]]},
@@ -121,7 +114,7 @@ def training_report(
             gt_image = tonemap(viewpoint.original_image).clamp(0, 1)
 
             if tb_writer and idx == 0:
-                preview = torch.stack([ diffuse_image, diffuse_gt_image, specular_image, specular_gt_image, pred_image, gt_image]).clamp(0, 1)
+                preview = torch.stack([diffuse_image, diffuse_gt_image, specular_image, specular_gt_image, pred_image, gt_image]).clamp(0, 1)
                 save_image(preview, os.path.join(tb_writer.log_dir, f"{config['name']}_preview_iteration_{iteration}.png"), nrow=2, padding=0)
 
             normal_gt_image = torch.clamp(viewpoint.normal_image / 2 + 0.5, 0.0, 1.0)
@@ -174,6 +167,7 @@ def training_report(
             f.write(f"{iteration}, {diffuse_psnr_test:02.2f}, {specular_psnr_test:02.2f}, {psnr_test:02.2f}\n")
 
     torch.cuda.empty_cache()
+
 
 def main(cfg: Config):
     set_seeds()
@@ -242,7 +236,7 @@ def main(cfg: Config):
                 scene.save(iteration)
 
             if iteration % cfg.pruning_interval == 0:
-                if iteration > cfg.pruning_start_iter and cfg.min_weight > 0: 
+                if iteration > cfg.pruning_start_iter and cfg.min_weight > 0:
                     gaussians.prune_points((raytracer.cuda_module.get_gaussians().total_weight / cfg.pruning_interval < cfg.min_weight).squeeze(1))
                 if not cfg.disable_znear_densif_pruning:
                     gaussians.prune_znear_only(scene)

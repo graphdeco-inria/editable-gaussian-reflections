@@ -7,6 +7,6 @@ find editable_gauss_refl/cuda \
   -exec clang-format -i {} \;
 
 # Currently only for select files and directories
-SELECT_PATHS="editable_gauss_refl/ tests/ setup.py train.py render.py render_novel_views.py prepare_initial_ply.py measure_fps.py"
+SELECT_PATHS="editable_gauss_refl/ tests/ setup.py train.py render.py tools/render_novel_views.py prepare_initial_ply.py measure_fps.py"
 ruff check --extend-select I --fix $SELECT_PATHS
 ruff format --line-length 200 $SELECT_PATHS

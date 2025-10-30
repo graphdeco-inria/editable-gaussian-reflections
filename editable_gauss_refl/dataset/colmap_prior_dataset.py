@@ -2,7 +2,6 @@ import os
 
 import numpy as np
 import torch
-from einops import repeat
 from PIL import Image
 
 from editable_gauss_refl.dataset.colmap_parser import ColmapParser
@@ -135,7 +134,7 @@ class ColmapPriorDataset:
         )
         points_tensor = transform_points(points_tensor, w2c_tensor)
         depth_points_image = project_pointcloud_to_depth_map(points_tensor, fovx, fovy, depth_image.shape[:2])
-        valid_mask = (depth_points_image != 0)
+        valid_mask = depth_points_image != 0
         x = depth_image[:, :, 0][valid_mask].float()
         y = depth_points_image[valid_mask]
         # a, b = linear_least_squares_1d(x, y)
@@ -162,7 +161,7 @@ class ColmapPriorDataset:
             depth_image=distance_image,
             normal_image=normal_image,
             roughness_image=roughness_image,
-            f0_image=f0_image
+            f0_image=f0_image,
         )
         return cam_info
 

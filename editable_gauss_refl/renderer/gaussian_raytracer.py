@@ -17,6 +17,7 @@ import torch
 from editable_gauss_refl import make_raytracer
 from editable_gauss_refl.scene.gaussian_model import GaussianModel
 
+
 class GaussianRaytracer:
     def __init__(self, pc: GaussianModel, image_width: int, image_height: int):
         self.image_width: int = image_width

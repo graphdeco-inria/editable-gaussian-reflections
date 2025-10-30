@@ -1,20 +1,19 @@
+import json
 import os
+from dataclasses import dataclass
+from typing import Literal, Optional
 
 import torch
 import tyro
 from tqdm import tqdm
-import json
+from typing_extensions import Annotated
+from tyro.conf import arg
 
 from editable_gauss_refl.config import Config
 from editable_gauss_refl.renderer import GaussianRaytracer, render
 from editable_gauss_refl.scene import GaussianModel, Scene
 from editable_gauss_refl.utils.general_utils import set_seeds
 from editable_gauss_refl.utils.system_utils import searchForMaxIteration
-
-from dataclasses import dataclass, field
-from typing import Literal, Optional
-from typing_extensions import Annotated
-from tyro.conf import arg
 
 
 @dataclass
@@ -34,7 +33,7 @@ def measure_fps(
     # * Warmup caches
     for view in tqdm(views, desc="Warmup progress"):
         render(view, raytracer, force_update_bvh=False, targets_available=False, denoise=False)
-    
+
     # * Run measurement
     start_event = torch.cuda.Event(enable_timing=True)
     end_event = torch.cuda.Event(enable_timing=True)

@@ -50,7 +50,7 @@ class BlenderDataset:
         roughness_image = self._get_buffer(frame_name, "roughness")
         normal_image = self._get_buffer(frame_name, "normal")
         depth_image = self._get_buffer(frame_name, "depth")
-        f0_image = self._get_buffer(frame_name, "f0") 
+        f0_image = self._get_buffer(frame_name, "f0")
 
         # Camera intrinsics
         height, width = image.shape[0], image.shape[1]

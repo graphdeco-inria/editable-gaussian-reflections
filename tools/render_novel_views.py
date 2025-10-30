@@ -9,11 +9,15 @@
 # For inquiries contact  george.drettakis@inria.fr
 #
 
-import sys 
+import sys
+
 sys.path.append(".")
 
+import json
 import os
 from copy import deepcopy
+from dataclasses import dataclass
+from typing import Optional
 
 import numpy as np
 import torch
@@ -21,6 +25,8 @@ import torchvision
 import tyro
 from einops import rearrange
 from tqdm import tqdm
+from typing_extensions import Annotated
+from tyro.conf import arg
 
 from editable_gauss_refl.config import Config
 from editable_gauss_refl.renderer import GaussianRaytracer, render
@@ -30,23 +36,16 @@ from editable_gauss_refl.utils.general_utils import set_seeds
 from editable_gauss_refl.utils.system_utils import searchForMaxIteration
 from editable_gauss_refl.utils.tonemapping import tonemap
 
-from dataclasses import dataclass, field
-from typing import Literal, Optional
-from typing_extensions import Annotated
-from tyro.conf import arg
-
-import json 
-
 
 @dataclass
 class RenderNovelViewCLI:
-    model_path: Annotated[str, arg(aliases=["-m"])] 
+    model_path: Annotated[str, arg(aliases=["-m"])]
 
     iteration: Optional[int] = None
     spp: int = 128
     denoise: bool = True
 
-    znear: float = 1.0 # * Set a high znear to avoid floaters, you may need to reduce this based on your scene
+    znear: float = 1.0  # * Set a high znear to avoid floaters, you may need to reduce this based on your scene
 
 
 @torch.no_grad()
@@ -165,4 +164,3 @@ if __name__ == "__main__":
         raytracer,
         save_dir,
     )
-

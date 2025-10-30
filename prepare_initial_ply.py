@@ -1,33 +1,29 @@
-import argparse
 import os
 from dataclasses import dataclass
-import numpy as np 
+from typing import Annotated, Literal, Optional
 
 import torch
 import tyro
-from tyro.conf import arg
 from tqdm import tqdm
-from typing import Optional, Annotated, Literal
+from tyro.conf import arg
 
 from editable_gauss_refl.dataset.colmap_parser import ColmapParser
 from editable_gauss_refl.scene.dataset_readers import get_dataset
-from editable_gauss_refl.utils.tonemapping import untonemap
-from editable_gauss_refl.utils.ply_utils import save_ply
-
-from editable_gauss_refl.utils.general_utils import set_seeds
 from editable_gauss_refl.utils.depth_utils import compute_primary_ray_directions
-import json
+from editable_gauss_refl.utils.general_utils import set_seeds
+from editable_gauss_refl.utils.ply_utils import save_ply
+from editable_gauss_refl.utils.tonemapping import untonemap
 
 
 @dataclass
 class PrepareInitialPLYCLI:
-    source_path: Annotated[str, arg(aliases=["-s"])] # * e.g. "data/renders/shiny_kitchen"
+    source_path: Annotated[str, arg(aliases=["-s"])]  # * e.g. "data/renders/shiny_kitchen"
     mode: Literal["sfm", "dense"] = "dense"
     filename: str = "point_cloud_{mode}.ply"
 
     voxel_scale: float = 400.0
     resolution: int = 128
-    
+
     max_images: Optional[int] = None
 
 

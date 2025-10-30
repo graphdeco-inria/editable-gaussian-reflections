@@ -1,24 +1,26 @@
 import json
 import os
 from pathlib import Path
-import sys 
 
 import numpy as np
 import torch
-from einops import rearrange, repeat
+from einops import rearrange
 from PIL import Image
 from torch import Tensor
 
 from editable_gauss_refl.dataset.colmap_parser import ColmapParser
 from editable_gauss_refl.utils.depth_utils import (
-    compute_primary_ray_directions,
     project_pointcloud_to_depth_map,
     ransac_linear_fit,
     transform_depth_to_position_image,
     transform_normals_to_world,
     transform_points,
 )
-from editable_gauss_refl.utils.graphics_utils import BasicPointCloud, focal2fov, fov2focal
+from editable_gauss_refl.utils.graphics_utils import (
+    BasicPointCloud,
+    focal2fov,
+    fov2focal,
+)
 from editable_gauss_refl.utils.tonemapping import untonemap
 
 from .camera_info import CameraInfo
@@ -38,15 +40,7 @@ class BlenderPriorDataset:
         self.resolution = resolution
         self.max_images = max_images
 
-        self.buffer_names = [
-            "render",
-            "diffuse",
-            "specular",
-            "roughness",
-            "metalness",
-            "depth",
-            "normal"
-        ]
+        self.buffer_names = ["render", "diffuse", "specular", "roughness", "metalness", "depth", "normal"]
         self.colmap_parser = ColmapParser(data_dir)
         self.point_cloud = BasicPointCloud(
             points=self.colmap_parser.points,
@@ -116,11 +110,11 @@ class BlenderPriorDataset:
         y = depth_points_image[valid_mask]
         # a, b = linear_least_squares_1d(x, y)
         (a, b), _ = ransac_linear_fit(x, y)
-        buffers["depth"] = (buffers["depth"] * a + b)
+        buffers["depth"] = buffers["depth"] * a + b
 
         # Convert to depth to distance image
-        position_image = transform_depth_to_position_image(buffers["depth"].squeeze(-1), fovx, fovy) 
-        
+        position_image = transform_depth_to_position_image(buffers["depth"].squeeze(-1), fovx, fovy)
+
         # Save position_image as a PLY file
         point_cloud = position_image.reshape(-1, 3).cpu().numpy()
         valid_points = ~np.isnan(point_cloud).any(axis=1)
@@ -148,7 +142,7 @@ class BlenderPriorDataset:
             depth_image=buffers["distance"],
             normal_image=buffers["normal"],
             roughness_image=buffers["roughness"],
-            f0_image=f0_image
+            f0_image=f0_image,
         )
         return cam_info
 
