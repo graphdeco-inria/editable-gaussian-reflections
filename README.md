@@ -89,7 +89,7 @@ To run the real scenes from the Neural Catacaustics dataset:
 ```bash 
 bash run_all_neural_catacaustics.sh
 ```
-Note that in the real scenes, depth regularization was reduced since it did not improve results, and the specular loss weight was reduced significantly which seemed to work better. The initial scale was also adjusted and the init/target radiance values clamped to a maximum.
+Note that in the real scenes, depth regularization was reduced since it did not improve results, and other hyperparameters were adjusted as well. 
 
 The bear scene (`neural_catacaustics/multibounce`) shown in the video was run on an older configuration which still used SfM init. Although the new configuration yields arguably better results, you can reproduce the old one with:
 ```
@@ -148,10 +148,6 @@ python render_novel_views.py -s $SCENE_PATH -m $MODEL_PATH --spp $SPP
 MODEL_PATH=out/shiny_kitchen
 python metrics.py -m $MODEL_PATH
 ```
-Results from the paper were run in 32 bit, but we have since quantized the training data to 8 bit, and addressed a minor aliasing issue when downsampling the source data. PSNR values should be slighly higher than reported in the paper on average (especially for diffuse pass which is markedly higher). Original 32bit training data is available upon request.
-
-We obtain the following results:
-<!-- todo: insert final results here -->
 
 ### Measuring framerates
 ```bash
@@ -166,6 +162,25 @@ python gaussian_viewer.py -m $MODEL_PATH
 ```
 
 Note that to open your own real scenes with the viewer, the camera poses first need to be transformed from COLMAP to JSON, which can be done with the script `bash scripts/transforms_from_colmap.sh`. We have already done this step for the provided scenes.
+
+## Notes on metrics
+We addressed a minor aliasing issue when downsampling the source data and so PSNR values should be slighly higher than reported in the paper on average (especially for diffuse pass). 
+
+We currently obtain the following results with ground truth inputs:
+```
+shiny_kitchen       shiny_office        shiny_livingroom
+diff. spec. final   diff. spec. final   diff. spec. final
+33.20 24.30 26.96 | 29.68 26.46 26.96 | 31.74 24.48 27.54 (paper)
+36.39 24.55 27.45 | 32.02 26.54 27.54 | 33.85 24.52 27.89 (code release)
+```
+and the following with network inputs:
+```
+shiny_kitchen       shiny_office        shiny_livingroom
+diff. spec. final   diff. spec. final   diff. spec. final
+20.36 16.95 20.41 | 23.77 20.35 21.21 | 20.60 17.40 17.75 (paper)
+20.44 17.03 20.55 | 24.10 20.20 21.28 | 20.47 18.47 18.77 (now)
+```
+
 
 ## BibTeX
 
