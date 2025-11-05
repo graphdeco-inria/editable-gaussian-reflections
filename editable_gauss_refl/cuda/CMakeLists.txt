@@ -15,7 +15,21 @@ list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake")
 # === Compiler Standards ===
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CUDA_STANDARD 17)
-set(CMAKE_CUDA_ARCHITECTURES 86)  # 8.6 = RTX A6000; (7.5 = RTX 8000)
+set(CMAKE_CUDA_ARCHITECTURES 86
+    CACHE STRING "CUDA architectures to target (e.g., 75 86)") 
+set(_torch_arch_list "")
+foreach(a IN LISTS CMAKE_CUDA_ARCHITECTURES)
+  if(a MATCHES "^[0-9][0-9]$")
+    string(SUBSTRING "${a}" 0 1 major)
+    string(SUBSTRING "${a}" 1 1 minor)
+    list(APPEND _torch_arch_list "${major}.${minor}")
+  else()
+    list(APPEND _torch_arch_list "${a}")
+  endif()
+endforeach()
+list(JOIN _torch_arch_list " " _torch_arch_str)   # Torch accepts space- or semicolon-separated
+set(TORCH_CUDA_ARCH_LIST "${_torch_arch_str}"
+    CACHE STRING "Torch arch list (auto from CMAKE_CUDA_ARCHITECTURES)" FORCE)
 
 # === Dependency Discovery ===
 find_package(PythonLibs REQUIRED)
