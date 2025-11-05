@@ -62,7 +62,6 @@ Instructions for Windows are coming soon.
 MODEL_PATH=pretrained/shiny_kitchen
 python gaussian_viewer.py -m $MODEL_PATH
 ```
-<!-- todo: try it -->
 The models are self-contained and you do not need to download the corresponding dataset to view them.
 
 Selections are made with bounding box/cylinders and filters detailled in `bounding_boxes.json` files. You can edit these files to add your own selections.
@@ -174,7 +173,6 @@ python measure_fps.py -m $MODEL_PATH
 MODEL_PATH=output/renders/shiny_kitchen
 python gaussian_viewer.py -m $MODEL_PATH
 ```
-<!-- todo: try it -->
 Note that to open your own real scenes with the viewer, the camera poses first need to be transformed from COLMAP to JSON, which can be done with the script `bash scripts/transforms_from_colmap.sh`. We have already done this step for the provided scenes.
 
 ## Notes on metrics
