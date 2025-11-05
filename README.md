@@ -17,7 +17,7 @@ cd gaussian-splatting-raytraced
 conda create -n editable_gauss_refl python=3.12
 conda activate editable_gauss_refl
 
-pip install torch==2.5.1 torchvision==0.20.1 torchaudio==2.5.1
+pip install torch==2.5.1 torchvision==0.20.1 torchaudio==2.5.1 --index-url https://download.pytorch.org/whl/cu121 # IMPORTANT: set your CUDA version
 pip install -r requirements.txt
 ```
 
@@ -25,7 +25,7 @@ We have included the official OptiX SDK header files in the `third_party/optix` 
 
 To build the cuda raytracer run
 ```bash
-bash make.sh -DCMAKE_CUDA_ARCHITECTURES="86" # set your CUDA architecture: https://developer.nvidia.com/cuda-gpus
+bash make.sh -DCMAKE_CUDA_ARCHITECTURES="86" # IMPORTANT: set your CUDA architecture (https://developer.nvidia.com/cuda-gpus)
 ```
 alternatively you can pip install the project.
 
