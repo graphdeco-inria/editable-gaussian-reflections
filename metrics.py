@@ -10,7 +10,7 @@ from torchvision.utils import save_image
 import numpy as np
 import torch
 from tyro.conf import arg
-from torchmetrics import PeakSignalNoiseRatio, StructuralSimilarityIndexMeasure
+from torchmetrics.image import PeakSignalNoiseRatio, StructuralSimilarityIndexMeasure
 from torchmetrics.image.lpip import LearnedPerceptualImagePatchSimilarity
 from torchvision.transforms.functional import to_tensor, to_pil_image
 

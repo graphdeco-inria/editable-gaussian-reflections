@@ -28,14 +28,14 @@ do
         --eval \
         --max_images 2
 
-    python render_novel_views.py \
+    python tools/render_novel_views.py \
         --source_path $SCENE_DIR/$SCENE \
         --model_path $OUTPUT_DIR/$SCENE \
         --resolution $RESOLUTION \
         --eval \
         --max_images 2
 
-    python tools/measure_fps.py \
+    python measure_fps.py \
         --source_path $SCENE_DIR/$SCENE \
         --model_path $OUTPUT_DIR/$SCENE \
         --resolution $RESOLUTION \

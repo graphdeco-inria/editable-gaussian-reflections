@@ -40,7 +40,7 @@ VOXEL_SCALE=50
 
 for SCENE in $SCENE_LIST;
 do
-    python prepare_initial_plys.py \
+    python prepare_initial_ply.py \
         --source_path $SCENE_DIR/$SCENE \
         --resolution $RESOLUTION \
         --do_depth_fit \

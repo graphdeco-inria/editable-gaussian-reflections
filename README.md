@@ -21,7 +21,7 @@ pip install torch==2.5.1 torchvision==0.20.1 torchaudio==2.5.1 --index-url https
 pip install -r requirements.txt
 ```
 
-We have included the official OptiX SDK header files in the third_party/optix directory as a submodule, so by default, you don't need to download the OptiX SDK from the NVIDIA official website, just add the `--recursive` flag when cloning the repository.
+We have included the official OptiX SDK header files in the `third_party/optix` directory as a submodule so that no additional install is required.
 
 To build the cuda raytracer run
 ```bash
@@ -29,13 +29,21 @@ bash make.sh
 ```
 alternatively you can pip install the project.
 
-To test if installed correctly, run
+You can download all pretrained models and (optionally) datasets with:
+```
+bash download_all_pretrained_models.sh
+bash download_all_datasets.sh
+```
+
+To test if everything is installed correctly, you can run
 ```bash
-bash ./scripts/test.sh
+# requires downloading the datasets
+bash ./scripts/test.sh    
 bash ./scripts/dryrun.sh
 ```
 
 ### Troubleshooting
+
 If you run into cmake or gcc version issues, try using conda to install newer versions.
 
 ```bash
@@ -43,16 +51,19 @@ conda install -c conda-forge cxx-compiler==1.6.0 -y
 conda install anaconda::cmake -y
 ```
 
+### Windows Installation
+
+Instructions for Windows are coming soon.
+
 ## Viewing and editing pretrained models
-[Pretrained models are available here](https://repo-sam.inria.fr/nerphys/editable-gaussian-reflections/pretrained/index.html) and can be opened with:
+[Pretrained models are available here](https://repo-sam.inria.fr/nerphys/editable-gaussian-reflections/pretrained/index.html) and can be viewer with:
 
 ```bash 
-MODEL_PATH=pretrained/renders/shiny_kitchen
+MODEL_PATH=pretrained/shiny_kitchen
 python gaussian_viewer.py -m $MODEL_PATH
 ```
+<!-- todo: try it -->
 The models are self-contained and you do not need to download the corresponding dataset to view them.
-
-You can otherwise download all models with `bash download_all_datasets.sh`.
 
 Selections are made with bounding box/cylinders and filters detailled in `bounding_boxes.json` files. You can edit these files to add your own selections.
 
@@ -62,9 +73,7 @@ As described in the paper some manual edits were applied to the bear scene (neur
 
 ## Downloading the datasets
 
-[Download links are available here](https://repo-sam.inria.fr/nerphys/editable-gaussian-reflections/datasets/index.html)
-
-You can otherwise download all scenes with `bash download_all_datasets.sh`
+[Download links are available here](https://repo-sam.inria.fr/nerphys/editable-gaussian-reflections/datasets/index.html).
 
 These files already contain the required network predictions and dense init point clouds; detailled commands for producing these yourself are provided [further below](#detailled-commands).
 
@@ -81,7 +90,7 @@ bash run_all_demos.sh
 
 To run the synthetic scenes with network inputs (`data/renders_priors`):
 ```bash 
-bash run_all_synthetic.sh
+bash run_all_synthetic_priors.sh
 ```
 (As pointed out in the paper, we obtain rather poor results in these scenes)
 
@@ -89,7 +98,7 @@ To run the real scenes from the Neural Catacaustics dataset:
 ```bash 
 bash run_all_neural_catacaustics.sh
 ```
-Note that in the real scenes, depth regularization was reduced since it did not improve results, and other hyperparameters were adjusted as well. 
+Note that in the real scenes, depth regularization was disabled since it did not improve results, and other hyperparameters were adjusted as well. 
 
 The bear scene (`neural_catacaustics/multibounce`) shown in the video was run on an older configuration which still used SfM init. Although the new configuration yields arguably better results, you can reproduce the old one with:
 ```
@@ -99,10 +108,16 @@ Ablations for network predictions in the synthetic scene were also run with lega
 
 ## Detailled commands
 
-### Predicting network priors
-Refer to the auxillary codebase
-https://github.com/jefequien/GenPrior/tree/main/tools.
+Individual scenes can be run with
+```bash
+SCENE_PATH=data/renders/shiny_kitchen
+MODEL_PATH=output/renders/shiny_kitchen
+bash run.sh $MODEL_PATH -s $SCENE_PATH
+```
+More specific commands are given below.
 
+### Predicting network priors
+Refer to the auxillary codebase https://github.com/jefequien/GenPrior/tree/main/tools.
 
 ### Creating the initial point cloud 
 ```bash 
@@ -118,14 +133,14 @@ The script `scripts/prepare_initial_ply.sh` contains the hyperparameters we used
 ### Training 
 ```bash
 SCENE_PATH=data/renders/shiny_kitchen
-MODEL_PATH=out/shiny_kitchen
+MODEL_PATH=output/renders/shiny_kitchen
 python train.py -s $SCENE_PATH -m $MODEL_PATH
 ```
 
 ### Rendering test views
 ```bash
 SCENE_PATH=data/renders/shiny_kitchen
-MODEL_PATH=out/shiny_kitchen
+MODEL_PATH=output/renders/shiny_kitchen
 SPP=128 # samples per pixel
 python render.py -s $SCENE_PATH -m $MODEL_PATH --spp $SPP
 ```
@@ -133,54 +148,52 @@ We rendered at 128spp for evaluation but lower values can give adequate results.
 
 You may need to adjust the near clipping plane with the `--znear` flag if you run other scenes.
 
-To render a view of the reconstructed environment, use this script with the flag `--modes env_rot_1`.
-
+To render a view of the reconstructed environment, use this script with the flag `--modes env_rot_1`. <!-- todo: -->
 ### Rendering novel views
 ```bash 
 SCENE_PATH=data/renders/shiny_kitchen
-MODEL_PATH=out/shiny_kitchen
+MODEL_PATH=output/renders/shiny_kitchen
 SPP=128 # samples per pixel
-python render_novel_views.py -s $SCENE_PATH -m $MODEL_PATH --spp $SPP
+bash render_novel_views.sh $MODEL_PATH -s $SCENE_PATH --spp $SPP
 ```
 
 ### Evaluation
 ```bash 
-MODEL_PATH=out/shiny_kitchen
+MODEL_PATH=output/renders/shiny_kitchen
 python metrics.py -m $MODEL_PATH
 ```
 
 ### Measuring framerates
 ```bash
-MODEL_PATH=out/shiny_kitchen
+MODEL_PATH=output/renders/shiny_kitchen
 python measure_fps.py -m $MODEL_PATH
 ```
 
 ### Editing with the interactive viewer
 ```bash 
-MODEL_PATH=out/shiny_kitchen
+MODEL_PATH=output/renders/shiny_kitchen
 python gaussian_viewer.py -m $MODEL_PATH
 ```
-
+<!-- todo: try it -->
 Note that to open your own real scenes with the viewer, the camera poses first need to be transformed from COLMAP to JSON, which can be done with the script `bash scripts/transforms_from_colmap.sh`. We have already done this step for the provided scenes.
 
 ## Notes on metrics
-We addressed a minor aliasing issue when downsampling the source data and so PSNR values should be slighly higher than reported in the paper on average (especially for diffuse pass). 
+Since submission we quantized training data addressed a minor aliasing issue that occurred when downsampling the source data. PSNR values should be slighly higher than reported in the paper on average (especially for diffuse pass). 
 
 We currently obtain the following results with ground truth inputs:
 ```
 shiny_kitchen       shiny_office        shiny_livingroom
-diff. spec. final   diff. spec. final   diff. spec. final
+diff. spec. final | diff. spec. final | diff. spec. final
 33.20 24.30 26.96 | 29.68 26.46 26.96 | 31.74 24.48 27.54 (paper)
 36.39 24.55 27.45 | 32.02 26.54 27.54 | 33.85 24.52 27.89 (code release)
 ```
 and the following with network inputs:
 ```
 shiny_kitchen       shiny_office        shiny_livingroom
-diff. spec. final   diff. spec. final   diff. spec. final
+diff. spec. final | diff. spec. final | diff. spec. final
 20.36 16.95 20.41 | 23.77 20.35 21.21 | 20.60 17.40 17.75 (paper)
 20.44 17.03 20.55 | 24.10 20.20 21.28 | 20.47 18.47 18.77 (now)
 ```
-
 
 ## BibTeX
 
@@ -200,4 +213,4 @@ diff. spec. final   diff. spec. final   diff. spec. final
   HAL_ID = {hal-05306634},
   HAL_VERSION = {v1},
 }
-``
+```
