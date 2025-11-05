@@ -148,7 +148,7 @@ We rendered at 128spp for evaluation but lower values can give adequate results.
 
 You may need to adjust the near clipping plane with the `--znear` flag if you run other scenes.
 
-To render a view of the reconstructed environment, use this script with the flag `--modes env_rot_1`. <!-- todo: -->
+To render a view of the reconstructed environment, use this script with the flag `--modes env_rot_1`. 
 ### Rendering novel views
 ```bash 
 SCENE_PATH=data/renders/shiny_kitchen
