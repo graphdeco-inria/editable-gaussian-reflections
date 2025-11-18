@@ -2,9 +2,15 @@ import os
 
 import torch
 
-GAUSS_TRACER_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "cuda", "build", "libraytracer.so")
+if os.name == 'nt':
+    __PARENT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    GAUSS_TRACER_PATH = os.path.join(__PARENT_DIR, "build\\Release\\gray.dll")
+else:
+    GAUSS_TRACER_PATH = os.path.join(
+        os.path.dirname(os.path.abspath(__file__)), 
+        "cuda", "build", "libraytracer.so"
+    )
 LOADED = False
-
 
 def make_raytracer(
     image_width: int,
@@ -18,4 +24,9 @@ def make_raytracer(
         torch.classes.load_library(GAUSS_TRACER_PATH)
         LOADED = True
 
+    if os.name == 'nt':
+        GAUSS_TRACER_PATH = os.path.dirname(os.path.dirname(GAUSS_TRACER_PATH))
+
     return torch.classes.raytracer.Raytracer(image_width, image_height, num_gaussians, ppll_forward_size, ppll_backward_size)
+
+

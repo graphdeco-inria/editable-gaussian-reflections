@@ -53,7 +53,10 @@ conda install anaconda::cmake -y
 
 ### Windows Installation
 
-Instructions for Windows are coming soon.
+The code has been tested using the Visual Studio native x64 terminal, with cuda 12.8 and python 3.12. You will need to install python 3.12 at the level of the system, and ensure that this is the version of python first in the Path variable. To compile you need to set the OptiX environment variable manually. The standard value is shown below, you will need to change it if OptiX is installed elsewhere on your system.
+```bash
+set OptiX8_INCLUDE_DIR=C:\ProgramData\NVIDIA Corporation\OptiX SDK 8.1.0\include
+```
 
 ## Viewing and editing pretrained models
 [Pretrained models are available here](https://repo-sam.inria.fr/nerphys/editable-gaussian-reflections/pretrained/index.html) and can be viewer with:

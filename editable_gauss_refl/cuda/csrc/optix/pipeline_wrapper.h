@@ -1,8 +1,15 @@
 #include "../params.h"
 
+#ifdef _WIN32
+#define NOMINMAX
+#include <Windows.h>
+#include <string>
+#include <filesystem>
+#else
 #include <dlfcn.h>
-#include <libgen.h>
 #include <unistd.h>
+#include <libgen.h>
+#endif
 
 class PipelineWrapper {
   public:

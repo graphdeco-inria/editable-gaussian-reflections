@@ -13,8 +13,34 @@ endif(NOT CMAKE_BUILD_TYPE)
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake")
 
 # === Compiler Standards ===
-set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_CUDA_STANDARD 17)
+
+if (MSVC) # Windows
+    message(STATUS "******* In MSVC code")
+    set(CMAKE_CXX_STANDARD 20)
+    set(CMAKE_CUDA_STANDARD 20)
+
+    # --- CUDA relaxed constexpr flag ---
+    if(NOT CMAKE_CUDA_FLAGS MATCHES "--expt-relaxed-constexpr")
+        set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} --expt-relaxed-constexpr" CACHE STRING "CUDA flags" FORCE)
+    endif()
+
+    # --- OptiX include directory ---
+    if(DEFINED ENV{OptiX8_INCLUDE_DIR} AND EXISTS "$ENV{OptiX8_INCLUDE_DIR}")
+        set(OptiX8_INCLUDE_DIR "$ENV{OptiX8_INCLUDE_DIR}" CACHE PATH "OptiX SDK include directory" FORCE)
+    elseif(EXISTS "C:/ProgramData/NVIDIA Corporation/OptiX SDK 8.1.0/include")
+        set(OptiX8_INCLUDE_DIR "C:/ProgramData/NVIDIA Corporation/OptiX SDK 8.1.0/include" CACHE PATH "OptiX SDK include directory" FORCE)
+    else()
+        message(FATAL_ERROR
+        "OptiX include directory not found. Please set environment variable OptiX8_INCLUDE_DIR "
+        "to the path of your OptiX SDK (e.g., C:/ProgramData/NVIDIA Corporation/OptiX SDK 8.1.0/include).")
+    endif()
+
+    message(STATUS "Using OptiX include dir: ${OptiX8_INCLUDE_DIR}")
+else() # Linux
+    set(CMAKE_CXX_STANDARD 17)
+    set(CMAKE_CUDA_STANDARD 17)
+endif()
+
 set(CMAKE_CUDA_ARCHITECTURES 86
     CACHE STRING "CUDA architectures to target (e.g., 75 86)") 
 set(_torch_arch_list "")
@@ -57,12 +83,24 @@ set_target_properties(optix_program PROPERTIES
 )
 
 # === Include Directories ===
+if (MSVC)
+target_include_directories(gray PRIVATE
+    ".venv/Lib/site-packages/torch/include"
+    ".venv/Lib/site-packages/torch/include/torch/csrc/api/include"
+    ${CUDA_INCLUDE_DIRS}
+    ${PYTHON_INCLUDE_DIRS}
+    ${OptiX8_INCLUDE_DIRS}
+    ${CMAKE_CUDA_TOOLKIT_INCLUDE_DIRECTORIES}
+)
+else()
 target_include_directories(raytracer PRIVATE
     ${CUDA_INCLUDE_DIRS}
     ${PYTHON_INCLUDE_DIRS}
     ${OptiX8_INCLUDE_DIRS}
     ${CMAKE_CUDA_TOOLKIT_INCLUDE_DIRECTORIES}
 )
+endif()
+
 
 target_include_directories(optix_program PRIVATE
     ${OptiX8_INCLUDE_DIRS}
@@ -78,11 +116,17 @@ target_compile_definitions(raytracer PRIVATE
 )
 
 # === Compile Options ===
+if (MSVC)
+target_compile_options(raytracer PRIVATE
+    $<$<COMPILE_LANGUAGE:CUDA>:-ftz=true -prec-div=false -prec-sqrt=false>
+)
+else()
 target_compile_options(raytracer PRIVATE
     -Wno-everything
     -Wno-macro-redefined
     $<$<COMPILE_LANGUAGE:CUDA>:-ffast-math -ftz=true -prec-div=false -prec-sqrt=false>
 )
+endif()
 
 target_compile_options(optix_program PRIVATE
     -Wno-everything
@@ -102,8 +146,13 @@ target_link_libraries(optix_program PRIVATE
 )
 
 # === Custom: copy the .ptx next to the .so ===
-set(PTX_SOURCE "${CMAKE_CURRENT_BINARY_DIR}/CMakeFiles/optix_program.dir/csrc/shaders.ptx")
-set(PTX_DEST "${CMAKE_CURRENT_BINARY_DIR}/libraytracer.ptx")
+if (MSVC)
+    set(PTX_SOURCE "${CMAKE_CURRENT_BINARY_DIR}\\optix_program.dir\\$<CONFIG>\\cuda\\variants\\${VARIANT}\\shaders.ptx")
+    set(PTX_DEST "${CMAKE_CURRENT_BINARY_DIR}\\libgray_${VARIANT}.ptx")
+else()
+    set(PTX_SOURCE "${CMAKE_CURRENT_BINARY_DIR}/CMakeFiles/optix_program.dir/csrc/shaders.ptx")
+    set(PTX_DEST "${CMAKE_CURRENT_BINARY_DIR}/libraytracer.ptx")
+endif()
 add_custom_command(
     OUTPUT ${PTX_DEST}
     DEPENDS ${PTX_SOURCE}
@@ -122,3 +171,8 @@ add_custom_command(
     COMMENT "Generating flags_output.txt"
 )
 file(COPY csrc/flags.h DESTINATION ${CMAKE_BINARY_DIR})
+
+# ensure MSVC uses /MD
+if(MSVC)
+  set_property(TARGET gray PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
+endif()
