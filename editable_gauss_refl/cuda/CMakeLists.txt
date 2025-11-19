@@ -84,7 +84,7 @@ set_target_properties(optix_program PROPERTIES
 
 # === Include Directories ===
 if (MSVC)
-target_include_directories(gray PRIVATE
+target_include_directories(raytracer PRIVATE
     ".venv/Lib/site-packages/torch/include"
     ".venv/Lib/site-packages/torch/include/torch/csrc/api/include"
     ${CUDA_INCLUDE_DIRS}
