@@ -24,9 +24,6 @@ def make_raytracer(
         torch.classes.load_library(GAUSS_TRACER_PATH)
         LOADED = True
 
-    if os.name == 'nt':
-        GAUSS_TRACER_PATH = os.path.dirname(os.path.dirname(GAUSS_TRACER_PATH))
-
     return torch.classes.raytracer.Raytracer(image_width, image_height, num_gaussians, ppll_forward_size, ppll_backward_size)
 
 

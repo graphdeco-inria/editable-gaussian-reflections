@@ -147,8 +147,8 @@ target_link_libraries(optix_program PRIVATE
 
 # === Custom: copy the .ptx next to the .so ===
 if (MSVC)
-    set(PTX_SOURCE "${CMAKE_CURRENT_BINARY_DIR}\\optix_program.dir\\$<CONFIG>\\cuda\\variants\\${VARIANT}\\shaders.ptx")
-    set(PTX_DEST "${CMAKE_CURRENT_BINARY_DIR}\\libgray_${VARIANT}.ptx")
+    set(PTX_SOURCE "${CMAKE_CURRENT_BINARY_DIR}\\optix_program.dir\\csrc\\shaders.ptx")
+    set(PTX_DEST "${CMAKE_CURRENT_BINARY_DIR}\\libgray.ptx")
 else()
     set(PTX_SOURCE "${CMAKE_CURRENT_BINARY_DIR}/CMakeFiles/optix_program.dir/csrc/shaders.ptx")
     set(PTX_DEST "${CMAKE_CURRENT_BINARY_DIR}/libraytracer.ptx")
@@ -174,5 +174,5 @@ file(COPY csrc/flags.h DESTINATION ${CMAKE_BINARY_DIR})
 
 # ensure MSVC uses /MD
 if(MSVC)
-  set_property(TARGET gray PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
+  set_property(TARGET raytracer PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
 endif()
