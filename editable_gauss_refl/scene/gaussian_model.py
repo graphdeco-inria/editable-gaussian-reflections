@@ -1,0 +1,633 @@
+#
+# Copyright (C) 2023, Inria
+# GRAPHDECO research group, https://team.inria.fr/graphdeco
+# All rights reserved.
+#
+# This software is free for non-commercial, research and evaluation use
+# under the terms of the LICENSE.md file.
+#
+# For inquiries contact  george.drettakis@inria.fr
+#
+
+import os
+
+import numpy as np
+import torch
+from plyfile import PlyData, PlyElement
+from simple_knn._C import distCUDA2
+from torch import nn
+
+from editable_gauss_refl.config import Config
+from editable_gauss_refl.utils.general_utils import (
+    build_scaling_rotation,
+    get_expon_lr_func,
+    inverse_sigmoid,
+    strip_symmetric,
+)
+from editable_gauss_refl.utils.graphics_utils import BasicPointCloud
+from editable_gauss_refl.utils.system_utils import mkdir_p
+
+
+class GaussianModel:
+    def setup_functions(self):
+        def build_covariance_from_scaling_rotation(scaling, scaling_modifier, rotation):
+            L = build_scaling_rotation(scaling_modifier * scaling, rotation)
+            actual_covariance = L @ L.transpose(1, 2)
+            symm = strip_symmetric(actual_covariance)
+            return symm
+
+        self.scaling_activation = torch.exp
+        self.scaling_inverse_activation = torch.log
+
+        self.covariance_activation = build_covariance_from_scaling_rotation
+
+        self.opacity_activation = torch.sigmoid
+        self.inverse_opacity_activation = inverse_sigmoid
+
+        self.rotation_activation = torch.nn.functional.normalize
+
+        self.diffuse_activation = lambda x: x
+
+        self.is_dirty = False  # for viewer
+
+    def __init__(self, cfg: Config):
+        self.cfg = cfg
+        self._xyz = torch.empty(0)
+        self._normal = torch.empty(0)
+        self._roughness = torch.empty(0)
+        self._f0 = torch.empty(0)
+        self._diffuse = torch.empty(0)
+        self._scaling = torch.empty(0)
+        self._rotation = torch.empty(0)
+        self._opacity = torch.empty(0)
+        self._round_counter = torch.empty(0)
+        self.max_radii2D = torch.empty(0)
+        self.xyz_gradient_accum_diffuse = torch.empty(0)
+        self.xyz_gradient_accum_specular = torch.empty(0)
+        self.comes_from_colmap_pc = torch.empty(0)
+        self.denom = torch.empty(0)
+        self.optimizer = None
+        self.percent_dense = 0
+        self.spatial_lr_scale = 0
+        self.setup_functions()
+
+        self.schedule = None
+        self.num_densification_steps = 0
+
+    def capture(self):
+        return (
+            self._xyz,
+            self._normal,
+            self._roughness,
+            self._f0,
+            self._diffuse,
+            self._scaling,
+            self._rotation,
+            self._opacity,
+            self._round_counter,
+            self.max_radii2D,
+            self.xyz_gradient_accum_diffuse,
+            self.xyz_gradient_accum_specular,
+            self.comes_from_colmap_pc,
+            self.denom,
+            self.optimizer.state_dict(),
+            self.spatial_lr_scale,
+        )
+
+    def restore(self, model_args, training_args):
+        (
+            self._xyz,
+            self._normal,
+            self._roughness,
+            self._f0,
+            self._diffuse,
+            self._scaling,
+            self._rotation,
+            self._opacity,
+            self._round_counter,
+            self.max_radii2D,
+            xyz_gradient_accum_diffuse,
+            xyz_gradient_accum_specular,
+            comes_from_colmap_pc,
+            denom,
+            opt_dict,
+            self.spatial_lr_scale,
+        ) = model_args
+        self.training_setup(training_args)
+        self.xyz_gradient_accum_diffuse = xyz_gradient_accum_diffuse
+        self.xyz_gradient_accum_specular = xyz_gradient_accum_specular
+        self.comes_from_colmap_pc = comes_from_colmap_pc
+        self.denom = denom
+        self.optimizer.load_state_dict(opt_dict)
+
+        self.init_empty_grads()
+
+    def init_empty_grads(self):
+        self._xyz.grad = torch.zeros_like(self._xyz)
+        self._normal.grad = torch.zeros_like(self._normal)
+        self._roughness.grad = torch.zeros_like(self._roughness)
+        self._f0.grad = torch.zeros_like(self._f0)
+        self._opacity.grad = torch.zeros_like(self._opacity)
+        self._round_counter.grad = torch.zeros_like(self._round_counter)
+        self._diffuse.grad = torch.zeros_like(self._diffuse)
+        self._scaling.grad = torch.zeros_like(self._scaling)
+        self._rotation.grad = torch.zeros_like(self._rotation)
+
+    @property
+    def get_scaling(self):
+        return self.scaling_activation(self._scaling)
+
+    @property
+    def _get_scaling(self):
+        return self._scaling  # for override for the viewer
+
+    @property
+    def _get_rotation(self):
+        return self._rotation  # for override for the viewer
+
+    @property
+    def get_diffuse(self):
+        return self._diffuse
+
+    @property
+    def get_rotation(self):
+        return self.rotation_activation(self._rotation)
+
+    @property
+    def get_xyz(self):
+        return self._xyz
+
+    @property
+    def get_normal(self):
+        return self._normal
+
+    @property
+    def get_roughness(self):
+        return self._roughness
+
+    @property
+    def get_f0(self):
+        return self._f0
+
+    def get_inverse_covariance(self, scaling_modifier=1):
+        return self.covariance_activation(1 / self.get_scaling, 1 / scaling_modifier, self.get_rotation)
+
+    @property
+    def get_opacity(self):
+        return self.opacity_activation(self._opacity)
+
+    def get_covariance(self, scaling_modifier=1):
+        return self.covariance_activation(self.get_scaling, scaling_modifier, self._rotation)
+
+    def create_from_pcd(
+        self,
+        pcd: BasicPointCloud,
+        spatial_lr_scale: float,
+        fovY_radians: float,
+        max_camera_zfar: float,
+    ):
+        self.spatial_lr_scale = spatial_lr_scale
+
+        fused_point_cloud = torch.tensor(np.asarray(pcd.points)).float().cuda()
+        fused_color = torch.tensor(np.asarray(pcd.colors)).float().cuda()
+        fused_normal = torch.tensor(np.asarray(pcd.normals)).float().cuda()
+
+        print("Number of points at initialisation : ", fused_point_cloud.shape[0])
+
+        dist2 = torch.clamp_min(
+            distCUDA2(torch.from_numpy(np.asarray(pcd.points)).float().cuda()),
+            0.0000001,
+        )
+        scales = torch.log(torch.sqrt(dist2) * self.cfg.init_scale)[..., None].repeat(1, 3)
+        rots = torch.zeros((fused_point_cloud.shape[0], 4), device="cuda")
+        rots[:, 0] = 1
+        opacities = inverse_sigmoid(self.cfg.init_opa * torch.ones((fused_point_cloud.shape[0], 1), dtype=torch.float, device="cuda"))
+
+        print("Number of points at initialisation : ", fused_point_cloud.shape[0])
+
+        self._xyz = nn.Parameter(fused_point_cloud.requires_grad_(True))
+        self._normal = nn.Parameter(fused_normal.clone())
+        self._roughness = nn.Parameter(torch.ones((fused_point_cloud.shape[0], 1), device="cuda") * self.cfg.init_roughness)
+        self._f0 = nn.Parameter(torch.ones((fused_point_cloud.shape[0], 3), device="cuda") * self.cfg.init_f0)
+        self._diffuse = nn.Parameter(fused_color.clone())
+        if self.cfg.clamp_max is not None:
+            self._diffuse.data = torch.clamp(self._diffuse.data, 0.0, self.cfg.clamp_max)
+        self._scaling = nn.Parameter(scales.requires_grad_(True))
+        self._rotation = nn.Parameter(rots.requires_grad_(True))
+        self._opacity = nn.Parameter(opacities.requires_grad_(True))
+
+        self._round_counter = torch.zeros((fused_point_cloud.shape[0], 1), device="cuda")
+
+        self.max_radii2D = torch.zeros((self.get_xyz.shape[0]), device="cuda")
+
+        self._xyz.grad = torch.zeros_like(self._xyz)
+        self._normal.grad = torch.zeros_like(self._normal)
+        self._roughness.grad = torch.zeros_like(self._roughness)
+        self._f0.grad = torch.zeros_like(self._f0)
+        self._opacity.grad = torch.zeros_like(self._opacity)
+        self._diffuse.grad = torch.zeros_like(self._diffuse)
+        self._scaling.grad = torch.zeros_like(self._scaling)
+        self._rotation.grad = torch.zeros_like(self._rotation)
+
+    @torch.no_grad()
+    def add_farfield_points(self, scene):
+        print(f"Generating random point cloud ({self.cfg.init_num_pts_farfield})...")
+        new_xyz = torch.randn(self.cfg.init_num_pts_farfield, 3, device="cuda").clamp(-3, 3) * scene.cameras_extent * self.cfg.scene_extent_init_radius
+        mask = scene.select_points_to_prune_near_cameras(new_xyz, torch.zeros_like(new_xyz))
+        new_xyz = new_xyz[~mask]
+
+        add_book_points = "ADD_BOOK_INIT_PTS" in os.environ
+        if add_book_points:
+            num_book_pts = int(os.getenv("NUM_BOOK_PTS", 50000))
+            extra_pts = torch.rand(num_book_pts, 3, device="cuda") * 0.3 + torch.tensor([-0.15, -0.10, -0.15], device="cuda")
+            new_xyz = torch.cat([new_xyz, extra_pts])
+            print("ADDED EXTRA POINTS FOR BOOK DEMO")
+
+        dist2 = torch.clamp_min(
+            distCUDA2(new_xyz.float().cuda()),
+            0.0000001,
+        )
+        new_scaling = torch.log(torch.sqrt(dist2) * self.cfg.init_scale_farfield)[..., None].repeat(1, 3)
+
+        if add_book_points:
+            book_pts_scale = float(os.getenv("BOOK_PTS_SCALE", 0.001))
+            new_scaling[-new_xyz.shape[0] :] = torch.log(torch.tensor(book_pts_scale, device="cuda"))
+        new_rotation = torch.zeros((new_xyz.shape[0], 4), device="cuda")
+        new_rotation[:, 0] = 1
+        new_opacity = inverse_sigmoid(self.cfg.init_opa_farfield * torch.ones((new_xyz.shape[0], 1), dtype=torch.float, device="cuda"))
+        new_diffuse = torch.ones_like(new_xyz) * self.cfg.init_diffuse_farfield
+        if add_book_points:
+            new_diffuse[-new_xyz.shape[0] :] = torch.rand_like(new_diffuse[-new_xyz.shape[0] :])
+
+        new_normal = torch.zeros_like(new_xyz)
+        new_f0 = torch.ones_like(new_xyz) * 0.04
+
+        new_roughness = torch.zeros_like(new_xyz)[:, :1]
+
+        new_round_counter = torch.zeros(new_xyz.shape[0], 1, dtype=torch.int, device="cuda")
+        new_comes_from_colmap_pc = torch.zeros(new_xyz.shape[0], 1, dtype=torch.int, device="cuda")
+
+        self.densification_postfix(
+            new_xyz,
+            new_normal,
+            new_roughness,
+            new_f0,
+            new_diffuse,
+            new_opacity,
+            new_scaling,
+            new_rotation,
+            new_round_counter,
+            new_comes_from_colmap_pc,
+            reset_params=True,
+        )
+
+        torch.cuda.synchronize()
+
+    def training_setup(self, training_args):
+        self.percent_dense = training_args.percent_dense
+        self.xyz_gradient_accum_diffuse = torch.zeros((self.get_xyz.shape[0], 1), device="cuda")
+        self.xyz_gradient_accum_specular = torch.zeros((self.get_xyz.shape[0], 1), device="cuda")
+        self.comes_from_colmap_pc = torch.ones((self.get_xyz.shape[0], 1), device="cuda")
+        self.denom = torch.zeros((self.get_xyz.shape[0], 1), device="cuda")
+
+        self._xyz.grad = torch.zeros_like(self._xyz)
+        self._normal.grad = torch.zeros_like(self._normal)
+        self._roughness.grad = torch.zeros_like(self._roughness)
+        self._f0.grad = torch.zeros_like(self._f0)
+        self._opacity.grad = torch.zeros_like(self._opacity)
+        self._diffuse.grad = torch.zeros_like(self._diffuse)
+        self._scaling.grad = torch.zeros_like(self._scaling)
+        self._rotation.grad = torch.zeros_like(self._rotation)
+
+        opt_list = [
+            {
+                "params": [self._xyz],
+                "lr": training_args.xyz_lr_init * self.spatial_lr_scale,
+                "name": "xyz",
+            },
+            {"params": [self._normal], "lr": training_args.normal_lr, "name": "normal"},
+            {
+                "params": [self._roughness],
+                "lr": training_args.roughness_lr,
+                "name": "roughness",
+            },
+            {"params": [self._f0], "lr": training_args.f0_lr, "name": "f0"},
+            {"params": [self._diffuse], "lr": training_args.diffuse_lr, "name": "f_dc"},
+            {
+                "params": [self._opacity],
+                "lr": training_args.opacity_lr,
+                "name": "opacity",
+            },
+            {
+                "params": [self._scaling],
+                "lr": training_args.scaling_lr,
+                "name": "scaling",
+            },
+            {
+                "params": [self._rotation],
+                "lr": training_args.rotation_lr,
+                "name": "rotation",
+            },
+        ]
+
+        self.optimizer = torch.optim.Adam(
+            opt_list,
+            lr=0.0,
+            eps=1e-15,
+            betas=(training_args.beta_1, training_args.beta_2),
+        )
+        self.xyz_scheduler_args = get_expon_lr_func(
+            lr_init=training_args.xyz_lr_init * self.spatial_lr_scale,
+            lr_final=training_args.xyz_lr_final * self.spatial_lr_scale,
+            lr_delay_mult=training_args.xyz_lr_delay_mult,
+            max_steps=training_args.xyz_lr_max_steps,
+        )
+
+    def update_learning_rate(self, iteration):
+        """Learning rate scheduling per step"""
+        for param_group in self.optimizer.param_groups:
+            if param_group["name"] == "xyz":
+                lr = self.xyz_scheduler_args(iteration)
+                param_group["lr"] = lr
+                return lr
+
+    def save_ply(self, path):
+        mkdir_p(os.path.dirname(path))
+
+        xyz = self._xyz.detach().cpu().numpy()
+        f_dc = self._diffuse.detach().cpu().numpy()
+        opacities = self._opacity.detach().cpu().numpy()
+        scale = self._scaling.detach().cpu().numpy()
+        rotation = self._rotation.detach().cpu().numpy()
+        normal = self._normal.detach().cpu().numpy()
+        roughness = self._roughness.detach().cpu().numpy()
+        f0 = self._f0.detach().cpu().numpy()
+
+        all_attributes = [
+            "x",
+            "y",
+            "z",
+            "f_dc_0",
+            "f_dc_1",
+            "f_dc_2",
+            "opacity",
+            "scale_0",
+            "scale_1",
+            "scale_2",
+            "rot_0",
+            "rot_1",
+            "rot_2",
+            "rot_3",
+            "normal_0",
+            "normal_1",
+            "normal_2",
+            "roughness",
+            "f0_0",
+            "f0_1",
+            "f0_2",
+        ]
+        dtype_full = [(attribute, "f4") for attribute in all_attributes]
+
+        elements = np.empty(xyz.shape[0], dtype=dtype_full)
+        attributes = np.concatenate(
+            (
+                xyz,
+                f_dc,
+                opacities,
+                scale,
+                rotation,
+                normal,
+                roughness,
+                f0,
+            ),
+            axis=1,
+        )
+        elements[:] = list(map(tuple, attributes))
+        el = PlyElement.describe(elements, "vertex")
+        PlyData([el]).write(path)
+
+    def load_ply(self, path):
+        plydata = PlyData.read(path)
+
+        xyz = np.stack(
+            (
+                np.asarray(plydata.elements[0]["x"]),
+                np.asarray(plydata.elements[0]["y"]),
+                np.asarray(plydata.elements[0]["z"]),
+            ),
+            axis=1,
+        )
+        opacities = np.asarray(plydata.elements[0]["opacity"])[..., np.newaxis]
+
+        diffuse = np.zeros((xyz.shape[0], 3))
+        diffuse[:, 0] = np.asarray(plydata.elements[0]["f_dc_0"])
+        diffuse[:, 1] = np.asarray(plydata.elements[0]["f_dc_1"])
+        diffuse[:, 2] = np.asarray(plydata.elements[0]["f_dc_2"])
+
+        scale_names = [p.name for p in plydata.elements[0].properties if p.name.startswith("scale_")]
+        scale_names = sorted(scale_names, key=lambda x: int(x.split("_")[-1]))
+        scales = np.zeros((xyz.shape[0], len(scale_names)))
+        for idx, attr_name in enumerate(scale_names):
+            scales[:, idx] = np.asarray(plydata.elements[0][attr_name])
+
+        rot_names = [p.name for p in plydata.elements[0].properties if p.name.startswith("rot")]
+        rot_names = sorted(rot_names, key=lambda x: int(x.split("_")[-1]))
+        rots = np.zeros((xyz.shape[0], len(rot_names)))
+        for idx, attr_name in enumerate(rot_names):
+            rots[:, idx] = np.asarray(plydata.elements[0][attr_name])
+
+        normal_names = [p.name for p in plydata.elements[0].properties if p.name.startswith("normal")]
+        normal_names = sorted(normal_names, key=lambda x: int(x.split("_")[-1]))
+        normals = np.zeros((xyz.shape[0], len(normal_names)))
+        for idx, attr_name in enumerate(normal_names):
+            normals[:, idx] = np.asarray(plydata.elements[0][attr_name])
+
+        roughness = np.asarray(plydata.elements[0]["roughness"])[..., np.newaxis]
+
+        f0_names = [p.name for p in plydata.elements[0].properties if p.name.startswith("f0")]
+        f0_names = sorted(f0_names, key=lambda x: int(x.split("_")[-1]))
+        f0 = np.zeros((xyz.shape[0], len(f0_names)))
+        for idx, attr_name in enumerate(f0_names):
+            f0[:, idx] = np.asarray(plydata.elements[0][attr_name])
+
+        self._xyz = nn.Parameter(torch.tensor(xyz, dtype=torch.float, device="cuda"))
+        self._diffuse = nn.Parameter(torch.tensor(diffuse, dtype=torch.float, device="cuda"))
+        self._opacity = nn.Parameter(torch.tensor(opacities, dtype=torch.float, device="cuda"))
+        self._scaling = nn.Parameter(torch.tensor(scales, dtype=torch.float, device="cuda"))
+        self._rotation = nn.Parameter(torch.tensor(rots, dtype=torch.float, device="cuda"))
+        self._normal = nn.Parameter(torch.tensor(normals, dtype=torch.float, device="cuda"))
+        self._roughness = nn.Parameter(torch.tensor(roughness, dtype=torch.float, device="cuda"))
+        self._f0 = nn.Parameter(torch.tensor(f0, dtype=torch.float, device="cuda"))
+
+        self._round_counter = torch.zeros((xyz.shape[0], 1), dtype=torch.float, device="cuda")
+
+    def replace_tensor_to_optimizer(self, tensor, name):
+        optimizable_tensors = {}
+        for group in self.optimizer.param_groups:
+            if group["name"] == name:
+                stored_state = self.optimizer.state.get(group["params"][0], None)
+                stored_state["exp_avg"] = torch.zeros_like(tensor)
+                stored_state["exp_avg_sq"] = torch.zeros_like(tensor)
+
+                del self.optimizer.state[group["params"][0]]
+                group["params"][0] = nn.Parameter(tensor)
+                self.optimizer.state[group["params"][0]] = stored_state
+
+                optimizable_tensors[group["name"]] = group["params"][0]
+        return optimizable_tensors
+
+    def _prune_optimizer(self, mask):
+        optimizable_tensors = {}
+        for group in self.optimizer.param_groups:
+            stored_state = self.optimizer.state.get(group["params"][0], None)
+            if stored_state is not None:
+                stored_state["exp_avg"] = stored_state["exp_avg"][mask]
+                stored_state["exp_avg_sq"] = stored_state["exp_avg_sq"][mask]
+
+                del self.optimizer.state[group["params"][0]]
+                group["params"][0] = nn.Parameter((group["params"][0][mask]))
+                self.optimizer.state[group["params"][0]] = stored_state
+
+                optimizable_tensors[group["name"]] = group["params"][0]
+            else:
+                group["params"][0] = nn.Parameter(group["params"][0][mask])
+                optimizable_tensors[group["name"]] = group["params"][0]
+        return optimizable_tensors
+
+    def prune_points(self, mask):
+        valid_points_mask = ~mask
+        optimizable_tensors = self._prune_optimizer(valid_points_mask)
+
+        self._xyz = optimizable_tensors["xyz"]
+        self._xyz.grad = torch.zeros_like(self._xyz)
+        #
+        self._normal = optimizable_tensors["normal"]
+        self._normal.grad = torch.zeros_like(self._normal)
+        #
+        self._roughness = optimizable_tensors["roughness"]
+        self._roughness.grad = torch.zeros_like(self._roughness)
+        #
+        self._f0 = optimizable_tensors["f0"]
+        self._f0.grad = torch.zeros_like(self._f0)
+        #
+        self._diffuse = optimizable_tensors["f_dc"]
+        self._diffuse.grad = torch.zeros_like(self._diffuse)
+        #
+        self._opacity = optimizable_tensors["opacity"]
+        self._opacity.grad = torch.zeros_like(self._opacity)
+        #
+        self._scaling = optimizable_tensors["scaling"]
+        self._scaling.grad = torch.zeros_like(self._scaling)
+        #
+        self._rotation = optimizable_tensors["rotation"]
+        self._rotation.grad = torch.zeros_like(self._rotation)
+
+        self.xyz_gradient_accum_diffuse = self.xyz_gradient_accum_diffuse[valid_points_mask]
+        self.xyz_gradient_accum_specular = self.xyz_gradient_accum_specular[valid_points_mask]
+        self.comes_from_colmap_pc = self.comes_from_colmap_pc[valid_points_mask]
+
+        self._round_counter = self._round_counter[valid_points_mask]
+
+        self.denom = self.denom[valid_points_mask]
+        self.max_radii2D = self.max_radii2D[valid_points_mask]
+
+    def cat_tensors_to_optimizer(self, tensors_dict):
+        optimizable_tensors = {}
+        for group in self.optimizer.param_groups:
+            assert len(group["params"]) == 1
+            extension_tensor = tensors_dict[group["name"]]
+            stored_state = self.optimizer.state.get(group["params"][0], None)
+            if stored_state is not None:
+                stored_state["exp_avg"] = torch.cat((stored_state["exp_avg"], torch.zeros_like(extension_tensor)), dim=0)
+                stored_state["exp_avg_sq"] = torch.cat(
+                    (stored_state["exp_avg_sq"], torch.zeros_like(extension_tensor)),
+                    dim=0,
+                )
+
+                del self.optimizer.state[group["params"][0]]
+                group["params"][0] = nn.Parameter(torch.cat((group["params"][0], extension_tensor), dim=0).requires_grad_(True))
+                self.optimizer.state[group["params"][0]] = stored_state
+
+                optimizable_tensors[group["name"]] = group["params"][0]
+            else:
+                group["params"][0] = nn.Parameter(torch.cat((group["params"][0], extension_tensor), dim=0).requires_grad_(True))
+                optimizable_tensors[group["name"]] = group["params"][0]
+
+        return optimizable_tensors
+
+    def densification_postfix(
+        self,
+        new_xyz,
+        new_normal,
+        new_roughness,
+        new_f0,
+        new_diffuse,
+        new_opacity,
+        new_scaling,
+        new_rotation,
+        new_round_counter,
+        new_comes_from_colmap_pc,
+        reset_params=True,
+    ):
+        d = {
+            "xyz": new_xyz,
+            "normal": new_normal,
+            "roughness": new_roughness,
+            "f0": new_f0,
+            "f_dc": new_diffuse,  # keep the same name for compat
+            "opacity": new_opacity,
+            "scaling": new_scaling,
+            "rotation": new_rotation,
+        }
+
+        optimizable_tensors = self.cat_tensors_to_optimizer(d)
+        optimizable_tensors["xyz"].grad = torch.zeros_like(optimizable_tensors["xyz"])
+        self._xyz = optimizable_tensors["xyz"]
+
+        optimizable_tensors["normal"].grad = torch.zeros_like(optimizable_tensors["normal"])
+        self._normal = optimizable_tensors["normal"]
+
+        optimizable_tensors["roughness"].grad = torch.zeros_like(optimizable_tensors["roughness"])
+        self._roughness = optimizable_tensors["roughness"]
+
+        optimizable_tensors["f0"].grad = torch.zeros_like(optimizable_tensors["f0"])
+        self._f0 = optimizable_tensors["f0"]
+
+        optimizable_tensors["f_dc"].grad = torch.zeros_like(optimizable_tensors["f_dc"])
+        self._diffuse = optimizable_tensors["f_dc"]  # keep the same name for compat
+
+        optimizable_tensors["opacity"].grad = torch.zeros_like(optimizable_tensors["opacity"])
+        self._opacity = optimizable_tensors["opacity"]
+
+        optimizable_tensors["scaling"].grad = torch.zeros_like(optimizable_tensors["scaling"])
+        self._scaling = optimizable_tensors["scaling"]
+
+        optimizable_tensors["rotation"].grad = torch.zeros_like(optimizable_tensors["rotation"])
+        self._rotation = optimizable_tensors["rotation"]
+
+        self._round_counter = torch.cat((self._round_counter, new_round_counter), dim=0)
+        self.comes_from_colmap_pc = torch.cat((self.comes_from_colmap_pc, new_comes_from_colmap_pc), dim=0)
+
+        if reset_params:
+            self.xyz_gradient_accum_diffuse = torch.zeros((self.get_xyz.shape[0], 1), device="cuda")
+            self.xyz_gradient_accum_specular = torch.zeros((self.get_xyz.shape[0], 1), device="cuda")
+            self.denom = torch.zeros((self.get_xyz.shape[0], 1), device="cuda")
+            self.max_radii2D = torch.zeros((self.get_xyz.shape[0]), device="cuda")
+
+    def prune_znear_only(self, scene):
+        prune_mask = scene.select_points_to_prune_near_cameras(self._xyz.data, self.get_scaling)
+        self.prune_points(prune_mask)
+
+    def prune(self, scene, opt, min_opacity, extent):
+        prune_mask = (self.get_opacity < min_opacity).squeeze()
+        if not opt.densif_skip_big_points_ws:
+            big_points_ws = self.get_scaling.max(dim=1).values > 0.1 * extent
+            prune_mask = torch.logical_or(prune_mask, big_points_ws)
+
+        if opt.densif_no_pruning:
+            prune_mask = torch.zeros_like(prune_mask)
+
+        if not self.cfg.disable_znear_densif_pruning:
+            prune_mask |= scene.select_points_to_prune_near_cameras(self._xyz.data, self.get_scaling)
+
+        self.prune_points(prune_mask)

@@ -1,0 +1,189 @@
+import os
+
+import numpy as np
+import torch
+from PIL import Image
+
+from editable_gauss_refl.dataset.colmap_parser import ColmapParser
+from editable_gauss_refl.utils.depth_utils import (
+    project_pointcloud_to_depth_map,
+    ransac_linear_fit,
+    transform_depth_to_position_image,
+    transform_normals_to_world,
+    transform_points,
+)
+from editable_gauss_refl.utils.graphics_utils import BasicPointCloud, focal2fov
+from editable_gauss_refl.utils.tonemapping import untonemap
+
+from .camera_info import CameraInfo
+from .colmap_loader import (
+    qvec2rotmat,
+    read_extrinsics_binary,
+    read_extrinsics_text,
+    read_intrinsics_binary,
+    read_intrinsics_text,
+)
+from .image_utils import from_pil_image
+
+
+class ColmapPriorDataset:
+    def __init__(
+        self,
+        data_dir: str,
+        split: str = "train",
+        resolution: int | None = None,
+        max_images: int | None = None,
+        do_eval: bool = True,
+        clamp_max: float | None = None,
+    ):
+        self.data_dir = data_dir
+        self.split = split
+        self.resolution = resolution
+        self.max_images = max_images
+        self.do_eval = do_eval
+        self.clamp_max = clamp_max
+
+        self.colmap_parser = ColmapParser(data_dir)
+        self.point_cloud = BasicPointCloud(
+            points=self.colmap_parser.points,
+            colors=self.colmap_parser.points_rgb,
+            normals=np.zeros_like(self.colmap_parser.points),
+        )
+
+        self.buffers_dir = os.path.join(self.data_dir, "priors")
+        self.llffhold = 8
+        try:
+            cameras_extrinsic_file = os.path.join(data_dir, "sparse/0", "images.bin")
+            cameras_intrinsic_file = os.path.join(data_dir, "sparse/0", "cameras.bin")
+            self.cam_extrinsics = read_extrinsics_binary(cameras_extrinsic_file)
+            self.cam_intrinsics = read_intrinsics_binary(cameras_intrinsic_file)
+        except Exception:
+            cameras_extrinsic_file = os.path.join(data_dir, "sparse/0", "images.txt")
+            cameras_intrinsic_file = os.path.join(data_dir, "sparse/0", "cameras.txt")
+            self.cam_extrinsics = read_extrinsics_text(cameras_extrinsic_file)
+            self.cam_intrinsics = read_intrinsics_text(cameras_intrinsic_file)
+
+        keys = list(sorted(list(self.cam_extrinsics.keys())))
+        if self.do_eval:
+            if split == "train":
+                self.keys = [key for i, key in enumerate(keys) if i % self.llffhold != 0]
+            else:
+                self.keys = [key for i, key in enumerate(keys) if i % self.llffhold == 0]
+        else:
+            if split == "train":
+                self.keys = keys
+            else:
+                self.keys = []
+        if self.max_images is not None:
+            self.keys = self.keys[: self.max_images]
+
+    def __len__(self) -> int:
+        return len(self.keys)
+
+    def __getitem__(self, idx: int) -> CameraInfo:
+        key = self.keys[idx]
+        extr = self.cam_extrinsics[key]
+        intr = self.cam_intrinsics[extr.camera_id]
+        image_name = extr.name
+        frame_name = os.path.splitext(image_name)[0]
+        image_path = os.path.join(self.data_dir, "images", frame_name + ".jpg")
+
+        image = self._get_buffer(frame_name, "render")
+        diffuse_image = self._get_buffer(frame_name, "diffuse")
+        specular_image = self._get_buffer(frame_name, "specular")
+        roughness_image = self._get_buffer(frame_name, "roughness")
+        metalness_image = self._get_buffer(frame_name, "metalness")
+        depth_image = self._get_buffer(frame_name, "depth")
+        normal_image = self._get_buffer(frame_name, "normal")
+
+        f0_image = (0.04 * (1.0 - metalness_image) + metalness_image).repeat(1, 1, 3)
+
+        # Camera intrinsics
+        height = intr.height
+        width = intr.width
+        if intr.model == "SIMPLE_PINHOLE":
+            focal_length_x = intr.params[0]
+            fovy = focal2fov(focal_length_x, height)
+            fovx = focal2fov(focal_length_x, width)
+        elif intr.model == "PINHOLE":
+            focal_length_x = intr.params[0]
+            focal_length_y = intr.params[1]
+            fovy = focal2fov(focal_length_y, height)
+            fovx = focal2fov(focal_length_x, width)
+        else:
+            assert False, "Colmap camera model not handled: only undistorted datasets (PINHOLE or SIMPLE_PINHOLE cameras) supported!"
+
+        # Camera extrinsics
+        w2c = np.eye(4)
+        w2c[:3, :3] = qvec2rotmat(extr.qvec)
+        w2c[:3, 3] = extr.tvec
+        # R is stored transposed due to 'glm' in CUDA code
+        R = np.transpose(w2c[:3, :3])
+        T = w2c[:3, 3]
+
+        R_tensor = torch.tensor(R, dtype=torch.float32)
+        w2c_tensor = torch.tensor(w2c, dtype=torch.float32)
+
+        # Postprocess normal_image
+        normal_image = transform_normals_to_world(normal_image, R_tensor)
+
+        # Postprocess depth_image
+        points_tensor = torch.tensor(
+            self.colmap_parser.points[self.colmap_parser.point_indices[image_name]],
+            dtype=torch.float32,
+        )
+        points_tensor = transform_points(points_tensor, w2c_tensor)
+        depth_points_image = project_pointcloud_to_depth_map(points_tensor, fovx, fovy, depth_image.shape[:2])
+        valid_mask = depth_points_image != 0
+        x = depth_image[:, :, 0][valid_mask].float()
+        y = depth_points_image[valid_mask]
+        # a, b = linear_least_squares_1d(x, y)
+        (a, b), _ = ransac_linear_fit(x, y)
+        depth_image = depth_image * a + b
+
+        # Convert to depth to distance image
+        position_image = transform_depth_to_position_image(depth_image[:, :, 0], fovx, fovy)
+        distance_image = torch.norm(position_image, dim=-1, keepdim=True)
+
+        cam_info = CameraInfo(
+            uid=idx,
+            R=R,
+            T=T,
+            FovY=fovy,
+            FovX=fovx,
+            image=image,
+            image_path=image_path,
+            image_name=image_name,
+            width=width,
+            height=height,
+            diffuse_image=diffuse_image,
+            specular_image=specular_image,
+            depth_image=distance_image,
+            normal_image=normal_image,
+            roughness_image=roughness_image,
+            f0_image=f0_image,
+        )
+        return cam_info
+
+    def _get_buffer(self, frame_name: str, buffer_name: str):
+        fno = frame_name.split("/")[-1]
+        buffer_path = os.path.join(self.buffers_dir, buffer_name, buffer_name + "_" + fno + ".png")
+
+        buffer_image = Image.open(buffer_path)
+        buffer_height = self.resolution
+        buffer_width = int(buffer_height * (buffer_image.size[0] / buffer_image.size[1]))
+        buffer_image = buffer_image.resize((buffer_width, buffer_height))
+        buffer = from_pil_image(buffer_image)
+
+        if buffer_name in ["render", "diffuse", "specular"]:
+            buffer = untonemap(buffer)
+            if self.clamp_max is not None:
+                buffer = buffer.clip(0, self.clamp_max)
+        elif buffer_name in ["roughness", "metalness", "depth"]:
+            pass
+        elif buffer_name in ["normal"]:
+            buffer = buffer * 2.0 - 1.0
+        else:
+            raise ValueError(f"Buffer name not recognized: {buffer_name}")
+        buffer = torch.tensor(buffer)
+        return buffer

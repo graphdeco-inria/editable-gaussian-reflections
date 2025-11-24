@@ -1,0 +1,166 @@
+#
+# Copyright (C) 2023, Inria
+# GRAPHDECO research group, https://team.inria.fr/graphdeco
+# All rights reserved.
+#
+# This software is free for non-commercial, research and evaluation use
+# under the terms of the LICENSE.md file.
+#
+# For inquiries contact  george.drettakis@inria.fr
+#
+
+import sys
+
+sys.path.append(".")
+
+import json
+import os
+from copy import deepcopy
+from dataclasses import dataclass
+from typing import Optional
+
+import numpy as np
+import torch
+import torchvision
+import tyro
+from einops import rearrange
+from tqdm import tqdm
+from typing_extensions import Annotated
+from tyro.conf import arg
+
+from editable_gauss_refl.config import Config
+from editable_gauss_refl.renderer import GaussianRaytracer, render
+from editable_gauss_refl.scene import GaussianModel, Scene
+from editable_gauss_refl.utils.cam_utils import generate_spiral_path
+from editable_gauss_refl.utils.general_utils import set_seeds
+from editable_gauss_refl.utils.system_utils import searchForMaxIteration
+from editable_gauss_refl.utils.tonemapping import tonemap
+
+
+@dataclass
+class RenderNovelViewCLI:
+    model_path: Annotated[str, arg(aliases=["-m"])]
+
+    iteration: Optional[int] = None
+    spp: int = 128
+    denoise: bool = True
+
+    znear: float = 1.0  # * Set a high znear to avoid floaters, you may need to reduce this based on your scene
+
+
+@torch.no_grad()
+def render_set(
+    cli,
+    cameras,
+    raytracer,
+    save_dir,
+):
+    for idx, camera in enumerate(tqdm(cameras, desc="Rendering progress")):
+        config = raytracer.cuda_module.get_config()
+        if cli.spp > 1:
+            config.accumulate_samples.copy_(True)
+            raytracer.cuda_module.reset_accumulators()
+            for _ in range(cli.spp):
+                package = render(
+                    camera,
+                    raytracer,
+                    denoise=False,
+                    znear=cli.znear,
+                )
+            if cli.denoise:
+                raytracer.cuda_module.denoise()
+                package.final = raytracer.cuda_module.get_framebuffer().output_denoised.clone().detach().moveaxis(-1, 1)
+        else:
+            package = render(
+                camera,
+                raytracer,
+                denoise=cli.denoise,
+                znear=cli.znear,
+            )
+
+        diffuse_image = tonemap(package.rgb[0]).clamp(0, 1)
+        specular_image = tonemap(package.rgb[1:].sum(dim=0)).clamp(0, 1)
+        pred_image = tonemap(package.final.squeeze(0)).clamp(0, 1)
+
+        # Match normal image with EnvGS visualization
+        R_tensor = torch.tensor(camera.R.T, dtype=torch.float32)
+        normal_image = package.normal[0].cpu()
+        normal_image = rearrange(normal_image, "c h w -> h w c")
+        normal_image = normal_image / torch.norm(normal_image, dim=-1, keepdim=True)
+        normal_image = torch.einsum("ij,...j->...i", R_tensor, normal_image)
+        normal_image = rearrange(normal_image, "h w c -> c h w")
+        normal_image *= -1
+        normal_image[0, :, :] *= -1  # To match EnvGS visualization.
+
+        result = {
+            "render": pred_image,
+            "specular": specular_image,
+            "diffuse": diffuse_image,
+            "depth": package.depth[0] / package.depth[0].amax(),
+            "normal": normal_image * 0.5 + 0.5,
+            "roughness": package.roughness[0],
+            "f0": package.f0[0],
+        }
+        for k, v in result.items():
+            save_path = os.path.join(save_dir, k, "{0:05d}".format(idx) + f"_{k}.png")
+            if not os.path.isdir(os.path.dirname(save_path)):
+                os.makedirs(os.path.dirname(save_path), exist_ok=True)
+            torchvision.utils.save_image(v, save_path)
+
+
+if __name__ == "__main__":
+    cli, unknown_args = tyro.cli(RenderNovelViewCLI, return_unknown_args=True)
+    saved_cli_path = os.path.join(cli.model_path, "cfg.json")
+    cfg = tyro.cli(Config, args=unknown_args, default=Config(**json.load(open(saved_cli_path, "r"))))
+
+    if cli.iteration is None:
+        load_iteration = searchForMaxIteration(os.path.join(cli.model_path, "point_cloud"))
+    else:
+        load_iteration = cli.iteration
+    print("Loading trained model at iteration {}".format(load_iteration))
+
+    set_seeds()
+
+    gaussians = GaussianModel(cfg)
+    scene = Scene(cfg, gaussians, load_iteration=load_iteration, shuffle=False)
+    views = scene.getTrainCameras()
+
+    raytracer = GaussianRaytracer(gaussians, views[0].image_width, views[0].image_height)
+
+    # Create spiral path from EnvGS
+    camtoworlds_all = []
+    for view in views:
+        w2c = np.eye(4)
+        w2c[:3, :3] = view.R.T
+        w2c[:3, 3] = view.T
+        c2w = np.linalg.inv(w2c)
+        camtoworlds_all.append(c2w)
+    camtoworlds_all = np.array(camtoworlds_all)
+    camtoworlds_all = generate_spiral_path(camtoworlds_all)
+    camtoworlds_all = np.concatenate(
+        [
+            camtoworlds_all,
+            np.repeat(np.array([[[0.0, 0.0, 0.0, 1.0]]]), len(camtoworlds_all), axis=0),
+        ],
+        axis=1,
+    )  # [N, 4, 4]
+
+    # Create cameras from camera path
+    cameras = []
+    for c2w in camtoworlds_all:
+        camera = deepcopy(views[0])
+        w2c = np.linalg.inv(c2w)
+        camera.R = np.transpose(w2c[:3, :3])
+        camera.T = w2c[:3, 3]
+        camera.update()
+        cameras.append(camera)
+    if cfg.max_images is not None:
+        cameras = cameras[: cfg.max_images]
+
+    save_dir = os.path.join(cfg.model_path, "novel_views", f"ours_{scene.loaded_iter}")
+    render_set(
+        cli,
+        cameras,
+        raytracer,
+        save_dir,
+    )

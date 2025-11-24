@@ -1,0 +1,7 @@
+[submodule "submodules/simple-knn"]
+	path = submodules/simple-knn
+	url = https://gitlab.inria.fr/bkerbl/simple-knn.git
+    ignore = dirty
+[submodule "editable_gauss_refl/cuda/csrc/third_party/optix"]
+	path = editable_gauss_refl/cuda/csrc/third_party/optix
+	url = https://github.com/NVIDIA/optix-dev.git
