@@ -60,7 +60,7 @@ set NO_WORKERS=1
 ``` -->
 
 ## Viewing and editing pretrained models
-[Pretrained models are available here](https://repo-sam.inria.fr/nerphys/editable-gaussian-reflections/pretrained/index.html) and can be viewer with:
+[Pretrained models are available here](https://repo-sam.inria.fr/nerphys/editable-gaussian-reflections/pretrained/index.html) and can be viewed with:
 
 ```bash 
 MODEL_PATH=pretrained/shiny_kitchen
