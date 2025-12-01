@@ -1,7 +1,9 @@
 #include "../params.h"
 
 #ifdef _WIN32
+#ifndef NOMINMAX
 #define NOMINMAX
+#endif
 #include <Windows.h>
 #include <string>
 #include <filesystem>
@@ -10,6 +12,8 @@
 #include <unistd.h>
 #include <libgen.h>
 #endif
+#include <stdexcept>
+#include <vector>
 
 class PipelineWrapper {
   public:
@@ -59,6 +63,21 @@ class PipelineWrapper {
     }
 
     static std::string getSharedObjectDir() {
+#ifdef _WIN32
+        HMODULE handle = nullptr;
+        if (!GetModuleHandleExA(
+                GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                reinterpret_cast<LPCSTR>(&getSharedObjectDir),
+                &handle)) {
+            throw std::runtime_error("GetModuleHandleExA failed");
+        }
+        char module_path[MAX_PATH];
+        DWORD len = GetModuleFileNameA(handle, module_path, MAX_PATH);
+        if (len == 0 || len == MAX_PATH) {
+            throw std::runtime_error("GetModuleFileNameA failed");
+        }
+        return std::filesystem::path(module_path).parent_path().string();
+#else
         Dl_info dl_info;
         dladdr((void *)getSharedObjectDir, &dl_info);
         std::string path(dl_info.dli_fname);
@@ -66,6 +85,7 @@ class PipelineWrapper {
         std::string dir = dirname(path_dup);
         free(path_dup);
         return dir;
+#endif
     }
 
     static std::string loadPtxFile() {

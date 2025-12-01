@@ -543,7 +543,11 @@ class GaussianViewer(Viewer):
             
             imgui.set_cursor_pos_x((imgui.get_content_region_avail().x - imgui.calc_text_size("Diffuse").x) * 0.35)
             imgui.text("Diffuse")
-            _, self.edit.diffuse_override = imgui.color_edit4("##Diffuse Override", self.edit.diffuse_override, flags=imgui.ColorEditFlags_.no_options | imgui.ColorEditFlags_.alpha_preview)
+            _, self.edit.diffuse_override = imgui.color_edit4(
+                "##Diffuse Override",
+                self.edit.diffuse_override,
+                flags=imgui.ColorEditFlags_.no_options | imgui.ColorEditFlags_.alpha_preview_half
+            )
             if imgui.is_item_hovered() and imgui.is_mouse_clicked(imgui.MouseButton_.right):
                 self.edit.diffuse_override = (0.0, 0.0, 0.0, 0.0)
             imgui.same_line()
@@ -581,7 +585,10 @@ class GaussianViewer(Viewer):
 
             imgui.set_cursor_pos_x((imgui.get_content_region_avail().x - imgui.calc_text_size("Specular").x) * 0.35)
             imgui.text("Specular")
-            _, self.edit.specular_override = imgui.color_edit4("##Specular Override", self.edit.specular_override, flags=imgui.ColorEditFlags_.no_options | imgui.ColorEditFlags_.alpha_preview)
+            _, self.edit.specular_override = imgui.color_edit4(
+                "##Specular Override", 
+                self.edit.specular_override, 
+                flags=imgui.ColorEditFlags_.no_options | imgui.ColorEditFlags_.alpha_preview_half)
             if imgui.is_item_hovered() and imgui.is_mouse_clicked(imgui.MouseButton_.right):
                 self.edit.specular_override = (0.0, 0.0, 0.0, 0.0)
             imgui.same_line()

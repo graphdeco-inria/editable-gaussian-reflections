@@ -79,11 +79,12 @@ class Image(Widget):
         if res_y <= 0:
             res_y = self.texture.res_y
 
+        tex_ref = imgui.ImTextureRef(int(self.texture.id))
         if draw_list is not None:
             # Figure out
-            draw_list.add_image(self.texture.id, (0, 0), (res_x, res_y))
+            draw_list.add_image(tex_ref, (0, 0), (res_x, res_y))
         else:
-            imgui.image(self.texture.id, (res_x, res_y))
+            imgui.image(tex_ref, (res_x, res_y))
 
 class NumpyImage(Image):
     """ Image viewer where the image to be shown comes from NumPy array. """

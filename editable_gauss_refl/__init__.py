@@ -2,12 +2,15 @@ import os
 
 import torch
 
-if os.name == 'nt':
-    __PARENT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    GAUSS_TRACER_PATH = os.path.join(__PARENT_DIR, "build\\Release\\gray.dll")
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+if os.name == "nt":
+    GAUSS_TRACER_PATH = os.path.join(
+        BASE_DIR,
+        "cuda", "build", "Release", "raytracer.dll"
+    )
 else:
     GAUSS_TRACER_PATH = os.path.join(
-        os.path.dirname(os.path.abspath(__file__)), 
+        BASE_DIR,
         "cuda", "build", "libraytracer.so"
     )
 LOADED = False

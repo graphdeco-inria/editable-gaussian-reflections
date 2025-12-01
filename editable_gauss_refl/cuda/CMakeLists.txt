@@ -1,4 +1,10 @@
 cmake_minimum_required(VERSION 3.18)
+
+if (NOT TARGET CUDA::nvToolsExt)
+    message(STATUS "Injecting dummy CUDA::nvToolsExt target")
+    add_library(CUDA::nvToolsExt INTERFACE IMPORTED)
+endif()
+
 project (raytracer LANGUAGES CXX CUDA)
 
 # Set default build type to 'Release'
@@ -15,9 +21,13 @@ list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake")
 # === Compiler Standards ===
 
 if (MSVC) # Windows
-    message(STATUS "******* In MSVC code")
+    add_compile_definitions(NOMINMAX)
+
     set(CMAKE_CXX_STANDARD 20)
+    set(CMAKE_CXX_STANDARD_REQUIRED ON)
     set(CMAKE_CUDA_STANDARD 20)
+    set(CMAKE_CUDA_STANDARD_REQUIRED ON)
+
 
     # --- CUDA relaxed constexpr flag ---
     if(NOT CMAKE_CUDA_FLAGS MATCHES "--expt-relaxed-constexpr")
@@ -58,7 +68,7 @@ set(TORCH_CUDA_ARCH_LIST "${_torch_arch_str}"
     CACHE STRING "Torch arch list (auto from CMAKE_CUDA_ARCHITECTURES)" FORCE)
 
 # === Dependency Discovery ===
-find_package(PythonLibs REQUIRED)
+find_package(Python COMPONENTS Interpreter Development REQUIRED)
 # We use this to be able to link against CUDA::cudart and/or CUDA::cuda_driver
 find_package(CUDAToolkit REQUIRED)
 # Make sure we have access to Optix8
@@ -83,6 +93,13 @@ set_target_properties(optix_program PROPERTIES
 )
 
 # === Include Directories ===
+
+# Pick up Python headers/libraries from FindPython
+if(NOT DEFINED PYTHON_INCLUDE_DIRS AND DEFINED Python_INCLUDE_DIRS)
+    set(PYTHON_INCLUDE_DIRS "${Python_INCLUDE_DIRS}")
+    set(PYTHON_LIBRARIES "${Python_LIBRARIES}")
+endif()
+
 if (MSVC)
 target_include_directories(raytracer PRIVATE
     ".venv/Lib/site-packages/torch/include"
@@ -118,19 +135,25 @@ target_compile_definitions(raytracer PRIVATE
 # === Compile Options ===
 if (MSVC)
 target_compile_options(raytracer PRIVATE
+    /W1
     $<$<COMPILE_LANGUAGE:CUDA>:-ftz=true -prec-div=false -prec-sqrt=false>
 )
 else()
 target_compile_options(raytracer PRIVATE
-    -Wno-everything
-    -Wno-macro-redefined
+   -Wno-everything 
+   -Wno-macro-redefined
     $<$<COMPILE_LANGUAGE:CUDA>:-ffast-math -ftz=true -prec-div=false -prec-sqrt=false>
 )
 endif()
 
+if (MSVC)
+target_compile_options(optix_program PRIVATE
+)
+else()
 target_compile_options(optix_program PRIVATE
     -Wno-everything
 )
+endif()
 
 # === Link Libraries ===
 target_link_libraries(raytracer PRIVATE
@@ -147,11 +170,11 @@ target_link_libraries(optix_program PRIVATE
 
 # === Custom: copy the .ptx next to the .so ===
 if (MSVC)
-    set(PTX_SOURCE "${CMAKE_CURRENT_BINARY_DIR}\\optix_program.dir\\csrc\\shaders.ptx")
-    set(PTX_DEST "${CMAKE_CURRENT_BINARY_DIR}\\libgray.ptx")
+    set(PTX_SOURCE "${CMAKE_CURRENT_BINARY_DIR}/optix_program.dir/${CMAKE_CFG_INTDIR}/shaders.ptx")
+    set(PTX_DEST   "${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_CFG_INTDIR}/libraytracer.ptx")
 else()
     set(PTX_SOURCE "${CMAKE_CURRENT_BINARY_DIR}/CMakeFiles/optix_program.dir/csrc/shaders.ptx")
-    set(PTX_DEST "${CMAKE_CURRENT_BINARY_DIR}/libraytracer.ptx")
+    set(PTX_DEST   "${CMAKE_CURRENT_BINARY_DIR}/libraytracer.ptx")
 endif()
 add_custom_command(
     OUTPUT ${PTX_DEST}

@@ -22,3 +22,9 @@ tyro
 requests
 tifffile
 submodules/simple-knn
+# GUI
+websockets==12.0
+PyOpenGL
+PyOpenGL_accelerate
+glfw
+imgui-bundle

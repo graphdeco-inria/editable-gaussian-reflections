@@ -3,6 +3,10 @@
 #include <cmath>
 #include <cuda_runtime.h>
 
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
+
 #define BRDF_EPS 1e-8
 
 __device__ float D_GGX(float3 N, float3 H, float alpha) {

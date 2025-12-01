@@ -33,7 +33,8 @@ class PixelInspector(Widget):
             texture_size = ImVec2(texture.res_x, texture.res_y)
             uv0 = (mouse_pos - inspect_size) / texture_size
             uv1 = (mouse_pos + inspect_size) / texture_size
-            imgui.image(texture.id, self.window_size, uv0, uv1)
+            tex_ref = imgui.ImTextureRef(int(texture.id))
+            imgui.image(tex_ref, self.window_size, uv0, uv1)
             imgui.text("Click: Accept; Scroll +/-: Zoom; Esc: Exit")
 
         # Change inspect size

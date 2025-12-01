@@ -213,6 +213,8 @@ class SphereViewer(Widget):
 
         if draw_list is not None:
             # Figure out
-            draw_list.add_image(self._color_texture.id, (0, 0), (res_x, res_y))
+            tex_ref = imgui.ImTextureRef(int(self._color_texture.id))
+            draw_list.add_image(tex_ref, (0, 0), (res_x, res_y))
         else:
-            imgui.image(self._color_texture.id, (res_x, res_y))
+            tex_ref = imgui.ImTextureRef(int(self._color_texture.id))
+            imgui.image(tex_ref, (res_x, res_y))
