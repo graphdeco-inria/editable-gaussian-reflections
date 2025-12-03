@@ -120,7 +120,7 @@ bash run.sh $MODEL_PATH -s $SCENE_PATH
 More specific commands are given below.
 
 ### Predicting network priors
-Refer to the auxillary codebase https://github.com/jefequien/GenPrior/tree/main/tools.
+Refer to the auxillary codebase https://github.com/jefequien/GenPrior.
 
 ### Creating the initial point cloud 
 ```bash 
